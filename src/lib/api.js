@@ -26,6 +26,8 @@ export const api = {
   verifyOtp: (phone, code, name) =>
     request('/api/auth/verify', { method: 'POST', body: { phone, code, name } }),
   me: () => request('/api/me', { auth: true }),
+  register: (payload) => request('/api/auth/register', { method: 'POST', body: payload, auth: true }),
+  setSound: (sound_on) => request('/api/me/sound', { method: 'PATCH', body: { sound_on }, auth: true }),
 
   experts: (params = {}) => {
     const qs = new URLSearchParams(Object.entries(params).filter(([, v]) => v)).toString()

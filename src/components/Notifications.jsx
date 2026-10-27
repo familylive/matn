@@ -1,0 +1,72 @@
+import { useEffect, useRef, useState } from 'react'
+import { io } from 'socket.io-client'
+import { useAuth } from '../context/AuthContext.jsx'
+
+const socket = io({ autoConnect: false })
+
+function beep() {
+  try {
+    const Ctx = window.AudioContext || window.webkitAudioContext
+    if (!Ctx) return
+    const ctx = new Ctx()
+    const now = ctx.currentTime
+    ;[880, 1180].forEach((freq, i) => {
+      const osc = ctx.createOscillator()
+      const gain = ctx.createGain()
+      osc.type = 'sine'
+      osc.frequency.value = freq
+      gain.gain.setValueAtTime(0.0001, now + i * 0.18)
+      gain.gain.exponentialRampToValueAtTime(0.25, now + i * 0.18 + 0.02)
+      gain.gain.exponentialRampToValueAtTime(0.0001, now + i * 0.18 + 0.22)
+      osc.connect(gain).connect(ctx.destination)
+      osc.start(now + i * 0.18)
+      osc.stop(now + i * 0.18 + 0.25)
+    })
+    setTimeout(() => ctx.close?.(), 1200)
+  } catch {}
+}
+
+export default function Notifications() {
+  const { user } = useAuth()
+  const [toast, setToast] = useState(null)
+  const [soundOn, setSoundOn] = useState(localStorage.getItem('soundOn') !== '0')
+  const timerRef = useRef(null)
+
+  useEffect(() => {
+    if (!socket.connected) socket.connect()
+    if (user?.id) socket.emit('identify', user.id)
+
+    const onNotify = (n) => {
+      setToast(n)
+      if (localStorage.getItem('soundOn') !== '0') beep()
+      if (navigator.vibrate) navigator.vibrate([120, 60, 120])
+      clearTimeout(timerRef.current)
+      timerRef.current = setTimeout(() => setToast(null), 6000)
+    }
+    socket.on('notify', onNotify)
+    return () => socket.off('notify', onNotify)
+  }, [user?.id])
+
+  useEffect(() => {
+    const handler = (e) => setSoundOn(e.detail)
+    window.addEventListener('sound-pref', handler)
+    return () => window.removeEventListener('sound-pref', handler)
+  }, [])
+
+  if (!toast || !soundOn) return null
+
+  return (
+    <div className="fixed top-3 inset-x-3 z-50 max-w-sm mx-auto">
+      <div className="card-lux p-3 flex items-start gap-3 shadow-lg">
+        <span className="w-9 h-9 rounded-full bg-[#E9F5EE] text-[#006C35] grid place-items-center text-lg">
+          {toast.type === 'bid' ? '💰' : '🔔'}
+        </span>
+        <div className="flex-1">
+          <p className="font-bold text-sm text-[#11221A]">{toast.title}</p>
+          <p className="text-xs text-gray-600">{toast.body}</p>
+        </div>
+        <button onClick={() => setToast(null)} className="text-gray-400 text-sm">✕</button>
+      </div>
+    </div>
+  )
+}

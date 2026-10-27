@@ -80,10 +80,73 @@ app.post('/api/auth/verify', (req, res) => {
   res.json({ token: signToken(user.id), user })
 })
 
+const fullUser = (id) =>
+  db
+    .prepare(
+      `SELECT id, phone, name, city, role, email, nationality, specialty, lat, lng, avatar,
+        sound_on, last_seen, created_at,
+        CASE WHEN last_seen IS NOT NULL AND last_seen >= datetime('now', '-2 minutes') THEN 1 ELSE 0 END AS online
+       FROM users WHERE id = ?`,
+    )
+    .get(id)
+
 app.get('/api/me', authRequired, (req, res) => {
-  const user = db.prepare('SELECT id, phone, name, city, created_at FROM users WHERE id = ?').get(req.userId)
+  const user = fullUser(req.userId)
   if (!user) return res.status(404).json({ error: 'not_found' })
   res.json(user)
+})
+
+app.post('/api/auth/register', authRequired, (req, res) => {
+  const b = req.body || {}
+  const name = String(b.name || '').trim()
+  if (!name) return res.status(400).json({ error: 'name_required' })
+  const role = b.role === 'expert' ? 'expert' : 'customer'
+
+  db.prepare(
+    `UPDATE users SET name = ?, city = ?, role = ?, email = ?, nationality = ?, specialty = ?,
+      lat = ?, lng = ?, phone = COALESCE(?, phone), last_seen = datetime('now') WHERE id = ?`,
+  ).run(
+    name,
+    b.city || null,
+    role,
+    b.email || null,
+    b.nationality || null,
+    b.specialty || null,
+    b.lat != null ? Number(b.lat) : null,
+    b.lng != null ? Number(b.lng) : null,
+    b.phone || null,
+    req.userId,
+  )
+
+  if (role === 'expert') {
+    const existing = db.prepare('SELECT * FROM experts WHERE user_id = ?').get(req.userId)
+    if (existing) {
+      db.prepare(
+        `UPDATE experts SET name = ?, name_ar = ?, job = ?, city = ?, phone = ?, lat = ?, lng = ? WHERE id = ?`,
+      ).run(name, name, b.specialty || existing.job, b.city || existing.city, b.phone || existing.phone,
+        b.lat != null ? Number(b.lat) : existing.lat, b.lng != null ? Number(b.lng) : existing.lng, existing.id)
+    } else {
+      db.prepare(
+        `INSERT INTO experts (name, name_ar, job, city, rate, rating, reviews_count, image, phone, skills, experience, lat, lng, user_id)
+         VALUES (?, ?, ?, ?, '150 ريال/ساعة', 4.5, 0, '/experts/ac.jpg', ?, '[]', '1 سنة', ?, ?, ?)`,
+      ).run(name, name, b.specialty || 'AC', b.city || 'الرياض', b.phone || null,
+        b.lat != null ? Number(b.lat) : null, b.lng != null ? Number(b.lng) : null, req.userId)
+    }
+  }
+
+  res.json(fullUser(req.userId))
+})
+
+app.patch('/api/me/sound', authRequired, (req, res) => {
+  db.prepare('UPDATE users SET sound_on = ? WHERE id = ?').run(req.body?.sound_on ? 1 : 0, req.userId)
+  res.json({ ok: true, sound_on: req.body?.sound_on ? 1 : 0 })
+})
+
+app.get('/api/online/count', (_req, res) => {
+  const c = db
+    .prepare("SELECT COUNT(*) c FROM users WHERE last_seen >= datetime('now', '-2 minutes')")
+    .get().c
+  res.json({ online: c, experts_online: db.prepare("SELECT COUNT(*) c FROM experts e JOIN users u ON u.id = e.user_id WHERE u.last_seen >= datetime('now','-2 minutes')").get().c })
 })
 
 /* ---------- experts ---------- */
@@ -181,6 +244,12 @@ app.post('/api/requests', authRequired, (req, res) => {
     )
   const request = requestWithBids(info.lastInsertRowid)
   io.emit('request:new', request)
+  io.emit('notify', {
+    type: 'request',
+    title: 'طلب جديد',
+    body: `${request.title} — ${request.city || ''}`,
+    requestId: request.id,
+  })
   onNewRequest(io, request)
   res.status(201).json(request)
 })
@@ -209,6 +278,13 @@ app.post('/api/requests/:id/bids', authRequired, (req, res) => {
     )
     .get(info.lastInsertRowid)
   io.to(`request:${request.id}`).emit('bid:new', bid)
+  io.to(`user:${request.user_id}`).emit('notify', {
+    type: 'bid',
+    title: 'سومة جديدة',
+    body: `${bid.expert_name_ar || bid.expert_name} سوم بـ${bid.amount} ريال`,
+    requestId: request.id,
+    amount: bid.amount,
+  })
   res.status(201).json(bid)
 })
 
@@ -420,6 +496,9 @@ app.get('*', (req, res, next) => {
 })
 
 io.on('connection', (socket) => {
+  socket.on('identify', (userId) => {
+    if (userId) socket.join(`user:${userId}`)
+  })
   socket.on('join', (requestId) => socket.join(`request:${requestId}`))
   socket.on('leave', (requestId) => socket.leave(`request:${requestId}`))
 })

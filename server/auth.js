@@ -1,4 +1,5 @@
 import crypto from 'node:crypto'
+import { db } from './db.js'
 
 const SECRET = process.env.AUTH_SECRET || 'dev-secret-change-me'
 
@@ -26,5 +27,8 @@ export function authRequired(req, res, next) {
   const data = verifyToken(token)
   if (!data) return res.status(401).json({ error: 'unauthorized' })
   req.userId = data.uid
+  try {
+    db.prepare('UPDATE users SET last_seen = datetime(\'now\') WHERE id = ?').run(data.uid)
+  } catch {}
   next()
 }

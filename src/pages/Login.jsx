@@ -140,8 +140,8 @@ export default function Login() {
                   onClick={async () => {
                     setPhoneErr('')
                     try {
-                      await loginWithPhone(phone, code)
-                      navigate('/')
+                      const merged = await loginWithPhone(phone, code)
+                      navigate(merged?.name ? '/' : '/register')
                     } catch (e) {
                       setPhoneErr(e.message)
                     }
