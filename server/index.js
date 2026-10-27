@@ -10,6 +10,7 @@ import { db } from './db.js'
 import { signToken, verifyToken, authRequired } from './auth.js'
 import { cities } from './cities.js'
 import { seedAdmin, checkAdmin, adminToken, adminRequired } from './admin.js'
+import { seedBots, onNewRequest, resumeBots } from './bots.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const app = express()
@@ -37,6 +38,7 @@ const upload = multer({
 })
 
 seedAdmin()
+seedBots()
 
 /* ---------- auth (phone + OTP) ---------- */
 
@@ -179,6 +181,7 @@ app.post('/api/requests', authRequired, (req, res) => {
     )
   const request = requestWithBids(info.lastInsertRowid)
   io.emit('request:new', request)
+  onNewRequest(io, request)
   res.status(201).json(request)
 })
 
@@ -420,6 +423,8 @@ io.on('connection', (socket) => {
   socket.on('join', (requestId) => socket.join(`request:${requestId}`))
   socket.on('leave', (requestId) => socket.leave(`request:${requestId}`))
 })
+
+resumeBots(io)
 
 const PORT = process.env.PORT || 3001
 server.listen(PORT, () => console.log(`mihnati server on http://localhost:${PORT}`))

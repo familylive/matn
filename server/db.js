@@ -134,5 +134,6 @@ addColumn('experts', 'lng', 'REAL')
 addColumn('requests', 'lat', 'REAL')
 addColumn('requests', 'lng', 'REAL')
 addColumn('requests', 'ends_at', 'TEXT')
+addColumn('experts', 'is_bot', 'INTEGER DEFAULT 0')
 
 export default db

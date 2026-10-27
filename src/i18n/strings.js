@@ -26,6 +26,7 @@ export const strings = {
     'cat.Electrician': 'كهربائي',
     'cat.Painter': 'دهّان',
     'cat.Mechanic': 'ميكانيكي',
+    'cat.AC': 'فني تكييف',
 
     'city.Tunis': 'تونس',
     'city.Sfax': 'صفاقس',
@@ -147,6 +148,7 @@ export const strings = {
     'cat.Electrician': 'Electrician',
     'cat.Painter': 'Painter',
     'cat.Mechanic': 'Mechanic',
+    'cat.AC': 'AC Technician',
 
     'city.Tunis': 'Tunis',
     'city.Sfax': 'Sfax',
