@@ -75,6 +75,45 @@ CREATE TABLE IF NOT EXISTS reviews (
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
+CREATE TABLE IF NOT EXISTS admins (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  email TEXT UNIQUE NOT NULL,
+  password_hash TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS ads (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  title TEXT NOT NULL,
+  image TEXT,
+  link TEXT,
+  price REAL,
+  duration_days INTEGER DEFAULT 30,
+  starts_at TEXT NOT NULL DEFAULT (datetime('now')),
+  ends_at TEXT,
+  featured INTEGER DEFAULT 0,
+  active INTEGER DEFAULT 1,
+  views INTEGER DEFAULT 0,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS city_requests (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  city TEXT NOT NULL,
+  phone TEXT,
+  note TEXT,
+  status TEXT NOT NULL DEFAULT 'new',
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS invoices (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  number TEXT UNIQUE NOT NULL,
+  request_id INTEGER NOT NULL REFERENCES requests(id),
+  amount REAL NOT NULL,
+  status TEXT NOT NULL DEFAULT 'issued',
+  issued_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
 CREATE INDEX IF NOT EXISTS idx_bids_request ON bids(request_id);
 CREATE INDEX IF NOT EXISTS idx_requests_status ON requests(status);
 `)

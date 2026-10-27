@@ -9,28 +9,31 @@ export default function ExpertCard({ expert }) {
   return (
     <div
       onClick={() => navigate(`/expert/${expert.id}`, { state: { expert } })}
-      className="bg-white rounded-xl p-4 shadow-sm border border-gray-100 cursor-pointer hover:shadow-md transition-shadow"
+      className="card-lux cursor-pointer active:scale-[.995] transition"
     >
-      <div className="flex items-start gap-4">
-        <div className="relative">
-          <img src={expert.image} alt={expert.personName} className="w-20 h-20 rounded-lg object-cover" />
-          <div className="absolute top-2 end-2">
-            <FavoriteButton expertId={expert.id} />
+      <div className="gold-bar" />
+      <div className="p-4">
+        <div className="flex items-start gap-3">
+          <div className="relative">
+            <img src={expert.image} alt={expertName(expert, lang)} className="w-20 h-20 rounded-xl object-cover ring-2 ring-[#FBF5E3]" />
           </div>
-        </div>
-        <div className="flex-1">
-          <h4 className="font-semibold text-gray-900">{expertName(expert, lang)}</h4>
-          <p className="text-gray-600 text-sm">{t(`cat.${expert.jobName}`, expert.jobName)}</p>
-          <div className="flex items-center gap-2 mt-2">
-            <span className="text-yellow-400">★</span>
-            <span className="text-sm font-medium text-gray-900">{expert.rating}</span>
-            <span className="text-gray-400">•</span>
-            <span className="text-sm text-gray-600">
-              {expert.reviews} {t('expert.reviews')}
-            </span>
+          <div className="flex-1 min-w-0">
+            <div className="flex items-start justify-between gap-2">
+              <h4 className="font-extrabold text-[#11221A] truncate">{expertName(expert, lang)}</h4>
+              <FavoriteButton expertId={expert.id} />
+            </div>
+            <p className="text-[#006C35] text-sm font-semibold">{t(`cat.${expert.jobName}`, expert.jobName)}</p>
+            <div className="flex items-center gap-2 mt-1.5">
+              <span className="text-[#C9A227]">★</span>
+              <span className="text-sm font-bold text-gray-900">{expert.rating}</span>
+              <span className="text-gray-300">•</span>
+              <span className="text-xs text-gray-500">{expert.reviews} {t('expert.reviews')}</span>
+            </div>
+            <div className="flex items-center justify-between mt-2">
+              <span className="text-xs text-gray-500">📍 {t(`city.${expert.location}`, expert.location)}</span>
+              <span className="chip-gold">{expert.hourlyRate}</span>
+            </div>
           </div>
-          <p className="text-sm text-gray-600 mt-1">📍 {t(`city.${expert.location}`, expert.location)}</p>
-          <p className="text-sm text-blue-500 mt-1">{expert.hourlyRate}</p>
         </div>
       </div>
     </div>

@@ -14,16 +14,22 @@ export default function Header() {
   const { pathname } = useLocation()
   const { t, lang, toggleLang } = useLang()
   return (
-    <header className="bg-white border-b border-gray-100 px-4 py-3 flex items-center justify-between">
-      <span className="w-10" />
-      <h1 className="text-lg font-medium text-gray-900">{t(titleKeys[pathname] || 'app.name')}</h1>
-      <button
-        onClick={toggleLang}
-        aria-label="Change language"
-        className="w-10 h-8 rounded-lg border border-gray-200 text-xs font-semibold text-gray-600"
-      >
-        {lang === 'ar' ? 'EN' : 'ع'}
-      </button>
+    <header className="bg-white border-b border-[#ECE3CE]">
+      <div className="px-4 py-3 flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <span className="w-8 h-8 rounded-lg bg-[#006C35] text-white grid place-items-center font-extrabold">م</span>
+          <span className="font-extrabold text-[#11221A]">{t('app.name')}</span>
+        </div>
+        <span className="text-sm text-gray-500">{t(titleKeys[pathname] || 'app.name')}</span>
+        <button
+          onClick={toggleLang}
+          aria-label="Change language"
+          className="w-10 h-8 rounded-lg border border-[#E3D9BF] text-xs font-bold text-[#8a6d13] bg-[#FBF5E3]"
+        >
+          {lang === 'ar' ? 'EN' : 'ع'}
+        </button>
+      </div>
+      <div className="gold-bar" />
     </header>
   )
 }

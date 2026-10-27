@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import experts from '../data/experts.json'
 import { categories } from '../data/categories.js'
 import ExpertCard from '../components/ExpertCard.jsx'
+import AdsCarousel from '../components/AdsCarousel.jsx'
 import { useLang } from '../i18n/LanguageContext.jsx'
 
 export default function Home() {
@@ -23,16 +24,16 @@ export default function Home() {
     )
   }, [query, t])
 
-  const steps = ['1', '2', '3']
-
   return (
-    <div className="px-4 py-6">
-      <div className="mb-8">
-        <h2 className="text-2xl font-bold text-gray-900 mb-2">{t('home.title')}</h2>
-        <p className="text-gray-600 mb-6">{t('home.subtitle')}</p>
-        <div className="relative">
+    <div className="pb-8">
+      <div className="relative px-4 pt-5 pb-6 bg-gradient-to-b from-[#006C35] to-[#004d26] text-white overflow-hidden">
+        <div className="absolute -top-10 -end-10 w-40 h-40 rounded-full bg-white/5" />
+        <div className="absolute -bottom-14 -start-8 w-36 h-36 rounded-full bg-[#C9A227]/20" />
+        <h2 className="text-2xl font-extrabold leading-snug">{t('home.title')}</h2>
+        <p className="text-white/80 text-sm mt-1">{t('home.subtitle')}</p>
+        <div className="relative mt-4">
           <span className="absolute inset-y-0 start-0 ps-3 flex items-center pointer-events-none">
-            <svg className="h-5 w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg className="h-5 w-5 text-[#006C35]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
             </svg>
           </span>
@@ -41,46 +42,51 @@ export default function Home() {
             placeholder={t('home.search')}
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            className="w-full ps-10 pe-4 py-3 border border-gray-200 rounded-xl bg-gray-100 focus:bg-white focus:border-blue-400 outline-none"
+            className="w-full ps-10 pe-4 py-3 rounded-xl bg-white text-gray-800 placeholder:text-gray-400 outline-none ring-1 ring-[#C9A227]/40 focus:ring-2 focus:ring-[#C9A227]"
           />
         </div>
       </div>
 
-      <div className="mb-8">
-        <h3 className="text-xl font-bold text-gray-900 mb-4">{t('home.categories')}</h3>
-        <div className="grid grid-cols-2 gap-4">
+      <AdsCarousel />
+
+      <div className="px-4 mt-6">
+        <h3 className="section-title mb-3">{t('home.categories')}</h3>
+        <div className="grid grid-cols-2 gap-3">
           {categories.map((c) => (
             <button
               key={c.name}
               onClick={() => navigate(`/search?category=${encodeURIComponent(c.name)}`)}
-              className="bg-white rounded-xl py-5 shadow-sm border border-gray-100 flex flex-col items-center gap-2 hover:shadow-md transition-shadow"
+              className="card-lux active:scale-[.98] transition p-4 flex flex-col items-center gap-2"
             >
-              <span className="text-2xl">{c.icon}</span>
-              <span className="text-gray-700 font-medium">{t(`cat.${c.name}`, c.name)}</span>
+              <span className="w-12 h-12 rounded-full bg-[#FBF5E3] border border-[#EADFC8] grid place-items-center text-2xl">
+                {c.icon}
+              </span>
+              <span className="text-[#11221A] font-bold">{t(`cat.${c.name}`, c.name)}</span>
+              <span className="text-[10px] text-[#8a6d13]">اطلب الآن ←</span>
             </button>
           ))}
         </div>
       </div>
 
-      <div className="mb-8">
-        <h3 className="text-xl font-bold text-gray-900 mb-4">{t('home.featured')}</h3>
-        <div className="space-y-4">
+      <div className="px-4 mt-7">
+        <h3 className="section-title mb-3">{t('home.featured')}</h3>
+        <div className="space-y-3">
           {filtered.map((e) => <ExpertCard key={e.id} expert={e} />)}
           {filtered.length === 0 && <p className="text-gray-500 text-sm">{t('home.noResults')}</p>}
         </div>
       </div>
 
-      <div className="mb-8">
-        <h3 className="text-xl font-bold text-gray-900 mb-6">{t('home.how')}</h3>
-        <div className="space-y-6">
-          {steps.map((n) => (
-            <div key={n} className="flex items-start gap-4">
-              <div className="bg-blue-500 text-white rounded-full w-12 h-12 flex items-center justify-center text-lg font-bold flex-shrink-0">
+      <div className="px-4 mt-8">
+        <h3 className="section-title mb-4">{t('home.how')}</h3>
+        <div className="space-y-4">
+          {['1', '2', '3'].map((n) => (
+            <div key={n} className="flex items-start gap-3">
+              <div className="w-10 h-10 rounded-full bg-[#006C35] text-white grid place-items-center font-extrabold flex-shrink-0 ring-4 ring-[#FBF5E3]">
                 {n}
               </div>
-              <div className="flex-1">
-                <h4 className="text-lg font-bold text-gray-900 mb-2">{t(`home.step${n}.t`)}</h4>
-                <p className="text-gray-600">{t(`home.step${n}.d`)}</p>
+              <div>
+                <h4 className="font-bold text-[#11221A]">{t(`home.step${n}.t`)}</h4>
+                <p className="text-gray-600 text-sm">{t(`home.step${n}.d`)}</p>
               </div>
             </div>
           ))}
