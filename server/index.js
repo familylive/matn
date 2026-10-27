@@ -91,7 +91,7 @@ const requestWithBids = (id) => {
   if (!request) return null
   const bids = db
     .prepare(
-      `SELECT b.*, e.name AS expert_name, e.job AS expert_job, e.rating AS expert_rating, e.image AS expert_image
+      `SELECT b.*, e.name AS expert_name, e.name_ar AS expert_name_ar, e.job AS expert_job, e.rating AS expert_rating, e.image AS expert_image
        FROM bids b JOIN experts e ON e.id = b.expert_id
        WHERE b.request_id = ? ORDER BY b.amount ASC`,
     )
@@ -151,7 +151,7 @@ app.post('/api/requests/:id/bids', authRequired, (req, res) => {
 
   const bid = db
     .prepare(
-      `SELECT b.*, e.name AS expert_name, e.job AS expert_job, e.rating AS expert_rating, e.image AS expert_image
+      `SELECT b.*, e.name AS expert_name, e.name_ar AS expert_name_ar, e.job AS expert_job, e.rating AS expert_rating, e.image AS expert_image
        FROM bids b JOIN experts e ON e.id = b.expert_id WHERE b.id = ?`,
     )
     .get(info.lastInsertRowid)

@@ -11,13 +11,14 @@ if (count > 0) {
   console.log(`already seeded (${count} experts)`)
 } else {
   const insert = db.prepare(
-    `INSERT INTO experts (name, job, city, rate, rating, reviews_count, image, phone, skills, experience)
-     VALUES (@name, @job, @city, @rate, @rating, @reviews, @image, @phone, @skills, @experience)`,
+    `INSERT INTO experts (name, name_ar, job, city, rate, rating, reviews_count, image, phone, skills, experience)
+     VALUES (@name, @nameAr, @job, @city, @rate, @rating, @reviews, @image, @phone, @skills, @experience)`,
   )
   const tx = db.transaction((rows) => {
     for (const e of rows) {
       insert.run({
         name: e.personName,
+        nameAr: e.nameAr || null,
         job: e.jobName,
         city: e.location,
         rate: e.hourlyRate,
