@@ -116,7 +116,7 @@ export const strings = {
     'rd.live': 'مباشر',
     'rd.loading': 'جارٍ التحميل…',
 
-    'common.tnd': 'دينار',
+    'common.tnd': 'ريال',
     'common.km': 'كم',
   },
 
@@ -155,6 +155,22 @@ export const strings = {
     'city.Beja': 'Beja',
     'city.Kairouan': 'Kairouan',
     'city.Gabes': 'Gabes',
+    'city.الرياض': 'Riyadh',
+    'city.جدة': 'Jeddah',
+    'city.الدمام': 'Dammam',
+    'city.مكة المكرمة': 'Makkah',
+    'city.المدينة المنورة': 'Madinah',
+    'city.الطائف': 'Taif',
+    'city.أبها': 'Abha',
+    'city.تبوك': 'Tabuk',
+    'city.بريدة': 'Buraidah',
+    'city.حائل': 'Hail',
+    'city.نجران': 'Najran',
+    'city.جيزان': 'Jazan',
+    'city.الخبر': 'Khobar',
+    'city.الجبيل': 'Jubail',
+    'city.ينبع': 'Yanbu',
+    'city.الأحساء': 'Al Ahsa',
 
     'expert.reviews': 'reviews',
     'expert.emergency': '24/7 Emergency',
@@ -237,7 +253,7 @@ export const strings = {
     'rd.live': 'live',
     'rd.loading': 'Loading…',
 
-    'common.tnd': 'TND',
+    'common.tnd': 'SAR',
     'common.km': 'km',
   },
 }
