@@ -12,9 +12,5 @@ services:
         value: 22.11.0
       - key: DEV_OTP
         value: "1"
-      - key: DATA_DIR
-        value: /var/data
-    disk:
-      name: mihnati-data
-      mountPath: /var/data
-      sizeGB: 1
+# ملاحظة: الخطة المجانية بلا قرص دائم — قاعدة البيانات تُعاد بناؤها عند كل نشر.
+# للترقية: plan: starter + disk (mountPath /var/data) + DATA_DIR=/var/data
