@@ -24,7 +24,9 @@
     "reviews": 132,
     "image_remote": "https://images.unsplash.com/photo-1581092918056-0c4c3acd3789?w=400&h=300&fit=crop",
     "image": "/experts/1.jpg",
-    "nameAr": "أحمد بن علي"
+    "nameAr": "أحمد بن علي",
+    "lat": 24.7256,
+    "lng": 46.6833
   },
   {
     "id": 2,
@@ -51,7 +53,9 @@
     "reviews": 98,
     "image_remote": "https://images.unsplash.com/photo-1621905252507-b35492cc74b4?w=400&h=300&fit=crop",
     "image": "/experts/2.jpg",
-    "nameAr": "فاطمة خليفي"
+    "nameAr": "فاطمة خليفي",
+    "lat": 21.4758,
+    "lng": 39.2065
   },
   {
     "id": 3,
@@ -78,7 +82,9 @@
     "reviews": 156,
     "image_remote": "https://images.unsplash.com/photo-1504148455328-c376907d081c?w=400&h=300&fit=crop",
     "image": "/experts/3.jpg",
-    "nameAr": "محمد الطرابلسي"
+    "nameAr": "محمد الطرابلسي",
+    "lat": 26.4277,
+    "lng": 50.0778
   },
   {
     "id": 4,
@@ -105,7 +111,9 @@
     "reviews": 87,
     "image_remote": "https://images.unsplash.com/photo-1562259949-e8e7689d7828?w=400&h=300&fit=crop",
     "image": "/experts/4.jpg",
-    "nameAr": "سارة الماجري"
+    "nameAr": "سارة الماجري",
+    "lat": 21.3831,
+    "lng": 39.8669
   },
   {
     "id": 5,
@@ -132,6 +140,8 @@
     "reviews": 203,
     "image_remote": "https://images.unsplash.com/photo-1486262715619-67b85e0b08d3?w=400&h=300&fit=crop",
     "image": "/experts/5.jpg",
-    "nameAr": "كريم الوالي"
+    "nameAr": "كريم الوالي",
+    "lat": 24.5347,
+    "lng": 39.5622
   }
 ]

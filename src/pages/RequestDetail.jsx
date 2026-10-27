@@ -17,6 +17,12 @@ export default function RequestDetail() {
   const [experts, setExperts] = useState([])
   const [error, setError] = useState('')
   const [bid, setBid] = useState({ expertId: '', amount: '', note: '' })
+  const [now, setNow] = useState(Date.now())
+
+  useEffect(() => {
+    const timer = setInterval(() => setNow(Date.now()), 1000)
+    return () => clearInterval(timer)
+  }, [])
   const [live, setLive] = useState(false)
 
   const load = useCallback(async () => {
@@ -110,13 +116,22 @@ export default function RequestDetail() {
   }
 
   const lowest = data.bids[0]?.amount
+  const endMs = data.ends_at ? new Date(data.ends_at.replace(' ', 'T') + 'Z').getTime() : null
+  const remaining = endMs ? endMs - now : null
+  const ended = remaining !== null && remaining <= 0
+  const mmss = remaining && remaining > 0
+    ? `${String(Math.floor(remaining / 60000)).padStart(2, '0')}:${String(Math.floor((remaining % 60000) / 1000)).padStart(2, '0')}`
+    : null
 
   return (
     <div className="min-h-screen bg-gray-50 max-w-sm mx-auto">
       <div className="bg-white border-b border-gray-100 px-4 py-4 flex items-center gap-3">
         <button onClick={() => navigate(-1)} className="text-gray-500" aria-label={t('expert.back')}>←</button>
         <h1 className="font-semibold text-gray-900 truncate">{data.title}</h1>
-        {live && <span className="ms-auto text-xs text-green-600">● {t('rd.live')}</span>}
+        <span className={`ms-auto text-xs font-bold ${ended ? 'text-red-500' : 'text-[#006C35]'}`}>
+          {ended ? 'انتهى المزاد' : mmss ? `⏱ ${mmss}` : ''}
+        </span>
+        {live && <span className="text-xs text-green-600">●</span>}
       </div>
 
       <div className="px-4 py-5">
@@ -124,6 +139,16 @@ export default function RequestDetail() {
           <span className="text-xs bg-blue-50 text-blue-600 px-2 py-1 rounded-full">{t(`cat.${data.category}`, data.category)}</span>
           <span className="text-xs bg-gray-100 text-gray-600 px-2 py-1 rounded-full">{t(`req.status.${data.status}`, data.status)}</span>
           {data.city && <span className="text-sm text-gray-500">📍 {data.city}</span>}
+          {data.lat && data.lng && (
+            <a
+              href={`https://maps.google.com/?q=${data.lat},${data.lng}`}
+              target="_blank"
+              rel="noreferrer"
+              className="text-xs text-[#006C35] font-bold underline"
+            >
+              عرض الموقع على الخريطة
+            </a>
+          )}
         </div>
 
         {data.description && <p className="text-gray-700 mb-3">{data.description}</p>}
@@ -146,7 +171,15 @@ export default function RequestDetail() {
               <img src={b.expert_image} alt={b.expert_name} className="w-10 h-10 rounded-full object-cover" />
               <div className="flex-1">
                 <p className="font-medium text-gray-900 text-sm">{(lang === 'ar' && b.expert_name_ar) || b.expert_name}</p>
-                <p className="text-xs text-gray-500">{t(`cat.${b.expert_job}`, b.expert_job)} · ★ {b.expert_rating}</p>
+                <p className="text-xs text-gray-500">
+                  {t(`cat.${b.expert_job}`, b.expert_job)} · ★ {b.expert_rating}
+                  {b.distance_km != null ? ` · 📍 ${b.distance_km} كم` : ''}
+                </p>
+                {data.nearest_bid_id === b.id && (
+                  <span className="inline-block mt-1 text-[10px] bg-[#E9F5EE] text-[#006C35] px-2 py-0.5 rounded-full font-bold">
+                    الأقرب إليك
+                  </span>
+                )}
                 {b.note && <p className="text-xs text-gray-500 mt-1">{b.note}</p>}
               </div>
               <div className="text-right">
@@ -163,7 +196,7 @@ export default function RequestDetail() {
           {data.bids.length === 0 && <p className="text-sm text-gray-500">{t('rd.none')}</p>}
         </div>
 
-        {data.status === 'open' && (
+        {data.status === 'open' && !ended && (
           <form onSubmit={placeBid} className="bg-white rounded-xl p-4 border border-gray-100 mt-5 space-y-3">
             <h3 className="font-semibold text-gray-900 text-sm">{t('rd.placeBid')}</h3>
             <select

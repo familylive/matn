@@ -105,6 +105,18 @@ app.get('/api/experts/:id', (req, res) => {
 
 /* ---------- requests + live bidding ---------- */
 
+const R_EARTH_KM = 6371
+function haversineKm(aLat, aLng, bLat, bLng) {
+  if ([aLat, aLng, bLat, bLng].some((v) => v === null || v === undefined)) return null
+  const toRad = (d) => (d * Math.PI) / 180
+  const dLat = toRad(bLat - aLat)
+  const dLng = toRad(bLng - aLng)
+  const h =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(toRad(aLat)) * Math.cos(toRad(bLat)) * Math.sin(dLng / 2) ** 2
+  return Math.round(2 * R_EARTH_KM * Math.asin(Math.sqrt(h)) * 10) / 10
+}
+
 const requestWithBids = (id) => {
   const request = db
     .prepare(
@@ -114,12 +126,16 @@ const requestWithBids = (id) => {
   if (!request) return null
   const bids = db
     .prepare(
-      `SELECT b.*, e.name AS expert_name, e.name_ar AS expert_name_ar, e.job AS expert_job, e.rating AS expert_rating, e.image AS expert_image
+      `SELECT b.*, e.name AS expert_name, e.name_ar AS expert_name_ar, e.job AS expert_job, e.rating AS expert_rating, e.image AS expert_image, e.lat AS lat, e.lng AS lng
        FROM bids b JOIN experts e ON e.id = b.expert_id
        WHERE b.request_id = ? ORDER BY b.amount ASC`,
     )
     .all(id)
-  return { ...request, bids }
+    .map((b) => ({ ...b, distance_km: haversineKm(request.lat, request.lng, b.lat, b.lng) }))
+  const nearest = bids
+    .filter((b) => b.distance_km !== null)
+    .sort((a, z) => a.distance_km - z.distance_km)[0]
+  return { ...request, bids, nearest_bid_id: nearest?.id ?? null }
 }
 
 app.get('/api/requests', (req, res) => {
@@ -148,10 +164,19 @@ app.post('/api/requests', authRequired, (req, res) => {
   if (!title || !category) return res.status(400).json({ error: 'title_and_category_required' })
   const info = db
     .prepare(
-      `INSERT INTO requests (user_id, title, category, description, city, budget)
-       VALUES (?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO requests (user_id, title, category, description, city, budget, lat, lng, ends_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now', '+60 minutes'))`,
     )
-    .run(req.userId, title, category, description || null, city || null, budget ? Number(budget) : null)
+    .run(
+      req.userId,
+      title,
+      category,
+      description || null,
+      city || null,
+      budget ? Number(budget) : null,
+      req.body?.lat != null ? Number(req.body.lat) : null,
+      req.body?.lng != null ? Number(req.body.lng) : null,
+    )
   const request = requestWithBids(info.lastInsertRowid)
   io.emit('request:new', request)
   res.status(201).json(request)
@@ -161,6 +186,8 @@ app.post('/api/requests/:id/bids', authRequired, (req, res) => {
   const request = db.prepare('SELECT * FROM requests WHERE id = ?').get(req.params.id)
   if (!request) return res.status(404).json({ error: 'not_found' })
   if (request.status !== 'open') return res.status(409).json({ error: 'request_closed' })
+  if (request.ends_at && new Date(request.ends_at.replace(' ', 'T') + 'Z') < new Date())
+    return res.status(409).json({ error: 'auction_ended' })
 
   const expertId = Number(req.body?.expertId)
   const amount = Number(req.body?.amount)
@@ -174,7 +201,7 @@ app.post('/api/requests/:id/bids', authRequired, (req, res) => {
 
   const bid = db
     .prepare(
-      `SELECT b.*, e.name AS expert_name, e.name_ar AS expert_name_ar, e.job AS expert_job, e.rating AS expert_rating, e.image AS expert_image
+      `SELECT b.*, e.name AS expert_name, e.name_ar AS expert_name_ar, e.job AS expert_job, e.rating AS expert_rating, e.image AS expert_image, e.lat AS lat, e.lng AS lng
        FROM bids b JOIN experts e ON e.id = b.expert_id WHERE b.id = ?`,
     )
     .get(info.lastInsertRowid)

@@ -39,6 +39,8 @@ CREATE TABLE IF NOT EXISTS experts (
   reviews_count INTEGER DEFAULT 0,
   image TEXT,
   phone TEXT,
+  lat REAL,
+  lng REAL,
   skills TEXT,
   experience TEXT,
   verified INTEGER DEFAULT 1
@@ -54,6 +56,9 @@ CREATE TABLE IF NOT EXISTS requests (
   budget REAL,
   status TEXT NOT NULL DEFAULT 'open',
   accepted_bid_id INTEGER,
+  lat REAL,
+  lng REAL,
+  ends_at TEXT,
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
@@ -115,7 +120,19 @@ CREATE TABLE IF NOT EXISTS invoices (
 );
 
 CREATE INDEX IF NOT EXISTS idx_bids_request ON bids(request_id);
+
 CREATE INDEX IF NOT EXISTS idx_requests_status ON requests(status);
 `)
+
+/* ترقية قواعد البيانات القديمة */
+function addColumn(table, col, type) {
+  const cols = db.prepare(`PRAGMA table_info(${table})`).all().map((c) => c.name)
+  if (!cols.includes(col)) db.exec(`ALTER TABLE ${table} ADD COLUMN ${col} ${type}`)
+}
+addColumn('experts', 'lat', 'REAL')
+addColumn('experts', 'lng', 'REAL')
+addColumn('requests', 'lat', 'REAL')
+addColumn('requests', 'lng', 'REAL')
+addColumn('requests', 'ends_at', 'TEXT')
 
 export default db

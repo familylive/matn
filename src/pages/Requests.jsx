@@ -18,6 +18,7 @@ export default function Requests() {
   const [showForm, setShowForm] = useState(false)
   const [error, setError] = useState('')
   const [form, setForm] = useState({ title: '', category: 'Plumber', city: '', budget: '', description: '' })
+  const [loc, setLoc] = useState({ lat: null, lng: null, status: 'idle', accuracy: null })
   const { isAuthenticated } = useAuth()
   const { t } = useLang()
   const navigate = useNavigate()
@@ -42,7 +43,12 @@ export default function Requests() {
     if (!isAuthenticated) return navigate('/login')
     if (!form.city) return setError('اختر مدينتك أولاً')
     try {
-      const created = await api.createRequest({ ...form, budget: form.budget ? Number(form.budget) : null })
+      const created = await api.createRequest({
+        ...form,
+        budget: form.budget ? Number(form.budget) : null,
+        lat: loc.lat,
+        lng: loc.lng,
+      })
       setShowForm(false)
       setForm({ title: '', category: 'Plumber', city: '', budget: '', description: '' })
       navigate(`/requests/${created.id}`)
@@ -97,6 +103,43 @@ export default function Requests() {
             </div>
 
             <CityGate value={form.city} onChange={(c) => setForm({ ...form, city: c })} />
+
+            <div className="rounded-xl border border-[#E3D9BF] bg-[#FBF9F2] p-3">
+              <button
+                type="button"
+                onClick={() => {
+                  if (!navigator.geolocation) return setLoc({ ...loc, status: 'unsupported' })
+                  setLoc({ ...loc, status: 'loading' })
+                  navigator.geolocation.getCurrentPosition(
+                    (pos) =>
+                      setLoc({
+                        lat: pos.coords.latitude,
+                        lng: pos.coords.longitude,
+                        accuracy: Math.round(pos.coords.accuracy),
+                        status: 'ok',
+                      }),
+                    () => setLoc({ ...loc, status: 'denied' }),
+                    { enableHighAccuracy: true, timeout: 10000 },
+                  )
+                }}
+                className="w-full rounded-lg bg-white border border-[#006C35] text-[#006C35] py-2 text-sm font-bold"
+              >
+                {loc.status === 'loading' ? 'جارٍ تحديد موقعك…' : '📍 حدد موقعي الحالي'}
+              </button>
+              {loc.status === 'ok' && (
+                <p className="text-[11px] text-[#006C35] mt-2 text-center">
+                  تم تحديد موقعك ✅ (دقة ±{loc.accuracy} م) — راح تشوف مسافة كل حرفي عنك.
+                </p>
+              )}
+              {loc.status === 'denied' && (
+                <p className="text-[11px] text-red-500 mt-2 text-center">
+                  ما قدرنا نأخذ موقعك — اسمح بالوصول للموقع من إعدادات المتصفح.
+                </p>
+              )}
+              {loc.status === 'unsupported' && (
+                <p className="text-[11px] text-red-500 mt-2 text-center">جهازك ما يدعم تحديد الموقع.</p>
+              )}
+            </div>
 
             <textarea
               placeholder={t('req.details')}
