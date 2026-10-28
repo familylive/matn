@@ -67,7 +67,7 @@ export default function Home() {
 
       <div className="px-4 mt-6">
         <h3 className="section-title mb-3">{t('home.categories')}</h3>
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
           {categories.filter((c) => !c.parent_id).map((c) => { const kids = categories.filter((k) => k.parent_id === c.id); return (
             <button
               key={c.name}
@@ -108,7 +108,7 @@ export default function Home() {
 
       <div className="px-4 mt-7">
         <h3 className="section-title mb-3">{t('home.featured')}</h3>
-        <div className="space-y-3">
+        <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
           {filtered.map((e) => <ExpertCard key={e.id} expert={e} />)}
           {filtered.length === 0 && <p className="text-gray-500 text-sm">{t('home.noResults')}</p>}
         </div>
@@ -116,7 +116,7 @@ export default function Home() {
 
       <div className="px-4 mt-8">
         <h3 className="section-title mb-4">{t('home.how')}</h3>
-        <div className="space-y-4">
+        <div className="grid gap-4 md:grid-cols-3">
           {['1', '2', '3'].map((n) => (
             <div key={n} className="flex items-start gap-3">
               <div className="w-10 h-10 rounded-full bg-[#006C35] text-white grid place-items-center font-extrabold flex-shrink-0 ring-4 ring-[#FBF5E3]">

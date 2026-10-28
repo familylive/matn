@@ -38,7 +38,7 @@ export default function ExpertDetail() {
   const wa = expert.phoneNumber?.replace(/[^\d]/g, '')
 
   return (
-    <div className="min-h-screen bg-gray-50 max-w-sm mx-auto">
+    <div className="min-h-screen bg-gray-50 w-full max-w-sm md:max-w-3xl mx-auto">
       <div className="relative">
         <img src={expert.image} alt={expert.personName} className="w-full h-56 object-cover" />
         <button

@@ -83,7 +83,7 @@ export default function Register() {
   ]
 
   return (
-    <div className="px-4 py-5">
+    <div className="px-4 py-5 mx-auto w-full max-w-xl">
       <h2 className="text-xl font-extrabold text-[#11221A] mb-1">
         {isAuthenticated ? 'إكمال البيانات' : 'تسجيل جديد'}
       </h2>

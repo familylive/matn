@@ -28,7 +28,26 @@ export default function Header() {
           <span className="font-extrabold text-[#11221A] hidden sm:inline">{t('app.name')}</span>
         </Link>
 
-        <span className="flex-1 text-center text-[13px] text-gray-500 truncate">
+        <nav className="hidden md:flex items-center gap-1 flex-1 justify-center">
+          {[
+            { to: '/', key: 'nav.home' },
+            { to: '/my-requests', key: 'nav.myRequests' },
+            { to: '/requests', key: 'nav.requests' },
+            { to: '/favorites', key: 'nav.favorites' },
+          ].map((l) => (
+            <Link
+              key={l.to}
+              to={l.to}
+              className={`px-3 py-1.5 rounded-lg text-[13px] font-bold transition ${
+                pathname === l.to ? 'bg-[#FBF5E3] text-[#8a6d13]' : 'text-gray-600 hover:bg-gray-50'
+              }`}
+            >
+              {t(l.key)}
+            </Link>
+          ))}
+        </nav>
+
+        <span className="md:hidden flex-1 text-center text-[13px] text-gray-500 truncate">
           {t(titleKeys[pathname] || 'app.name')}
         </span>
 

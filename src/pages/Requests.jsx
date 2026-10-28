@@ -48,7 +48,12 @@ export default function Requests() {
       const data = await api.requests()
       setItems(Array.isArray(data) ? data : [])
     } catch (e) {
-      setError(e.message)
+      const code = e.code || e.message
+      setError(
+        code === 'unauthorized'
+          ? 'سجّل دخولك لعرض طلبات العملاء'
+          : ERROR_AR[code] || e.message,
+      )
     } finally {
       setLoading(false)
     }
@@ -89,7 +94,7 @@ export default function Requests() {
   }
 
   return (
-    <div className="px-4 py-5">
+    <div className="px-4 py-5 mx-auto w-full max-w-3xl">
       <div className="flex items-center justify-between mb-4">
         <div>
           <h2 className="text-xl font-extrabold text-[#11221A]">{t('req.title')}</h2>
@@ -197,7 +202,14 @@ export default function Requests() {
         </form>
       )}
 
-      {error && <p className="text-sm text-red-500 mb-3">{error}</p>}
+      {error && (
+        <p className="text-sm text-red-500 mb-3">
+          {error}
+          {error.includes('سجّل دخولك') && (
+            <button onClick={() => navigate('/login')} className="ms-2 underline font-bold">دخول</button>
+          )}
+        </p>
+      )}
       {loading && <p className="text-sm text-gray-500">{t('req.loading')}</p>}
 
       <div className="space-y-3">
