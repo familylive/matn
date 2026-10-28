@@ -424,6 +424,17 @@ app.get('/api/requests/:id', (req, res) => {
     if (!isOwner && !isAssigned && !sameSpecialty) {
       return res.status(403).json({ error: 'forbidden' })
     }
+    // 🔒 السرية: الفني يشوف سوماته فقط — ما يشوف سومات منافسيه
+    if (!isOwner && mine) {
+      const mineBids = data.bids.filter((b) => b.expert_id === mine.id)
+      return res.json({
+        ...data,
+        bids: mineBids,
+        bids_count: data.bids.length,
+        bids_hidden: true,
+        nearest_bid_id: null,
+      })
+    }
   }
   res.json(data)
 })
@@ -432,18 +443,7 @@ app.post('/api/requests', authRequired, (req, res) => {
   const { title, category, description, city, budget, subcategory, warranty_days } = req.body || {}
   if (!title || !category) return res.status(400).json({ error: 'title_and_category_required' })
 
-  // أقل مبلغ مسموح للقسم (يُمنع العميل من البخس)
-  const cat = db.prepare('SELECT * FROM categories WHERE key = ?').get(category)
-  const parentMin = cat?.parent_id ? db.prepare('SELECT min_price FROM categories WHERE id = ?').get(cat.parent_id)?.min_price : null
-  const minPrice = Number(cat?.min_price || parentMin || 0)
-  const budgetNum = budget ? Number(budget) : 0
-  if (minPrice > 0 && (!budgetNum || budgetNum < minPrice)) {
-    return res.status(422).json({
-      error: 'below_min_price',
-      min_price: minPrice,
-      message: `أقل مبلغ مسموح لهذا القسم ${minPrice} ر.س`,
-    })
-  }
+  // السعر ما يحدده العميل — يجي من المزاد (نحتفظ بالميزانية فقط إن أرسلها API قديم)
 
   const nextNumber = db.prepare('SELECT COALESCE(MAX(number), 1054) + 1 n FROM requests').get().n
   const info = db
@@ -491,13 +491,6 @@ app.post('/api/requests/:id/bids', authRequired, (req, res) => {
   const expertId = mine.id
   const amount = Number(req.body?.amount)
   if (!amount || amount <= 0) return res.status(400).json({ error: 'invalid_bid' })
-
-  // حد أدنى للسومة: ما ينزل أكثر من ١٠٪ عن ميزانية العميل
-  const budget = Number(request.budget) || 0
-  const minBid = budget > 0 ? Math.round(budget * 0.9) : 0
-  if (minBid && amount < minBid) {
-    return res.status(422).json({ error: 'below_floor', min_bid: minBid, message: `الحد الأدنى للسومة ${minBid} ريال (٩٠٪ من ميزانية العميل)` })
-  }
 
   const expert = mine
 

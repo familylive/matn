@@ -634,11 +634,11 @@ function Categories() {
           </label>
         </div>
         <div>
-          <label className="text-[11px] text-gray-500">أقل مبلغ يقدر يدفعه العميل (ر.س)</label>
+          <label className="text-[11px] text-gray-500">سعر أساسي للقسم (ر.س) — مرجع المزاد</label>
           <input type="number" min="0" placeholder="مثال: 100" value={form.min_price}
             onChange={(e) => setForm({ ...form, min_price: e.target.value })}
             className="w-full mt-1 px-3 py-2 border border-[#E3D9BF] rounded-lg text-sm" />
-          <p className="text-[10px] text-gray-400 mt-1">إذا حطيت رقم، ما يقدر العميل ينشر طلب بأقل منه</p>
+          <p className="text-[10px] text-gray-400 mt-1">يبدأ منه المزاد وينزل حتى ٧٥٪ منه. العميل ما يحدد السعر.</p>
         </div>
         {form.image && <img src={form.image} alt="preview" className="h-16 rounded-lg object-cover" />}
         {err && <p className="text-xs text-red-500">{err}</p>}
@@ -654,7 +654,7 @@ function Categories() {
               <input value={c.en || ''} onChange={(e) => setRows((r) => r.map((x) => x.id === c.id ? { ...x, en: e.target.value } : x))}
                 placeholder="English" className="w-full px-2 py-1.5 border border-[#E3D9BF] rounded-lg text-sm" />
               <div>
-                <label className="text-[11px] text-gray-500">أقل مبلغ (ر.س)</label>
+                <label className="text-[11px] text-gray-500">سعر أساسي (ر.س)</label>
                 <input type="number" min="0" value={c.min_price ?? ''} placeholder="بدون حد"
                   onChange={(e) => setRows((r) => r.map((x) => x.id === c.id ? { ...x, min_price: e.target.value } : x))}
                   className="w-full mt-1 px-2 py-1.5 border border-[#E3D9BF] rounded-lg text-sm" />
@@ -690,7 +690,7 @@ function Categories() {
               <div className="flex-1">
                 <p className="font-bold text-sm text-[#11221A]">{c.ar}</p>
                 <p className="text-[11px] text-gray-500">
-                  {c.min_price ? `أقل مبلغ ${c.min_price} ر.س · ` : ''}
+                  {c.min_price ? `أساسي ${c.min_price} ر.س · ` : ''}
                   {c.key} · {c.en || '—'}
                   {c.parent_id ? ` · تابع لـ${rows.find((r) => r.id === c.parent_id)?.ar || ''}` : ''}
                 </p>

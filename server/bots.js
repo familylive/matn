@@ -66,10 +66,25 @@ export function markBotCars() {
 const botsForRequest = (category) =>
   db.prepare('SELECT * FROM experts WHERE job = ? AND is_bot = 1 ORDER BY has_car DESC, rating DESC').all(category)
 
-// البوتات ملزمة بنفس القاعدة: ما تنزل أكثر من ١٠٪ عن ميزانية العميل
+// السعر يأتي من المزاد: نستخدم «السعر الأساسي للقسم» (min_price) كمرجع للبوتات
+function basePrice(request) {
+  try {
+    const row = db
+      .prepare(
+        `SELECT c.min_price AS own, p.min_price AS parent
+         FROM categories c LEFT JOIN categories p ON p.id = c.parent_id
+         WHERE c.key = ?`,
+      )
+      .get(request.category)
+    const base = Number(row?.own || row?.parent || 0)
+    if (base > 0) return base
+  } catch {}
+  return 250
+}
+
+// أرضية المزاد: ٧٥٪ من سعر القسم الأساسي
 function floorPrice(request) {
-  if (request.budget && request.budget > 0) return Math.max(60, Math.round(request.budget * 0.9))
-  return 90
+  return Math.max(50, Math.round(basePrice(request) * 0.75))
 }
 
 function placeBotBid(io, request, bot, amount, note) {
@@ -112,7 +127,7 @@ function tick(io, requestId) {
   if (candidate) {
     const amount =
       lowest === undefined
-        ? Math.max(floor, Math.round((request.budget || 260) * 0.92))
+        ? Math.max(floor, Math.round(basePrice(request)))
         : Math.max(floor, lowest - (5 + Math.floor(Math.random() * 11)))
     if (amount >= floor) placeBotBid(io, request, candidate, amount, BOTS.find((x) => x.name === candidate.name)?.note)
     return

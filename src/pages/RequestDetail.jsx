@@ -408,7 +408,15 @@ export default function RequestDetail() {
           </div>
         )}
 
-        <h2 className="font-bold text-gray-900 mb-3">{t('rd.bids')} ({data.bids.length})</h2>
+        <h2 className="font-bold text-gray-900 mb-1">
+          {data.bids_hidden ? 'سوماتك' : t('rd.bids')} ({data.bids_hidden ? data.bids_count : data.bids.length})
+        </h2>
+        {data.bids_hidden && (
+          <p className="text-[11px] text-[#8a6d13] bg-[#FBF5E3] border border-[#EADFC8] rounded-lg px-2 py-1.5 mb-3">
+            🔒 المزاد سري — تشوف سومتك فقط، ما تشوف سومات الفنيين الآخرين.
+            {data.bids.length > 0 ? ` سومتك الحالية: ${data.bids[0].amount} ر.س` : ' ما لك سومة بعد.'}
+          </p>
+        )}
         <div className="space-y-3">
           {data.bids.map((b) => (
             <div key={b.id} className="bg-white rounded-xl p-3 border border-gray-100 flex items-center gap-3">

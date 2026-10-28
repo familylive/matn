@@ -80,9 +80,6 @@ export default function Requests() {
     setError('')
     if (!isAuthenticated || !localStorage.getItem('authToken')) return navigate('/login')
     if (!form.city) return setError('اختر مدينتك أولاً')
-    if (minPrice > 0 && (!budgetNum || budgetNum < minPrice)) {
-      return setError(`أقل مبلغ مسموح لهذا القسم ${minPrice} ر.س`)
-    }
     try {
       const center = cityByName(form.city)
       const created = await api.createRequest({
@@ -140,13 +137,9 @@ export default function Requests() {
                   <option key={c.name} value={c.name}>{catLabel(c, lang)}</option>
                 ))}
               </select>
-              <input
-                type="number" min={minPrice || 0}
-                placeholder={minPrice ? `من ${minPrice} ر.س` : t('req.budget')}
-                value={form.budget}
-                onChange={(e) => setForm({ ...form, budget: e.target.value })}
-                className={`px-3 py-2.5 border rounded-xl outline-none ${budgetTooLow ? 'border-red-400 bg-red-50' : 'border-[#E3D9BF] focus:border-[#006C35]'}`}
-              />
+              <div className="px-3 py-2.5 rounded-xl bg-[#FBF5E3] border border-[#EADFC8] text-[11px] font-bold text-[#8a6d13] flex items-center">
+                💰 السعر يجي بالمزاد
+              </div>
             </div>
 
             {categories.filter((x) => x.parent_id === catId(categories, form.category)).length > 0 && (
@@ -160,14 +153,6 @@ export default function Requests() {
                   <option key={k.id} value={k.name}>{catLabel(k, lang)}</option>
                 ))}
               </select>
-            )}
-
-            {minPrice > 0 && (
-              <div className={`rounded-xl px-3 py-2 text-xs font-bold ${budgetTooLow ? 'bg-red-50 border border-red-300 text-red-600' : 'bg-[#FBF5E3] border border-[#EADFC8] text-[#8a6d13]'}`}>
-                {budgetTooLow
-                  ? `⛔ ما تقدر تنشر بأقل من ${minPrice} ر.س — هذا أقل سعر لقسم ${selectedCat?.ar || ''}`
-                  : `🔻 أقل مبلغ مسموح في ${selectedCat?.ar || 'هذا القسم'}: ${minPrice} ر.س`}
-              </div>
             )}
 
             <CityGate
@@ -239,9 +224,10 @@ export default function Requests() {
               rows={2}
               className="w-full px-3 py-2.5 border border-[#E3D9BF] rounded-xl outline-none focus:border-[#006C35]"
             />
-            <button type="submit" disabled={budgetTooLow} className={`btn-primary ${budgetTooLow ? 'opacity-40 cursor-not-allowed' : ''}`}>
-              {budgetTooLow ? `ما ينفع — الحد ${minPrice} ر.س` : t('req.publish')}
-            </button>
+            <p className="text-[11px] text-gray-500 text-center -mt-1">
+              انشر طلبك ← الفنيين يسومون ← أنت تختار الأنسب
+            </p>
+            <button type="submit" className="btn-primary">{t('req.publish')}</button>
           </div>
         </form>
       )}
