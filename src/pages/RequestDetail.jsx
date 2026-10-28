@@ -332,6 +332,9 @@ export default function RequestDetail() {
         {data.status === 'closed' && (
           <div className="card-lux p-3 mt-3 text-center">
             <p className="text-gray-600 font-bold text-sm">✅ الطلب مغلق</p>
+            {data.closed_by === 'admin' && data.close_reason && (
+              <p className="text-[11px] text-gray-500 mt-1">أُغلق بواسطة الإدارة — {data.close_reason}</p>
+            )}
           </div>
         )}
 

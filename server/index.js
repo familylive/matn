@@ -344,7 +344,7 @@ app.post('/api/requests/:id/close', authRequired, (req, res) => {
   if (request.status !== 'done') return res.status(409).json({ error: 'not_done' })
   const wu = request.warranty_until ? new Date(request.warranty_until.replace(' ', 'T') + 'Z') : null
   if (wu && wu > new Date()) return res.status(409).json({ error: 'warranty_active', until: request.warranty_until })
-  db.prepare("UPDATE requests SET status = 'closed', closed_at = datetime('now') WHERE id = ?").run(request.id)
+  db.prepare("UPDATE requests SET status = 'closed', closed_at = datetime('now'), closed_by = 'customer' WHERE id = ?").run(request.id)
   res.json(requestWithBids(request.id))
 })
 
@@ -416,6 +416,32 @@ app.get('/api/admin/overview', adminRequired, (_req, res) => {
     ads: one('SELECT COUNT(*) c FROM ads'),
     city_requests: one("SELECT COUNT(*) c FROM city_requests WHERE status = 'new'"),
   })
+})
+
+app.post('/api/admin/requests/:id/close', adminRequired, (req, res) => {
+  const request = db.prepare('SELECT * FROM requests WHERE id = ?').get(req.params.id)
+  if (!request) return res.status(404).json({ error: 'not_found' })
+  if (request.status !== 'done') return res.status(409).json({ error: 'not_done' })
+  const reason = String(req.body?.reason || '').trim()
+  if (reason.length < 10) return res.status(400).json({ error: 'reason_required' })
+
+  const completed = request.completed_at ? new Date(request.completed_at.replace(' ', 'T') + 'Z').getTime() : 0
+  if (completed && Date.now() - completed < 60 * 60 * 1000) {
+    return res.status(409).json({ error: 'wait_period', until: new Date(completed + 3600000).toISOString() })
+  }
+
+  db.prepare(
+    `UPDATE requests SET status = 'closed', closed_at = datetime('now'),
+      closed_by = 'admin', close_reason = ? WHERE id = ?`,
+  ).run(reason, request.id)
+
+  io.to(`user:${request.user_id}`).emit('notify', {
+    type: 'close',
+    title: 'أُغلق طلبك إدارياً',
+    body: reason,
+    requestId: request.id,
+  })
+  res.json(requestWithBids(request.id))
 })
 
 app.get('/api/admin/requests', adminRequired, (req, res) => {

@@ -294,6 +294,31 @@ function Requests({ scope }) {
             {r.lowest_bid ? ` · الأقل ${r.lowest_bid}` : ''}
           </p>
           <p className="text-[10px] text-gray-400 mt-1">{r.created_at}</p>
+          {r.status === 'done' && (
+            <button
+              onClick={async () => {
+                const reason = prompt('سبب الإغلاق الإداري (إلزامي — ١٠ أحرف على الأقل):')
+                if (reason === null) return
+                try {
+                  await api(`/api/admin/requests/${r.id}/close`, { method: 'POST', body: { reason } })
+                  alert('تم إغلاق الطلب')
+                  api(`/api/admin/requests?scope=${scope}`).then(setRows).catch(() => {})
+                } catch (e) {
+                  alert(
+                    e.message === 'reason_required' ? 'السبب مطلوب (١٠ أحرف على الأقل)'
+                    : e.message === 'wait_period' ? 'لازم تمر ساعة من التنفيذ قبل الإغلاق الإداري'
+                    : 'تعذّر الإغلاق',
+                  )
+                }
+              }}
+              className="mt-2 text-[11px] bg-[#11221A] text-white px-2.5 py-1 rounded-lg font-bold"
+            >
+              إغلاق إداري + سبب
+            </button>
+          )}
+          {r.closed_by === 'admin' && r.close_reason && (
+            <p className="text-[10px] text-[#8a6d13] mt-1">سبب الإغلاق: {r.close_reason}</p>
+          )}
         </div>
       ))}
       {rows.length === 0 && <p className="text-sm text-gray-500">ما فيه طلبات.</p>}
