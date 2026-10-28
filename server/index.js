@@ -11,6 +11,7 @@ import { signToken, verifyToken, authRequired } from './auth.js'
 import { cities } from './cities.js'
 import { seedAdmin, checkAdmin, adminToken, adminRequired, hashPassword } from './admin.js'
 import { seedBots, onNewRequest, resumeBots } from './bots.js'
+import { hashPassword as hashUserPassword, verifyPassword, findByIdentifier } from './accounts.js'
 import { issueInvoice, autoSettle, getSetting as getSet } from './flow.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
@@ -68,6 +69,55 @@ app.post('/api/auth/request-otp', (req, res) => {
 
   // In production this is where an SMS provider (Unifonic / Msegat) is called.
   res.json({ ok: true, phone, expiresIn: 300, ...(DEV_MODE ? { devCode: code } : {}) })
+})
+
+app.post('/api/auth/signup', (req, res) => {
+  const b = req.body || {}
+  const username = String(b.username || '').trim()
+  const password = String(b.password || '')
+  const name = String(b.name || '').trim()
+  if (username.length < 3) return res.status(400).json({ error: 'username_short' })
+  if (password.length < 6) return res.status(400).json({ error: 'password_short' })
+  if (!name) return res.status(400).json({ error: 'name_required' })
+
+  const exists = db.prepare('SELECT id FROM users WHERE lower(username) = ?').get(username.toLowerCase())
+  if (exists) return res.status(409).json({ error: 'username_taken' })
+
+  const phone = String(b.phone || '').replace(/[^\d+]/g, '') || null
+  if (phone && db.prepare('SELECT id FROM users WHERE phone = ?').get(phone)) {
+    return res.status(409).json({ error: 'phone_taken' })
+  }
+
+  const role = ['expert', 'support', 'customer'].includes(b.role) ? b.role : 'customer'
+  const info = db
+    .prepare(
+      `INSERT INTO users (phone, name, city, role, email, nationality, specialty, lat, lng, username, password_hash, last_seen)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))`,
+    )
+    .run(phone, name, b.city || null, role, b.email || null, b.nationality || null, b.specialty || null,
+      b.lat != null ? Number(b.lat) : null, b.lng != null ? Number(b.lng) : null,
+      username, hashUserPassword(password))
+
+  const userId = info.lastInsertRowid
+  if (role === 'expert') {
+    db.prepare(
+      `INSERT INTO experts (name, name_ar, job, city, rate, rating, reviews_count, image, phone, skills, experience, lat, lng, user_id, verify_status)
+       VALUES (?, ?, ?, ?, '150 ريال/ساعة', 4.5, 0, '/experts/ac.jpg', ?, '[]', '1 سنة', ?, ?, ?, 'pending')`,
+    ).run(name, name, b.specialty || 'AC', b.city || 'الرياض', phone,
+      b.lat != null ? Number(b.lat) : null, b.lng != null ? Number(b.lng) : null, userId)
+  }
+
+  res.status(201).json({ token: signToken(userId), user: fullUser(userId) })
+})
+
+app.post('/api/auth/login-local', (req, res) => {
+  const user = findByIdentifier(req.body?.identifier)
+  if (!user || !verifyPassword(req.body?.password, user.password_hash)) {
+    return res.status(401).json({ error: 'invalid_credentials' })
+  }
+  if (user.status === 'suspended') return res.status(403).json({ error: 'account_suspended' })
+  db.prepare("UPDATE users SET last_seen = datetime('now') WHERE id = ?").run(user.id)
+  res.json({ token: signToken(user.id), user: fullUser(user.id) })
 })
 
 app.post('/api/auth/verify', (req, res) => {

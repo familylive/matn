@@ -1,41 +1,28 @@
 import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext.jsx'
-import { demoUsers } from '../data/demoUsers.js'
-import { api } from '../lib/api.js'
-import { useLang } from '../i18n/LanguageContext.jsx'
+import { api, setToken } from '../lib/api.js'
 
 export default function Login() {
-  const [form, setForm] = useState({ userName: '', password: '' })
+  const [form, setForm] = useState({ identifier: '', password: '' })
+  const [show, setShow] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const navigate = useNavigate()
-  const { t } = useLang()
-  const { login, loginWithCredentials, loginWithPhone } = useAuth()
-  const [phone, setPhone] = useState('')
-  const [code, setCode] = useState('')
-  const [sent, setSent] = useState(false)
-  const [devCode, setDevCode] = useState('')
-  const [phoneErr, setPhoneErr] = useState('')
+  const { login } = useAuth()
 
-  const onChange = (e) => {
-    const { name, value } = e.target
-    setForm((f) => ({ ...f, [name]: value }))
-    if (error) setError('')
-  }
-
-  const onSubmit = async (e) => {
+  const submit = async (e) => {
     e.preventDefault()
     setBusy(true)
     setError('')
 
-    // لو الإدخال إيميل: جرّب دخول لوحة التحكم أولاً
-    if (form.userName.includes('@')) {
+    // دخول لوحة التحكم (إيميل الإدارة)
+    if (form.identifier.includes('@')) {
       try {
         const res = await fetch('/api/admin/login', {
           method: 'POST',
           headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({ email: form.userName.trim(), password: form.password }),
+          body: JSON.stringify({ email: form.identifier.trim(), password: form.password }),
         })
         if (res.ok) {
           const data = await res.json()
@@ -46,160 +33,97 @@ export default function Login() {
       } catch {}
     }
 
-    await new Promise((r) => setTimeout(r, 400))
-    const ok = loginWithCredentials(form.userName, form.password)
-    if (ok) navigate('/')
-    else setError(t('login.invalid'))
-    setBusy(false)
-  }
-
-  const quickLogin = (u) => {
-    const { password: _pw, ...safe } = u
-    login(safe)
-    navigate('/')
+    try {
+      const r = await api.loginLocal(form.identifier.trim(), form.password)
+      setToken(r.token)
+      login({ ...r.user, userName: r.user.name || r.user.username || r.user.phone })
+      navigate(r.user?.name ? '/' : '/register')
+    } catch (err) {
+      setError(
+        err.message === 'account_suspended' ? 'حسابك موقوف — راجع الدعم'
+        : 'اسم المستخدم أو كلمة المرور غلط',
+      )
+    } finally {
+      setBusy(false)
+    }
   }
 
   return (
-    <div className="flex-1 flex items-center justify-center p-4">
-      <div className="w-full max-w-md">
-        <div className="text-center mb-8">
-          <h1 className="text-3xl font-bold text-gray-900 mb-2">{t('login.title')}</h1>
-          <p className="text-gray-600">{t('login.subtitle')}</p>
+    <div className="px-4 py-8">
+      <div className="text-center mb-6">
+        <div className="w-16 h-16 rounded-2xl bg-[#006C35] text-white grid place-items-center text-3xl font-extrabold mx-auto ring-4 ring-[#C9A227]/30">
+          م
         </div>
+        <h1 className="text-2xl font-extrabold text-[#11221A] mt-3">تسجيل الدخول</h1>
+        <p className="text-gray-500 text-sm">أهلاً بك في مهنتي</p>
+      </div>
 
-        <form onSubmit={onSubmit} className="space-y-6">
+      <form onSubmit={submit} className="card-lux p-5 space-y-4">
+        <div className="gold-bar absolute inset-x-0 top-0" />
+        <div className="pt-1 space-y-4">
           <div>
-            <label htmlFor="userName" className="block text-sm font-medium text-gray-700 mb-2">
-              {t('login.username')}
-            </label>
+            <label className="text-xs font-bold text-gray-600">الإيميل أو اسم المستخدم</label>
             <input
-              id="userName" name="userName" type="text" required
-              value={form.userName} onChange={onChange}
-              placeholder={t('login.usernamePh')}
-              className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+              required
+              value={form.identifier}
+              onChange={(e) => setForm({ ...form, identifier: e.target.value })}
+              placeholder="example@mail.com أو username"
+              className="w-full mt-1 px-3 py-2.5 border border-[#E3D9BF] rounded-xl outline-none focus:border-[#006C35]"
             />
           </div>
 
           <div>
-            <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-2">
-              {t('login.password')}
-            </label>
-            <input
-              id="password" name="password" type="password" required
-              value={form.password} onChange={onChange}
-              placeholder={t('login.passwordPh')}
-              className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
-            />
+            <label className="text-xs font-bold text-gray-600">كلمة المرور</label>
+            <div className="relative mt-1">
+              <input
+                required
+                type={show ? 'text' : 'password'}
+                value={form.password}
+                onChange={(e) => setForm({ ...form, password: e.target.value })}
+                placeholder="••••••••"
+                className="w-full px-3 py-2.5 pe-11 border border-[#E3D9BF] rounded-xl outline-none focus:border-[#006C35]"
+              />
+              <button
+                type="button"
+                onClick={() => setShow((v) => !v)}
+                aria-label="إظهار كلمة المرور"
+                className="absolute inset-y-0 end-0 px-3 text-gray-400"
+              >
+                {show ? (
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88L3 3m6.878 6.878L21 21" />
+                  </svg>
+                ) : (
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                  </svg>
+                )}
+              </button>
+            </div>
           </div>
 
           {error && <p className="text-sm text-red-500">{error}</p>}
 
-          <button
-            type="submit" disabled={busy}
-            className="w-full bg-blue-500 text-white py-3 rounded-xl font-medium hover:bg-blue-600 transition-colors disabled:opacity-60"
-          >
-            {busy ? t('login.signing') : t('login.signin')}
+          <button type="submit" disabled={busy} className="btn-primary">
+            {busy ? 'جارٍ الدخول…' : 'دخول'}
           </button>
-
-          <button
-            type="button"
-            onClick={() => { login({ userId: 999, userName: 'Guest User', userLocation: 'Tunis' }); navigate('/') }}
-            className="w-full border border-gray-300 text-gray-700 py-3 rounded-xl font-medium hover:bg-gray-50 transition-colors"
-          >
-            {t('login.guest')}
-          </button>
-        </form>
-
-        <div className="mt-6 bg-white rounded-xl p-4 border border-gray-100">
-          <p className="text-sm font-medium text-gray-900 mb-3">{t('login.orPhone')}</p>
-          <div className="space-y-3">
-            <input
-              type="tel"
-              inputMode="tel"
-              placeholder={t('login.phonePh')}
-              value={phone}
-              onChange={(e) => setPhone(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm"
-            />
-            {!sent ? (
-              <button
-                type="button"
-                onClick={async () => {
-                  setPhoneErr('')
-                  try {
-                    const r = await api.requestOtp(phone)
-                    setSent(true)
-                    if (r.devCode) setDevCode(r.devCode)
-                  } catch (e) {
-                    setPhoneErr(e.message)
-                  }
-                }}
-                className="w-full bg-gray-900 text-white py-2.5 rounded-xl text-sm font-medium"
-              >
-                {t('login.sendCode')}
-              </button>
-            ) : (
-              <>
-                <input
-                  type="text"
-                  inputMode="numeric"
-                  placeholder={t('login.codePh')}
-                  value={code}
-                  onChange={(e) => setCode(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm"
-                />
-                {devCode && (
-                  <p className="text-xs text-gray-500">
-                    {t('login.demoCode')}: <span className="font-mono font-bold">{devCode}</span>
-                  </p>
-                )}
-                <button
-                  type="button"
-                  onClick={async () => {
-                    setPhoneErr('')
-                    try {
-                      const merged = await loginWithPhone(phone, code)
-                      navigate(merged?.name ? '/' : '/register')
-                    } catch (e) {
-                      setPhoneErr(e.message)
-                    }
-                  }}
-                  className="w-full bg-blue-500 text-white py-2.5 rounded-xl text-sm font-medium"
-                >
-                  {t('login.verify')}
-                </button>
-              </>
-            )}
-            {phoneErr && <p className="text-xs text-red-500">{phoneErr}</p>}
-          </div>
         </div>
+      </form>
 
-        <button
-          onClick={() => navigate('/admin')}
-          className="w-full mt-5 text-center text-sm font-bold text-[#8a6d13] bg-[#FBF5E3] border border-[#EADFC8] py-2.5 rounded-xl"
-        >
-          🛡️ دخول لوحة التحكم (للإدارة)
-        </button>
-
-        <div className="mt-8">
-          <p className="text-center text-sm text-gray-500 mb-4">{t('login.quick')}</p>
-          <div className="space-y-3">
-            {demoUsers.map((u) => (
-              <div key={u.userName} className="bg-white rounded-xl p-3 border border-gray-100 flex items-center gap-3">
-                <img src={u.avatar} alt={u.userName} className="w-10 h-10 rounded-full object-cover" />
-                <div className="flex-1">
-                  <p className="text-sm font-medium text-gray-900">{u.userName}</p>
-                  <p className="text-xs text-gray-500">{u.email}</p>
-                  <p className="text-xs text-gray-500">📍 {t(`city.${u.location}`, u.location)}</p>
-                </div>
-                <button onClick={() => quickLogin(u)} className="text-sm text-blue-500 font-medium">
-                  {t('login.click')}
-                </button>
-              </div>
-            ))}
-          </div>
-        </div>
+      <div className="text-center mt-5">
+        <span className="text-sm text-gray-500">ما عندك حساب؟ </span>
+        <Link to="/register" className="text-sm font-extrabold text-[#006C35] underline">
+          تسجيل جديد
+        </Link>
       </div>
+
+      <Link
+        to="/admin"
+        className="block text-center mt-6 text-xs font-bold text-[#8a6d13] bg-[#FBF5E3] border border-[#EADFC8] py-2.5 rounded-xl"
+      >
+        🛡️ دخول لوحة التحكم
+      </Link>
     </div>
   )
 }

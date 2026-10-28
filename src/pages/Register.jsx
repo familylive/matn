@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext.jsx'
-import { api } from '../lib/api.js'
+import { api, setToken } from '../lib/api.js'
 import { useCategories, catLabel } from '../hooks/useCategories.js'
 import MapPicker from '../components/MapPicker.jsx'
 import { useLang } from '../i18n/LanguageContext.jsx'
@@ -17,6 +17,8 @@ export default function Register() {
   const [form, setForm] = useState({
     role: 'customer',
     name: '',
+    username: '',
+    password: '',
     phone: '',
     email: '',
     nationality: 'سعودي',
@@ -25,11 +27,6 @@ export default function Register() {
     lat: null,
     lng: null,
   })
-
-  useEffect(() => {
-    if (!isAuthenticated) navigate('/login')
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isAuthenticated])
 
   useEffect(() => {
     fetch('/api/cities').then((r) => r.json()).then(setCities).catch(() => {})
@@ -58,8 +55,20 @@ export default function Register() {
     if (!form.lat || !form.lng) return setError('حدد موقعك على الخريطة')
     setBusy(true)
     try {
-      const updated = await api.register(form)
-      login({ ...user, ...updated, userName: updated.name || user.userName, userLocation: updated.city })
+      let updated
+      if (!isAuthenticated) {
+        if (!form.username || !form.password) {
+          setError('اسم المستخدم وكلمة المرور مطلوبان')
+          setBusy(false)
+          return
+        }
+        const r = await api.signup(form)
+        setToken(r.token)
+        updated = r.user
+      } else {
+        updated = await api.register(form)
+      }
+      login({ ...user, ...updated, userName: updated.name || updated.username, userLocation: updated.city })
       navigate(form.role === 'expert' ? '/verify' : '/profile')
     } catch (err) {
       setError(err.message)
@@ -75,7 +84,9 @@ export default function Register() {
 
   return (
     <div className="px-4 py-5">
-      <h2 className="text-xl font-extrabold text-[#11221A] mb-1">إكمال البيانات</h2>
+      <h2 className="text-xl font-extrabold text-[#11221A] mb-1">
+        {isAuthenticated ? 'إكمال البيانات' : 'تسجيل جديد'}
+      </h2>
       <p className="text-gray-500 text-sm mb-4">بياناتك تساعدنا نوصلك بأقرب حرفي أو طلب</p>
 
       <form onSubmit={submit} className="space-y-4">
@@ -103,6 +114,22 @@ export default function Register() {
         <div className="card-lux p-4 space-y-3">
           <div className="gold-bar absolute inset-x-0 top-0" />
           <div className="pt-1 space-y-3">
+            {!isAuthenticated && (
+              <>
+                <div>
+                  <label className="text-xs font-bold text-gray-600">اسم المستخدم *</label>
+                  <input required value={form.username} onChange={(e) => setForm({ ...form, username: e.target.value.replace(/\s/g, '') })}
+                    placeholder="username"
+                    className="w-full mt-1 px-3 py-2.5 border border-[#E3D9BF] rounded-xl outline-none focus:border-[#006C35]" />
+                </div>
+                <div>
+                  <label className="text-xs font-bold text-gray-600">كلمة المرور *</label>
+                  <input required type="password" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })}
+                    placeholder="٦ أحرف على الأقل"
+                    className="w-full mt-1 px-3 py-2.5 border border-[#E3D9BF] rounded-xl outline-none focus:border-[#006C35]" />
+                </div>
+              </>
+            )}
             <div>
               <label className="text-xs font-bold text-gray-600">الاسم *</label>
               <input required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })}
