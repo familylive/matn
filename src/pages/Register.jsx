@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext.jsx'
 import { api, setToken } from '../lib/api.js'
+import { SAUDI_CITIES } from '../data/cities.js'
 import { useCategories, catLabel } from '../hooks/useCategories.js'
 import MapPicker from '../components/MapPicker.jsx'
 import { useLang } from '../i18n/LanguageContext.jsx'
@@ -11,7 +12,7 @@ export default function Register() {
   const { t, lang } = useLang()
   const categories = useCategories()
   const navigate = useNavigate()
-  const [cities, setCities] = useState([])
+  const cities = SAUDI_CITIES
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const [form, setForm] = useState({
@@ -27,10 +28,6 @@ export default function Register() {
     lat: null,
     lng: null,
   })
-
-  useEffect(() => {
-    fetch('/api/cities').then((r) => r.json()).then(setCities).catch(() => {})
-  }, [])
 
   useEffect(() => {
     if (user) {

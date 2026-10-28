@@ -12,6 +12,7 @@ const ERROR_AR = {
 import { useLang } from '../i18n/LanguageContext.jsx'
 import { useCategories, catLabel } from '../hooks/useCategories.js'
 import CityGate from '../components/CityGate.jsx'
+import { cityByName } from '../data/cities.js'
 
 const statusStyles = {
   open: 'bg-[#E9F5EE] text-[#006C35]',
@@ -74,11 +75,12 @@ export default function Requests() {
     if (!isAuthenticated || !localStorage.getItem('authToken')) return navigate('/login')
     if (!form.city) return setError('اختر مدينتك أولاً')
     try {
+      const center = cityByName(form.city)
       const created = await api.createRequest({
         ...form,
         budget: form.budget ? Number(form.budget) : null,
-        lat: loc.lat,
-        lng: loc.lng,
+        lat: loc.lat ?? center?.lat ?? null,
+        lng: loc.lng ?? center?.lng ?? null,
       })
       setShowForm(false)
       setForm({ title: '', category: 'Plumber', subcategory: '', city: '', budget: '', description: '', warranty_days: 3 })
@@ -151,14 +153,21 @@ export default function Requests() {
               </select>
             )}
 
-            <CityGate value={form.city} onChange={(c) => setForm({ ...form, city: c })} />
+            <CityGate
+              value={form.city}
+              onChange={(c) => {
+                setForm((f) => ({ ...f, city: c }))
+                const center = cityByName(c)
+                setLoc((l) => (l.status === 'ok' ? l : { lat: center?.lat ?? null, lng: center?.lng ?? null, status: center ? 'city' : 'idle', accuracy: null }))
+              }}
+            />
 
             <div className="rounded-xl border border-[#E3D9BF] bg-[#FBF9F2] p-3">
               <button
                 type="button"
                 onClick={() => {
-                  if (!navigator.geolocation) return setLoc({ ...loc, status: 'unsupported' })
-                  setLoc({ ...loc, status: 'loading' })
+                  if (!navigator.geolocation) return setLoc((l) => ({ ...l, status: 'unsupported' }))
+                  setLoc((l) => ({ ...l, status: 'loading' }))
                   navigator.geolocation.getCurrentPosition(
                     (pos) =>
                       setLoc({
@@ -167,8 +176,12 @@ export default function Requests() {
                         accuracy: Math.round(pos.coords.accuracy),
                         status: 'ok',
                       }),
-                    () => setLoc({ ...loc, status: 'denied' }),
-                    { enableHighAccuracy: true, timeout: 10000 },
+                    (err) =>
+                      setLoc((l) => ({
+                        ...l,
+                        status: err?.code === 1 ? 'denied' : 'failed',
+                      })),
+                    { enableHighAccuracy: false, timeout: 15000, maximumAge: 60000 },
                   )
                 }}
                 className="w-full rounded-lg bg-white border border-[#006C35] text-[#006C35] py-2 text-sm font-bold"
@@ -181,8 +194,20 @@ export default function Requests() {
                 </p>
               )}
               {loc.status === 'denied' && (
+                <p className="text-[11px] text-red-500 mt-2 text-center leading-5">
+                  الموقع مقفول لهذا التطبيق. افتح: الإعدادات ← سفاري ← الموقع ← اسمح.
+                  <br />
+                  <span className="text-[#8a6d13]">تقدر تختار مدينتك فقط ونستخدم مركز المدينة.</span>
+                </p>
+              )}
+              {loc.status === 'failed' && (
                 <p className="text-[11px] text-red-500 mt-2 text-center">
-                  ما قدرنا نأخذ موقعك — اسمح بالوصول للموقع من إعدادات المتصفح.
+                  تعذّر تحديد الموقع — جرّب مرة ثانية أو اختر مدينتك فقط.
+                </p>
+              )}
+              {loc.status === 'city' && (
+                <p className="text-[11px] text-[#8a6d13] mt-2 text-center">
+                  راح نستخدم مركز {form.city} — اضغط الزر لتحديد موقعك بدقة أعلى.
                 </p>
               )}
               {loc.status === 'unsupported' && (

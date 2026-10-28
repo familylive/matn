@@ -1,11 +1,12 @@
 import { useEffect, useState } from 'react'
 import { api } from '../lib/api.js'
 import { useAuth } from '../context/AuthContext.jsx'
+import { SAUDI_CITIES, cityByName } from '../data/cities.js'
 
 export default function LocationSetup() {
   const { user, isAuthenticated, login } = useAuth()
   const [open, setOpen] = useState(false)
-  const [cities, setCities] = useState([])
+  const cities = SAUDI_CITIES
   const [city, setCity] = useState('')
   const [coords, setCoords] = useState({ lat: null, lng: null })
   const [err, setErr] = useState('')
@@ -15,10 +16,6 @@ export default function LocationSetup() {
     if (isAuthenticated && (!user?.city || !user?.lat)) setOpen(true)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isAuthenticated, user?.city, user?.lat])
-
-  useEffect(() => {
-    fetch('/api/cities').then((r) => r.json()).then(setCities).catch(() => {})
-  }, [])
 
   const locate = () => {
     if (!navigator.geolocation) return setErr('جهازك ما يدعم تحديد الموقع')
@@ -32,10 +29,12 @@ export default function LocationSetup() {
   const save = async () => {
     setErr('')
     if (!city) return setErr('اختر مدينتك')
-    if (!coords.lat) return setErr('حدد موقعك الحالي (GPS)')
+    // إذا ما قدرنا نأخذ GPS، نستخدم مركز المدينة المختارة
+    const base = coords.lat ? coords : cityByName(city) || {}
+    if (!base.lat) return setErr('حدد موقعك الحالي (GPS)')
     setBusy(true)
     try {
-      const updated = await api.patch('/api/me/profile', { city, lat: coords.lat, lng: coords.lng })
+      const updated = await api.patch('/api/me/profile', { city, lat: base.lat, lng: base.lng })
       login({ ...user, ...updated, userName: updated.name || user?.userName, userLocation: updated.city })
       setOpen(false)
     } catch {
@@ -56,7 +55,7 @@ export default function LocationSetup() {
           <p className="text-[11px] text-gray-500">مرة واحدة فقط — نستخدمه لجلب أقرب حرفي إليك</p>
         </div>
 
-        <button onClick={locate} className="w-full bg-[#006C35] text-white py-2.5 rounded-xl font-bold text-sm">
+        <button type="button" onClick={locate} className="w-full bg-[#006C35] text-white py-2.5 rounded-xl font-bold text-sm">
           {coords.lat ? '✅ تم تحديد موقعك' : '📍 استخدام موقعي الحالي (GPS)'}
         </button>
         {coords.lat && (

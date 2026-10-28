@@ -1,16 +1,13 @@
 import { useEffect, useState } from 'react'
 import { useLang } from '../i18n/LanguageContext.jsx'
+import { SAUDI_CITIES } from '../data/cities.js'
 
 export default function CityGate({ value, onChange }) {
   const { t } = useLang()
-  const [cities, setCities] = useState([])
+  const cities = SAUDI_CITIES
   const [showSupport, setShowSupport] = useState(false)
   const [support, setSupport] = useState({ city: '', phone: '', note: '' })
   const [sent, setSent] = useState(false)
-
-  useEffect(() => {
-    fetch('/api/cities').then((r) => r.json()).then(setCities).catch(() => {})
-  }, [])
 
   const submitSupport = async (e) => {
     e.preventDefault()
