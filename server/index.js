@@ -209,6 +209,14 @@ const requestWithBids = (id) => {
   return { ...request, bids, nearest_bid_id: nearest?.id ?? null }
 }
 
+app.get('/api/requests/counts', (_req, res) => {
+  const rows = db
+    .prepare("SELECT category, COUNT(*) c FROM requests WHERE status = 'open' GROUP BY category")
+    .all()
+  const byCategory = Object.fromEntries(rows.map((r) => [r.category, r.c]))
+  res.json({ total: rows.reduce((a, r) => a + r.c, 0), byCategory })
+})
+
 app.get('/api/requests', (req, res) => {
   const { status } = req.query
   const rows = db
@@ -256,6 +264,8 @@ app.post('/api/requests', authRequired, (req, res) => {
     title: 'طلب جديد',
     body: `${request.title} — ${request.city || ''}`,
     requestId: request.id,
+    category: request.category,
+    subcategory: request.subcategory || null,
   })
   onNewRequest(io, request)
   res.status(201).json(request)

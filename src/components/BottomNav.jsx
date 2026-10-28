@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react'
 import { NavLink } from 'react-router-dom'
 import { useLang } from '../i18n/LanguageContext.jsx'
 
@@ -11,6 +12,19 @@ const items = [
 
 export default function BottomNav() {
   const { t } = useLang()
+  const [open, setOpen] = useState(0)
+
+  useEffect(() => {
+    let alive = true
+    const load = () =>
+      fetch('/api/requests/counts')
+        .then((r) => r.json())
+        .then((d) => { if (alive) setOpen(d.total || 0) })
+        .catch(() => {})
+    load()
+    const id = setInterval(load, 30000)
+    return () => { alive = false; clearInterval(id) }
+  }, [])
   return (
     <nav className="bg-white border-t border-gray-100 flex justify-around py-3">
       {items.map((item) => (
@@ -21,9 +35,16 @@ export default function BottomNav() {
             `flex flex-col items-center gap-1 text-xs ${isActive ? 'text-blue-500' : 'text-gray-400'}`
           }
         >
-          <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" d={item.icon} />
-          </svg>
+          <span className="relative">
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" d={item.icon} />
+            </svg>
+            {item.key === 'nav.requests' && open > 0 && (
+              <span className="absolute -top-1.5 -end-2 min-w-[16px] h-4 px-1 rounded-full bg-red-500 text-white text-[9px] font-bold grid place-items-center">
+                {open}
+              </span>
+            )}
+          </span>
           {t(item.key)}
         </NavLink>
       ))}

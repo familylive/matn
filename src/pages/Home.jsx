@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import experts from '../data/experts.json'
 import { useCategories, catLabel } from '../hooks/useCategories.js'
@@ -11,6 +11,19 @@ export default function Home() {
   const navigate = useNavigate()
   const { t, lang } = useLang()
   const categories = useCategories()
+  const [counts, setCounts] = useState({ byCategory: {} })
+
+  useEffect(() => {
+    let alive = true
+    const load = () =>
+      fetch('/api/requests/counts')
+        .then((r) => r.json())
+        .then((d) => { if (alive) setCounts(d) })
+        .catch(() => {})
+    load()
+    const id = setInterval(load, 30000)
+    return () => { alive = false; clearInterval(id) }
+  }, [])
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase()
@@ -67,6 +80,11 @@ export default function Home() {
                 </span>
               )}
               <span className="text-[#11221A] font-bold">{catLabel(c, lang)}</span>
+              {counts.byCategory?.[c.name] ? (
+                <span className="absolute top-2 end-2 min-w-6 h-6 px-1.5 rounded-full bg-red-500 text-white text-[11px] font-bold grid place-items-center shadow">
+                  {counts.byCategory[c.name]}
+                </span>
+              ) : null}
               {kids.length > 0 && (
                 <span className="flex flex-wrap justify-center gap-1 mt-1">
                   {kids.map((k) => (

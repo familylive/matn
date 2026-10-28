@@ -37,6 +37,8 @@ export default function Notifications() {
     if (user?.id) socket.emit('identify', user.id)
 
     const onNotify = (n) => {
+      // تنبيه الطلبات للفنيين: حسب التخصص فقط
+      if (n.type === 'request' && user?.role === 'expert' && n.category && n.category !== user.specialty) return
       setToast(n)
       if (localStorage.getItem('soundOn') !== '0') beep()
       if (navigator.vibrate) navigator.vibrate([120, 60, 120])
@@ -57,7 +59,7 @@ export default function Notifications() {
 
   return (
     <div className="fixed top-3 inset-x-3 z-50 max-w-sm mx-auto">
-      <div className="card-lux p-3 flex items-start gap-3 shadow-lg">
+      <div className={`card-lux p-3 flex items-start gap-3 shadow-xl ${toast.type === 'request' ? 'ring-2 ring-[#C9A227]' : ''}`}>
         <span className="w-9 h-9 rounded-full bg-[#E9F5EE] text-[#006C35] grid place-items-center text-lg">
           {toast.type === 'bid' ? '💰' : '🔔'}
         </span>
