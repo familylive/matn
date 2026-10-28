@@ -943,7 +943,7 @@ app.post('/api/admin/restore', adminRequired, (req, res) => {
   const tables = req.body?.tables
   if (!tables || typeof tables !== 'object') return res.status(400).json({ error: 'invalid_backup' })
 
-  const order = ['reviews', 'payments', 'bids', 'invoices', 'requests', 'city_requests', 'ads', 'experts', 'users', 'categories'].filter(t => BACKUP_TABLES.includes(t))
+  const order = ['reviews', 'payments', 'bids', 'invoices', 'requests', 'city_requests', 'ads', 'experts', 'users', 'categories', 'settings'].filter(t => BACKUP_TABLES.includes(t))
 
   db.pragma('foreign_keys = OFF')
   try {
