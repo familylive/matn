@@ -127,6 +127,15 @@ export default function RequestDetail() {
     }
   }, [data?.status])
 
+  const closeRequest = async () => {
+    try {
+      const updated = await api.closeRequest(id)
+      setData(updated)
+    } catch (err) {
+      setError(err.message === 'warranty_active' ? 'الضمان لسه ساري — ما يمكن إغلاق الطلب' : 'تعذّر الإغلاق')
+    }
+  }
+
   const review = async (rating) => {
     try {
       await api.review(id, { rating })
@@ -320,6 +329,12 @@ export default function RequestDetail() {
           </div>
         )}
 
+        {data.status === 'closed' && (
+          <div className="card-lux p-3 mt-3 text-center">
+            <p className="text-gray-600 font-bold text-sm">✅ الطلب مغلق</p>
+          </div>
+        )}
+
         {isOwner && data.status === 'assigned' && (
           <button onClick={complete} className="w-full mt-4 bg-green-500 text-white py-2.5 rounded-xl font-medium">
             {t('rd.complete')}
@@ -351,6 +366,31 @@ export default function RequestDetail() {
                 </div>
               )
             })}
+          </div>
+        )}
+
+        {data.status === 'done' && data.warranty_until && (
+          <div className="card-lux p-4 mt-4">
+            <p className="font-extrabold text-sm text-[#11221A]">🛡️ ضمان الإصلاح</p>
+            <p className="text-[11px] text-gray-500 mt-1">
+              المدة: {data.warranty_days} يوم · ينتهي {data.warranty_until?.slice(0, 10)}
+            </p>
+            <p className="text-[11px] text-gray-500">
+              {(() => {
+                const until = new Date(data.warranty_until.replace(' ', 'T') + 'Z')
+                const diff = Math.ceil((until - Date.now()) / 86400000)
+                return diff > 0 ? `متبقي ${diff} يوم — الطلب يبقى مفتوح تحت الضمان` : 'انتهى الضمان — يمكنك إغلاق الطلب'
+              })()}
+            </p>
+            {isOwner && (
+              <button
+                onClick={closeRequest}
+                disabled={new Date(data.warranty_until.replace(' ', 'T') + 'Z') > new Date()}
+                className="mt-3 w-full bg-[#11221A] text-white py-2.5 rounded-xl text-sm font-bold disabled:opacity-40"
+              >
+                إغلاق الطلب نهائياً
+              </button>
+            )}
           </div>
         )}
 

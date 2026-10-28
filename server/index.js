@@ -240,12 +240,12 @@ app.get('/api/requests/:id', (req, res) => {
 })
 
 app.post('/api/requests', authRequired, (req, res) => {
-  const { title, category, description, city, budget, subcategory } = req.body || {}
+  const { title, category, description, city, budget, subcategory, warranty_days } = req.body || {}
   if (!title || !category) return res.status(400).json({ error: 'title_and_category_required' })
   const info = db
     .prepare(
-      `INSERT INTO requests (user_id, title, category, description, city, budget, lat, lng, ends_at, subcategory)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now', '+60 minutes'), ?)`,
+      `INSERT INTO requests (user_id, title, category, description, city, budget, lat, lng, ends_at, subcategory, warranty_days)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now', '+60 minutes'), ?, ?)`,
     )
     .run(
       req.userId,
@@ -257,6 +257,7 @@ app.post('/api/requests', authRequired, (req, res) => {
       req.body?.lat != null ? Number(req.body.lat) : null,
       req.body?.lng != null ? Number(req.body.lng) : null,
       subcategory || null,
+      Number(warranty_days) || 3,
     )
   const request = requestWithBids(info.lastInsertRowid)
   io.emit('request:new', request)
@@ -327,9 +328,24 @@ app.post('/api/requests/:id/complete', authRequired, (req, res) => {
   if (!request) return res.status(404).json({ error: 'not_found' })
   if (request.user_id !== req.userId) return res.status(403).json({ error: 'forbidden' })
   if (request.status !== 'assigned') return res.status(409).json({ error: 'not_assigned' })
-  db.prepare(`UPDATE requests SET status = 'done' WHERE id = ?`).run(request.id)
+  db.prepare(
+    `UPDATE requests SET status = 'done', completed_at = datetime('now'),
+      warranty_until = datetime('now', '+' || COALESCE(warranty_days, 3) || ' days')
+     WHERE id = ?`,
+  ).run(request.id)
   const invoice = issueInvoice(request.id)
   res.json({ ...requestWithBids(request.id), invoice })
+})
+
+app.post('/api/requests/:id/close', authRequired, (req, res) => {
+  const request = db.prepare('SELECT * FROM requests WHERE id = ?').get(req.params.id)
+  if (!request) return res.status(404).json({ error: 'not_found' })
+  if (request.user_id !== req.userId) return res.status(403).json({ error: 'forbidden' })
+  if (request.status !== 'done') return res.status(409).json({ error: 'not_done' })
+  const wu = request.warranty_until ? new Date(request.warranty_until.replace(' ', 'T') + 'Z') : null
+  if (wu && wu > new Date()) return res.status(409).json({ error: 'warranty_active', until: request.warranty_until })
+  db.prepare("UPDATE requests SET status = 'closed', closed_at = datetime('now') WHERE id = ?").run(request.id)
+  res.json(requestWithBids(request.id))
 })
 
 app.post('/api/requests/:id/review', authRequired, (req, res) => {
@@ -405,8 +421,8 @@ app.get('/api/admin/overview', adminRequired, (_req, res) => {
 app.get('/api/admin/requests', adminRequired, (req, res) => {
   const scope = req.query.scope
   const where =
-    scope === 'active' ? "WHERE r.status IN ('open','assigned')"
-    : scope === 'closed' ? "WHERE r.status IN ('done','canceled')"
+    scope === 'active' ? "WHERE r.status IN ('open','awaiting_payment','assigned','done')"
+    : scope === 'closed' ? "WHERE r.status IN ('closed','canceled')"
     : ''
   res.json(
     db

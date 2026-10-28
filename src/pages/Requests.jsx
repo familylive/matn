@@ -15,8 +15,18 @@ import CityGate from '../components/CityGate.jsx'
 
 const statusStyles = {
   open: 'bg-[#E9F5EE] text-[#006C35]',
+  awaiting_payment: 'bg-orange-50 text-orange-600',
   assigned: 'bg-[#FBF5E3] text-[#8a6d13]',
-  done: 'bg-gray-100 text-gray-600',
+  done: 'bg-blue-50 text-blue-600',
+  closed: 'bg-gray-100 text-gray-500',
+}
+
+const statusAr = {
+  open: 'مفتوح',
+  awaiting_payment: 'بانتظار الدفع',
+  assigned: 'مُسند',
+  done: 'تحت الضمان',
+  closed: 'مغلق',
 }
 
 const catId = (categories, key) => categories.find((c) => c.name === key)?.id || null
@@ -26,7 +36,7 @@ export default function Requests() {
   const [loading, setLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
   const [error, setError] = useState('')
-  const [form, setForm] = useState({ title: '', category: 'Plumber', subcategory: '', city: '', budget: '', description: '' })
+  const [form, setForm] = useState({ title: '', category: 'Plumber', subcategory: '', city: '', budget: '', description: '', warranty_days: 3 })
   const [loc, setLoc] = useState({ lat: null, lng: null, status: 'idle', accuracy: null })
   const { isAuthenticated, user } = useAuth()
   const { t, lang } = useLang()
@@ -66,7 +76,7 @@ export default function Requests() {
         lng: loc.lng,
       })
       setShowForm(false)
-      setForm({ title: '', category: 'Plumber', subcategory: '', city: '', budget: '', description: '' })
+      setForm({ title: '', category: 'Plumber', subcategory: '', city: '', budget: '', description: '', warranty_days: 3 })
       navigate(`/requests/${created.id}`)
     } catch (err) {
       if (err.code === 'unauthorized') {
@@ -136,6 +146,21 @@ export default function Requests() {
               </select>
             )}
 
+            <div>
+              <label className="block text-xs font-semibold text-gray-600 mb-1">🛡️ مدة الضمان على الإصلاح</label>
+              <select
+                value={form.warranty_days}
+                onChange={(e) => setForm({ ...form, warranty_days: Number(e.target.value) })}
+                className="w-full px-3 py-2.5 border border-[#E3D9BF] rounded-xl bg-white text-sm"
+              >
+                <option value={1}>يوم واحد</option>
+                <option value={3}>٣ أيام</option>
+                <option value={7}>أسبوع</option>
+                <option value={30}>شهر</option>
+              </select>
+              <p className="text-[10px] text-gray-500 mt-1">الطلب ما يُغلق إلا بعد انتهاء الضمان وموافقتك على الإغلاق.</p>
+            </div>
+
             <CityGate value={form.city} onChange={(c) => setForm({ ...form, city: c })} />
 
             <div className="rounded-xl border border-[#E3D9BF] bg-[#FBF9F2] p-3">
@@ -196,7 +221,7 @@ export default function Requests() {
             <div className="flex items-start justify-between gap-2">
               <h3 className="font-bold text-[#11221A]">{r.title}</h3>
               <span className={`text-[11px] px-2 py-1 rounded-full font-semibold whitespace-nowrap ${statusStyles[r.status] || 'bg-gray-100 text-gray-600'}`}>
-                {t(`req.status.${r.status}`, r.status)}
+                {statusAr[r.status] || r.status}
               </span>
             </div>
             <p className="text-sm text-gray-600 mt-1">

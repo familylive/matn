@@ -47,7 +47,11 @@ export function autoSettle(io, requestId) {
   db.prepare('INSERT INTO payments (request_id, method, amount, status, ref) VALUES (?, ?, ?, ?, ?)')
     .run(request.id, 'card', total, 'paid', `DEMO-${Date.now()}`)
 
-  db.prepare("UPDATE requests SET status = 'done' WHERE id = ?").run(request.id)
+  db.prepare(
+    `UPDATE requests SET status = 'done', completed_at = datetime('now'),
+      warranty_until = datetime('now', '+' || COALESCE(warranty_days, 3) || ' days')
+     WHERE id = ?`,
+  ).run(request.id)
   const invoice = issueInvoice(request.id)
 
   io.to(`request:${request.id}`).emit('request:accepted', {
