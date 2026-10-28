@@ -1287,6 +1287,7 @@ app.post('/api/admin/restore', adminRequired, (req, res) => {
       seedCats.forEach((c, i) => ins.run(c[0], c[1], c[2], c[3], i))
     }
     backfillNumbers()
+    seedBots()
     if (req.body?.files && typeof req.body.files === 'object') {
       for (const [name, b64] of Object.entries(req.body.files)) {
         if (typeof b64 !== 'string') continue
