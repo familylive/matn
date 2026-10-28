@@ -990,6 +990,23 @@ function CityRequests() {
 function Backup() {
   const [msg, setMsg] = useState('')
   const [busy, setBusy] = useState(false)
+  const [snaps, setSnaps] = useState({ enabled: false, items: [] })
+
+  const loadSnaps = () => api('/api/admin/snapshots').then(setSnaps).catch(() => {})
+  useEffect(() => { loadSnaps() }, [])
+
+  const restoreSnap = async (key) => {
+    if (!confirm('استعادة هذه النسخة؟ سيتم استبدال البيانات الحالية.')) return
+    setBusy(true)
+    try {
+      await api('/api/admin/snapshots/restore', { method: 'POST', body: { key } })
+      setMsg('تمت الاستعادة من النسخة السحابية ✅')
+    } catch {
+      setMsg('تعذّرت الاستعادة')
+    } finally {
+      setBusy(false)
+    }
+  }
 
   const download = async () => {
     setBusy(true)
@@ -1025,6 +1042,26 @@ function Backup() {
       <div className="card-lux p-4">
         <p className="font-extrabold text-[#11221A] mb-2">استعادة</p>
         <input type="file" accept="application/json" onChange={(e) => e.target.files?.[0] && restore(e.target.files[0])} className="text-sm w-full" />
+      </div>
+      <div className="card-lux p-4">
+        <div className="flex items-center justify-between mb-2">
+          <p className="font-extrabold text-[#11221A]">☁️ نسخ سحابية تلقائية</p>
+          <button onClick={loadSnaps} className="text-[11px] text-[#006C35] font-bold">تحديث</button>
+        </div>
+        <p className="text-[11px] text-gray-500 mb-2">تُحفظ كل ٣٠ دقيقة على Cloudflare — تبقى حتى لو انمسحت قاعدة السيرفر.</p>
+        {!snaps.enabled && <p className="text-xs text-gray-400">غير مفعّلة بعد (تحتاج إعداد Cloudflare).</p>}
+        {snaps.enabled && snaps.items.length === 0 && <p className="text-xs text-gray-400">ما فيه نسخ بعد — أول نسخة الساعة ٣ صباحاً.</p>}
+        <div className="space-y-1.5 max-h-64 overflow-y-auto">
+          {snaps.items.map((it) => (
+            <div key={it.key} className="flex items-center justify-between bg-[#FBF9F2] border border-[#EADFC8] rounded-lg px-2.5 py-1.5">
+              <span className="text-[11px] text-gray-700 font-bold" dir="ltr">{it.at}</span>
+              <button onClick={() => restoreSnap(it.key)} disabled={busy}
+                className="text-[11px] bg-[#006C35] text-white px-2 py-1 rounded-md font-bold">
+                استعادة
+              </button>
+            </div>
+          ))}
+        </div>
       </div>
       {msg && <p className="text-sm text-[#006C35] font-bold">{msg}</p>}
     </div>

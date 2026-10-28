@@ -1413,10 +1413,7 @@ app.get('/api/admin/backup', adminRequired, (_req, res) => {
   res.json(data)
 })
 
-app.post('/api/admin/restore', adminRequired, (req, res) => {
-  const tables = req.body?.tables
-  if (!tables || typeof tables !== 'object') return res.status(400).json({ error: 'invalid_backup' })
-
+function applyBackup(tables) {
   const order = ['reviews', 'payments', 'bids', 'invoices', 'requests', 'city_requests', 'ads', 'experts', 'users', 'categories', 'settings'].filter(t => BACKUP_TABLES.includes(t))
 
   db.pragma('foreign_keys = OFF')
@@ -1459,11 +1456,72 @@ app.post('/api/admin/restore', adminRequired, (req, res) => {
         try { fs.writeFileSync(path.join(uploadsDir, path.basename(name)), Buffer.from(b64, 'base64')) } catch {}
       }
     }
-    res.json({ ok: true, restored_at: new Date().toISOString() })
+    return { ok: true }
   } catch (e) {
-    res.status(500).json({ error: 'restore_failed', detail: String(e.message) })
+    return { ok: false, error: String(e.message) }
   } finally {
     db.pragma('foreign_keys = ON')
+  }
+}
+
+app.post('/api/admin/restore', adminRequired, (req, res) => {
+  const tables = req.body?.tables
+  if (!tables || typeof tables !== 'object') return res.status(400).json({ error: 'invalid_backup' })
+  const r = applyBackup(tables)
+  if (!r.ok) return res.status(500).json({ error: 'restore_failed', detail: r.error })
+  res.json({ ok: true, restored_at: new Date().toISOString() })
+})
+
+/* ---------- النسخ السحابية (Cloudflare) ---------- */
+const cfCfg = () => ({
+  token: process.env.CF_BACKUP_TOKEN,
+  acc: process.env.CF_ACCOUNT_ID,
+  ns: process.env.CF_KV_NS,
+})
+
+app.get('/api/admin/snapshots', adminRequired, async (_req, res) => {
+  const { token, acc, ns } = cfCfg()
+  if (!token || !acc || !ns) return res.json({ enabled: false, items: [] })
+  try {
+    const r = await fetch(
+      `https://api.cloudflare.com/client/v4/accounts/${acc}/storage/kv/namespaces/${ns}/keys?prefix=bk:&limit=200`,
+      { headers: { authorization: `Bearer ${token}` } },
+    )
+    const j = await r.json()
+    const items = (j.result || [])
+      .filter((k) => k.name !== 'bk:latest')
+      .map((k) => {
+        const m = k.name.slice(3)
+        return {
+          key: k.name,
+          at: `${m.slice(0, 4)}-${m.slice(4, 6)}-${m.slice(6, 8)} ${m.slice(8, 10)}:${m.slice(10, 12)}`,
+        }
+      })
+      .sort((a, b) => (a.key < b.key ? 1 : -1))
+    res.json({ enabled: true, items })
+  } catch (e) {
+    res.json({ enabled: true, items: [], error: String(e.message) })
+  }
+})
+
+app.post('/api/admin/snapshots/restore', adminRequired, async (req, res) => {
+  const key = String(req.body?.key || '')
+  if (key !== 'bk:latest' && !/^bk:\d{12}$/.test(key)) return res.status(400).json({ error: 'bad_key' })
+  const { token, acc, ns } = cfCfg()
+  if (!token) return res.status(400).json({ error: 'not_configured' })
+  try {
+    const r = await fetch(
+      `https://api.cloudflare.com/client/v4/accounts/${acc}/storage/kv/namespaces/${ns}/values/${encodeURIComponent(key)}`,
+      { headers: { authorization: `Bearer ${token}` } },
+    )
+    if (!r.ok) return res.status(404).json({ error: 'snapshot_not_found' })
+    const snap = await r.json()
+    if (!snap?.tables) return res.status(400).json({ error: 'bad_snapshot' })
+    const out = applyBackup(snap.tables)
+    if (!out.ok) return res.status(500).json({ error: 'restore_failed', detail: out.error })
+    res.json({ ok: true, restored_at: new Date().toISOString(), taken_at: snap.taken_at || null })
+  } catch (e) {
+    res.status(500).json({ error: 'restore_failed', detail: String(e.message) })
   }
 })
 
