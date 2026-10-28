@@ -119,6 +119,27 @@ CREATE TABLE IF NOT EXISTS invoices (
   issued_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
+CREATE TABLE IF NOT EXISTS categories (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  key TEXT UNIQUE NOT NULL,
+  ar TEXT NOT NULL,
+  en TEXT,
+  icon TEXT,
+  active INTEGER DEFAULT 1,
+  sort INTEGER DEFAULT 0
+);
+
+CREATE TABLE IF NOT EXISTS payments (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  request_id INTEGER NOT NULL REFERENCES requests(id),
+  method TEXT NOT NULL,
+  amount REAL NOT NULL,
+  phone TEXT,
+  status TEXT NOT NULL DEFAULT 'paid',
+  ref TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
 CREATE INDEX IF NOT EXISTS idx_bids_request ON bids(request_id);
 
 CREATE INDEX IF NOT EXISTS idx_requests_status ON requests(status);

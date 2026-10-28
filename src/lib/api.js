@@ -51,5 +51,6 @@ export const api = {
   placeBid: (id, payload) => request(`/api/requests/${id}/bids`, { method: 'POST', body: payload, auth: true }),
   acceptBid: (id, bidId) => request(`/api/requests/${id}/accept`, { method: 'POST', body: { bidId }, auth: true }),
   complete: (id) => request(`/api/requests/${id}/complete`, { method: 'POST', auth: true }),
+  payRequest: (id, payload) => request(`/api/requests/${id}/pay`, { method: 'POST', body: payload, auth: true }),
   review: (id, payload) => request(`/api/requests/${id}/review`, { method: 'POST', body: payload, auth: true }),
 }

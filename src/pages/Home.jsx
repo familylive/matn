@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import experts from '../data/experts.json'
-import { categories } from '../data/categories.js'
+import { useCategories, catLabel } from '../hooks/useCategories.js'
 import ExpertCard from '../components/ExpertCard.jsx'
 import AdsCarousel from '../components/AdsCarousel.jsx'
 import { useLang } from '../i18n/LanguageContext.jsx'
@@ -9,7 +9,8 @@ import { useLang } from '../i18n/LanguageContext.jsx'
 export default function Home() {
   const [query, setQuery] = useState('')
   const navigate = useNavigate()
-  const { t } = useLang()
+  const { t, lang } = useLang()
+  const categories = useCategories()
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase()
@@ -61,7 +62,7 @@ export default function Home() {
               <span className="w-12 h-12 rounded-full bg-[#FBF5E3] border border-[#EADFC8] grid place-items-center text-2xl">
                 {c.icon}
               </span>
-              <span className="text-[#11221A] font-bold">{t(`cat.${c.name}`, c.name)}</span>
+              <span className="text-[#11221A] font-bold">{catLabel(c, lang)}</span>
               <span className="text-[10px] text-[#8a6d13]">اطلب الآن ←</span>
             </button>
           ))}

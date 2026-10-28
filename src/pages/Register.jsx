@@ -2,13 +2,14 @@ import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext.jsx'
 import { api } from '../lib/api.js'
-import { categories } from '../data/categories.js'
+import { useCategories, catLabel } from '../hooks/useCategories.js'
 import MapPicker from '../components/MapPicker.jsx'
 import { useLang } from '../i18n/LanguageContext.jsx'
 
 export default function Register() {
   const { user, login, isAuthenticated } = useAuth()
-  const { t } = useLang()
+  const { t, lang } = useLang()
+  const categories = useCategories()
   const navigate = useNavigate()
   const [cities, setCities] = useState([])
   const [busy, setBusy] = useState(false)
@@ -142,7 +143,7 @@ export default function Register() {
                 <select value={form.specialty} onChange={(e) => setForm({ ...form, specialty: e.target.value })}
                   className="w-full mt-1 px-3 py-2.5 border border-[#E3D9BF] rounded-xl bg-white">
                   {categories.map((c) => (
-                    <option key={c.name} value={c.name}>{c.icon} {t(`cat.${c.name}`, c.name)}</option>
+                    <option key={c.name} value={c.name}>{c.icon} {catLabel(c, lang)}</option>
                   ))}
                 </select>
               </div>

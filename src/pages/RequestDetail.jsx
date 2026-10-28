@@ -18,6 +18,7 @@ export default function RequestDetail() {
   const [error, setError] = useState('')
   const [bid, setBid] = useState({ expertId: '', amount: '', note: '' })
   const [now, setNow] = useState(Date.now())
+  const [pay, setPay] = useState({ method: 'cash', phone: '', busy: false, done: false })
 
   useEffect(() => {
     const timer = setInterval(() => setNow(Date.now()), 1000)
@@ -96,6 +97,18 @@ export default function RequestDetail() {
       setData(await api.complete(id))
     } catch (err) {
       setError(err.message)
+    }
+  }
+
+  const submitPayment = async () => {
+    setPay((p) => ({ ...p, busy: true }))
+    try {
+      const r = await api.payRequest(id, { method: pay.method, phone: pay.phone })
+      setData(r.request)
+      setPay((p) => ({ ...p, busy: false, done: true }))
+    } catch (err) {
+      setError(err.message === 'phone_required' ? 'أدخل رقم جوال urpay' : 'تعذّر إتمام الدفع')
+      setPay((p) => ({ ...p, busy: false }))
     }
   }
 
@@ -229,6 +242,54 @@ export default function RequestDetail() {
               {t('rd.send')}
             </button>
           </form>
+        )}
+
+        {isOwner && data.status === 'awaiting_payment' && (
+          <div className="card-lux p-4 mt-4 space-y-3">
+            <div className="gold-bar absolute inset-x-0 top-0" />
+            <p className="font-extrabold text-[#11221A] pt-1">💳 إتمام الدفع</p>
+            <p className="text-xs text-gray-500">
+              المبلغ المستحق: <span className="font-bold text-[#006C35]">{lowest ?? 0} ريال</span>
+            </p>
+            <div className="space-y-2">
+              {[
+                { k: 'cash', label: '💵 كاش عند الاستلام', desc: 'تدفع للمعلم بعد تنفيذ العمل' },
+                { k: 'card', label: '💳 بطاقة (مدى/فيزا)', desc: 'دفع إلكتروني آمن' },
+                { k: 'urpay', label: '📱 urpay برقم الجوال', desc: 'حوّل عبر محفظة urpay' },
+              ].map((m) => (
+                <button
+                  key={m.k}
+                  onClick={() => setPay({ ...pay, method: m.k })}
+                  className={`w-full text-start p-3 rounded-xl border ${pay.method === m.k ? 'border-[#006C35] bg-[#E9F5EE]' : 'border-[#E3D9BF] bg-white'}`}
+                >
+                  <span className="font-bold text-sm text-[#11221A]">{m.label}</span>
+                  <span className="block text-[11px] text-gray-500">{m.desc}</span>
+                </button>
+              ))}
+            </div>
+
+            {pay.method === 'urpay' && (
+              <input
+                value={pay.phone}
+                onChange={(e) => setPay({ ...pay, phone: e.target.value })}
+                placeholder="رقم جوال urpay (05xxxxxxxx)"
+                className="w-full px-3 py-2 border border-[#E3D9BF] rounded-lg text-sm"
+              />
+            )}
+
+            <button onClick={submitPayment} disabled={pay.busy} className="btn-primary">
+              {pay.busy ? 'جارٍ التنفيذ…' : pay.method === 'cash' ? 'تأكيد الطلب (كاش)' : `ادفع ${lowest ?? 0} ريال`}
+            </button>
+            <p className="text-[10px] text-gray-400 text-center">
+              الدفع بالبطاقة/urpay تجريبي حالياً — نربط بوابة حقيقية (Moyasar) عند الحاجة.
+            </p>
+          </div>
+        )}
+
+        {pay.done && (
+          <div className="card-lux p-3 mt-3 text-center">
+            <p className="text-[#006C35] font-bold text-sm">✅ تم الدفع — جارٍ التنفيذ</p>
+          </div>
         )}
 
         {isOwner && data.status === 'assigned' && (

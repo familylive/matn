@@ -10,7 +10,7 @@ const ERROR_AR = {
   title_and_category_required: 'اكتب وصف الطلب واختر التصنيف',
 }
 import { useLang } from '../i18n/LanguageContext.jsx'
-import { categories } from '../data/categories.js'
+import { useCategories, catLabel } from '../hooks/useCategories.js'
 import CityGate from '../components/CityGate.jsx'
 
 const statusStyles = {
@@ -27,7 +27,8 @@ export default function Requests() {
   const [form, setForm] = useState({ title: '', category: 'Plumber', city: '', budget: '', description: '' })
   const [loc, setLoc] = useState({ lat: null, lng: null, status: 'idle', accuracy: null })
   const { isAuthenticated, user } = useAuth()
-  const { t } = useLang()
+  const { t, lang } = useLang()
+  const categories = useCategories()
   const navigate = useNavigate()
 
   const load = async () => {
@@ -108,7 +109,7 @@ export default function Requests() {
                 className="px-3 py-2.5 border border-[#E3D9BF] rounded-xl bg-white"
               >
                 {categories.map((c) => (
-                  <option key={c.name} value={c.name}>{t(`cat.${c.name}`, c.name)}</option>
+                  <option key={c.name} value={c.name}>{catLabel(c, lang)}</option>
                 ))}
               </select>
               <input

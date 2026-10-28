@@ -73,14 +73,17 @@ const NAV = [
     { key: 'requests:closed', label: 'المغلقة', icon: '⚪' },
   ]},
   { key: 'reports', label: 'التقارير', icon: '📈' },
+  { key: 'categories', label: 'التصنيفات', icon: '🗂️' },
   { key: 'ads', label: 'الإعلانات', icon: '📣' },
   { key: 'invoices', label: 'الفواتير', icon: '🧾' },
+  { key: 'payments', label: 'المدفوعات', icon: '💳' },
   { key: 'cities', label: 'طلبات المدن', icon: '📍' },
   { key: 'backup', label: 'النسخ الاحتياطي', icon: '💾' },
 ]
 
 const TITLES = {
   overview: 'نظرة عامة', reports: 'التقارير', ads: 'الإعلانات', invoices: 'الفواتير',
+  categories: 'التصنيفات', payments: 'المدفوعات',
   cities: 'طلبات المدن', backup: 'النسخ الاحتياطي',
   'users:admins': 'المستخدمون — الإدارة', 'users:experts': 'المستخدمون — الفنيون',
   'users:customers': 'المستخدمون — العملاء', 'users:support': 'المستخدمون — الدعم الفني',
@@ -442,6 +445,96 @@ function Ads() {
   )
 }
 
+function Categories() {
+  const [rows, setRows] = useState([])
+  const [form, setForm] = useState({ key: '', ar: '', en: '', icon: '🛠️' })
+  const [err, setErr] = useState('')
+  const load = () => api('/api/admin/categories').then(setRows).catch(() => {})
+  useEffect(() => { load() }, [])
+
+  const add = async (e) => {
+    e.preventDefault()
+    setErr('')
+    try {
+      await api('/api/admin/categories', { method: 'POST', body: form })
+      setForm({ key: '', ar: '', en: '', icon: '🛠️' })
+      load()
+    } catch (e2) { setErr(e2.message === 'key_exists' ? 'المفتاح مستخدم' : 'تعذّر الإضافة') }
+  }
+
+  const toggle = async (c) => {
+    await api(`/api/admin/categories/${c.id}`, { method: 'PATCH', body: { active: c.active ? 0 : 1 } })
+    load()
+  }
+  const remove = async (c) => {
+    if (!confirm(`حذف ${c.ar}؟`)) return
+    await api(`/api/admin/categories/${c.id}`, { method: 'DELETE' })
+    load()
+  }
+
+  return (
+    <div className="space-y-3">
+      <form onSubmit={add} className="card-lux p-4 space-y-2">
+        <div className="gold-bar absolute inset-x-0 top-0" />
+        <p className="font-extrabold text-[#11221A] pt-1">إضافة تصنيف</p>
+        <div className="grid grid-cols-2 gap-2">
+          <input required placeholder="الاسم بالعربي" value={form.ar} onChange={(e) => setForm({ ...form, ar: e.target.value })}
+            className="px-3 py-2 border border-[#E3D9BF] rounded-lg text-sm" />
+          <input required placeholder="المفتاح (EN)" value={form.key} onChange={(e) => setForm({ ...form, key: e.target.value.replace(/\s/g, '') })}
+            className="px-3 py-2 border border-[#E3D9BF] rounded-lg text-sm" />
+        </div>
+        <div className="grid grid-cols-2 gap-2">
+          <input placeholder="English name" value={form.en} onChange={(e) => setForm({ ...form, en: e.target.value })}
+            className="px-3 py-2 border border-[#E3D9BF] rounded-lg text-sm" />
+          <input placeholder="أيقونة" value={form.icon} onChange={(e) => setForm({ ...form, icon: e.target.value })}
+            className="px-3 py-2 border border-[#E3D9BF] rounded-lg text-sm" />
+        </div>
+        {err && <p className="text-xs text-red-500">{err}</p>}
+        <button className="btn-primary">إضافة</button>
+      </form>
+
+      {rows.map((c) => (
+        <div key={c.id} className="card-lux p-3 flex items-center gap-3">
+          <span className="text-2xl">{c.icon}</span>
+          <div className="flex-1">
+            <p className="font-bold text-sm text-[#11221A]">{c.ar}</p>
+            <p className="text-[11px] text-gray-500">{c.key} · {c.en || '—'}</p>
+          </div>
+          <button onClick={() => toggle(c)} className={`text-[11px] px-2 py-1 rounded-lg ${c.active ? 'bg-[#E9F5EE] text-[#006C35]' : 'bg-gray-100 text-gray-500'}`}>
+            {c.active ? 'مفعّل' : 'موقوف'}
+          </button>
+          <button onClick={() => remove(c)} className="text-[11px] text-red-500 px-1">حذف</button>
+        </div>
+      ))}
+      {rows.length === 0 && <p className="text-sm text-gray-500">ما فيه تصنيفات.</p>}
+    </div>
+  )
+}
+
+function Payments() {
+  const [rows, setRows] = useState([])
+  useEffect(() => { api('/api/admin/payments').then(setRows).catch(() => {}) }, [])
+  const label = { cash: 'كاش', card: 'بطاقة', urpay: 'urpay' }
+  const statusAr = { paid: 'مدفوع', pending_cash: 'عند الاستلام' }
+  return (
+    <div className="space-y-2">
+      {rows.map((p) => (
+        <div key={p.id} className="card-lux p-3 flex items-center justify-between">
+          <div>
+            <p className="font-bold text-sm text-[#11221A]">{label[p.method] || p.method} · {p.amount} ر.س</p>
+            <p className="text-[11px] text-gray-500">{p.request_title} · {p.owner_name}{p.phone ? ` · ${p.phone}` : ''}</p>
+            <p className="text-[10px] text-gray-400">{p.created_at}</p>
+          </div>
+          <span className={`text-[10px] px-2 py-1 rounded-full ${p.status === 'paid' ? 'bg-[#E9F5EE] text-[#006C35]' : 'bg-[#FBF5E3] text-[#8a6d13]'}`}>
+            {statusAr[p.status] || p.status}
+          </span>
+        </div>
+      ))}
+      {rows.length === 0 && <p className="text-sm text-gray-500">ما فيه مدفوعات بعد.</p>}
+    </div>
+  )
+}
+
 function Invoices() {
   const [rows, setRows] = useState([])
   useEffect(() => { api('/api/admin/invoices').then(setRows).catch(() => {}) }, [])
@@ -544,6 +637,8 @@ function Shell({ onLogout }) {
       case 'reports': return <Reports />
       case 'ads': return <Ads />
       case 'invoices': return <Invoices />
+      case 'categories': return <Categories />
+      case 'payments': return <Payments />
       case 'cities': return <CityRequests />
       case 'backup': return <Backup />
       default: return null

@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import experts from '../data/experts.json'
-import { categories } from '../data/categories.js'
+import { useCategories, catLabel } from '../hooks/useCategories.js'
 import ExpertCard from '../components/ExpertCard.jsx'
 import { useLang } from '../i18n/LanguageContext.jsx'
 
@@ -10,7 +10,8 @@ export default function Search() {
   const category = params.get('category') || ''
   const [query, setQuery] = useState('')
   const [sort, setSort] = useState('rating')
-  const { t } = useLang()
+  const { t, lang } = useLang()
+  const categories = useCategories()
 
   const results = useMemo(() => {
     const q = query.trim().toLowerCase()
@@ -55,7 +56,7 @@ export default function Search() {
             onClick={() => setParams({ category: c.name })}
             className={`px-3 py-1.5 rounded-full text-sm whitespace-nowrap ${category === c.name ? 'bg-blue-500 text-white' : 'bg-white text-gray-600 border border-gray-200'}`}
           >
-            {c.icon} {t(`cat.${c.name}`, c.name)}
+            {c.icon} {catLabel(c, lang)}
           </button>
         ))}
       </div>

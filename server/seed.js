@@ -42,3 +42,19 @@ if (users === 0) {
   db.prepare('INSERT INTO users (phone, name, city) VALUES (?, ?, ?)').run('+216000000000', 'Demo Customer', 'Tunis')
   console.log('seeded demo customer')
 }
+
+
+const cats = [
+  ['AC', 'فني تكييف', 'AC Technician', '❄️'],
+  ['Plumber', 'سباك', 'Plumber', '🔧'],
+  ['Carpenter', 'نجار', 'Carpenter', '🔨'],
+  ['Electrician', 'كهربائي', 'Electrician', '⚡'],
+  ['Painter', 'دهّان', 'Painter', '🎨'],
+  ['Mechanic', 'ميكانيكي', 'Mechanic', '🛠️'],
+]
+const catCount = db.prepare('SELECT COUNT(*) c FROM categories').get().c
+if (catCount === 0) {
+  const ins = db.prepare('INSERT INTO categories (key, ar, en, icon, sort) VALUES (?, ?, ?, ?, ?)')
+  cats.forEach((c, i) => ins.run(c[0], c[1], c[2], c[3], i))
+  console.log('seeded categories')
+}

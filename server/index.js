@@ -298,7 +298,7 @@ app.post('/api/requests/:id/accept', authRequired, (req, res) => {
   const bid = db.prepare('SELECT * FROM bids WHERE id = ? AND request_id = ?').get(bidId, request.id)
   if (!bid) return res.status(404).json({ error: 'bid_not_found' })
 
-  db.prepare(`UPDATE requests SET status = 'assigned', accepted_bid_id = ? WHERE id = ?`).run(bid.id, request.id)
+  db.prepare(`UPDATE requests SET status = 'awaiting_payment', accepted_bid_id = ? WHERE id = ?`).run(bid.id, request.id)
   const updated = requestWithBids(request.id)
   io.to(`request:${request.id}`).emit('request:accepted', updated)
   res.json(updated)
@@ -593,9 +593,92 @@ app.patch('/api/admin/city-requests/:id', adminRequired, (req, res) => {
   res.json({ ok: true })
 })
 
+/* ---------- التصنيفات ---------- */
+
+app.get('/api/categories', (_req, res) => {
+  res.json(db.prepare('SELECT * FROM categories WHERE active = 1 ORDER BY sort, id').all())
+})
+
+app.get('/api/admin/categories', adminRequired, (_req, res) => {
+  res.json(db.prepare('SELECT * FROM categories ORDER BY sort, id').all())
+})
+
+app.post('/api/admin/categories', adminRequired, (req, res) => {
+  const { key, ar, en, icon, sort } = req.body || {}
+  if (!key || !ar) return res.status(400).json({ error: 'key_and_ar_required' })
+  try {
+    const info = db.prepare('INSERT INTO categories (key, ar, en, icon, sort) VALUES (?, ?, ?, ?, ?)')
+      .run(key.trim(), ar.trim(), en || null, icon || '🛠️', Number(sort) || 99)
+    res.status(201).json(db.prepare('SELECT * FROM categories WHERE id = ?').get(info.lastInsertRowid))
+  } catch {
+    res.status(409).json({ error: 'key_exists' })
+  }
+})
+
+app.patch('/api/admin/categories/:id', adminRequired, (req, res) => {
+  const c = db.prepare('SELECT * FROM categories WHERE id = ?').get(req.params.id)
+  if (!c) return res.status(404).json({ error: 'not_found' })
+  const b = req.body || {}
+  const sets = []
+  const params = []
+  for (const f of ['ar', 'en', 'icon', 'active', 'sort']) {
+    if (b[f] !== undefined) { sets.push(`${f} = ?`); params.push(f === 'active' ? (b[f] ? 1 : 0) : b[f]) }
+  }
+  if (sets.length) db.prepare(`UPDATE categories SET ${sets.join(', ')} WHERE id = ?`).run(...params, c.id)
+  res.json(db.prepare('SELECT * FROM categories WHERE id = ?').get(c.id))
+})
+
+app.delete('/api/admin/categories/:id', adminRequired, (req, res) => {
+  db.prepare('DELETE FROM categories WHERE id = ?').run(req.params.id)
+  res.json({ ok: true })
+})
+
+/* ---------- الدفع ---------- */
+
+app.post('/api/requests/:id/pay', authRequired, (req, res) => {
+  const request = db.prepare('SELECT * FROM requests WHERE id = ?').get(req.params.id)
+  if (!request) return res.status(404).json({ error: 'not_found' })
+  if (request.user_id !== req.userId) return res.status(403).json({ error: 'forbidden' })
+  if (request.status !== 'awaiting_payment') return res.status(409).json({ error: 'not_awaiting_payment' })
+
+  const method = String(req.body?.method || '')
+  if (!['cash', 'card', 'urpay'].includes(method)) return res.status(400).json({ error: 'invalid_method' })
+  const phone = method === 'urpay' ? String(req.body?.phone || '').replace(/[^\d+]/g, '') : null
+  if (method === 'urpay' && phone.replace(/\D/g, '').length < 9) return res.status(400).json({ error: 'phone_required' })
+
+  const bid = db.prepare('SELECT * FROM bids WHERE id = ?').get(request.accepted_bid_id)
+  const amount = bid?.amount || 0
+  const status = method === 'cash' ? 'pending_cash' : 'paid'
+
+  const info = db
+    .prepare('INSERT INTO payments (request_id, method, amount, phone, status, ref) VALUES (?, ?, ?, ?, ?, ?)')
+    .run(request.id, method, amount, phone, status, method === 'card' ? `CARD-${Date.now()}` : null)
+
+  db.prepare("UPDATE requests SET status = 'assigned' WHERE id = ?").run(request.id)
+  const updated = requestWithBids(request.id)
+  io.to(`request:${request.id}`).emit('request:accepted', updated)
+  io.to(`user:${request.user_id}`).emit('notify', {
+    type: 'payment',
+    title: method === 'cash' ? 'تم تأكيد الدفع عند الاستلام' : 'تم الدفع بنجاح',
+    body: `${amount} ريال`,
+    requestId: request.id,
+  })
+  res.status(201).json({ ok: true, payment: db.prepare('SELECT * FROM payments WHERE id = ?').get(info.lastInsertRowid), request: updated })
+})
+
+app.get('/api/admin/payments', adminRequired, (_req, res) => {
+  res.json(
+    db.prepare(
+      `SELECT p.*, r.title AS request_title, u.name AS owner_name
+       FROM payments p JOIN requests r ON r.id = p.request_id JOIN users u ON u.id = r.user_id
+       ORDER BY p.id DESC LIMIT 300`,
+    ).all(),
+  )
+})
+
 /* ---------- نسخ احتياطي ---------- */
 
-const BACKUP_TABLES = ['users', 'experts', 'requests', 'bids', 'reviews', 'invoices', 'ads', 'city_requests']
+const BACKUP_TABLES = ['users', 'experts', 'requests', 'bids', 'reviews', 'invoices', 'ads', 'city_requests', 'categories', 'payments']
 
 app.get('/api/admin/backup', adminRequired, (_req, res) => {
   const data = { at: new Date().toISOString(), version: 1, tables: {} }
@@ -608,7 +691,7 @@ app.post('/api/admin/restore', adminRequired, (req, res) => {
   const tables = req.body?.tables
   if (!tables || typeof tables !== 'object') return res.status(400).json({ error: 'invalid_backup' })
 
-  const order = ['reviews', 'bids', 'invoices', 'requests', 'city_requests', 'ads', 'experts', 'users']
+  const order = ['reviews', 'payments', 'bids', 'invoices', 'requests', 'city_requests', 'ads', 'experts', 'users', 'categories'].filter(t => BACKUP_TABLES.includes(t))
 
   db.pragma('foreign_keys = OFF')
   try {
