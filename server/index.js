@@ -52,22 +52,25 @@ function backfillNumbers() {
 }
 backfillNumbers()
 
-// توحيد صيغة الجوالات القديمة إلى +9665XXXXXXXX
-try {
-  const users = db.prepare('SELECT id, phone FROM users WHERE phone IS NOT NULL').all()
-  const upd = db.prepare('UPDATE users SET phone = ? WHERE id = ?')
-  let fixed = 0
-  for (const u of users) {
-    const n = normalizePhone(u.phone)
-    if (n && n !== u.phone && !db.prepare('SELECT 1 FROM users WHERE phone = ? AND id != ?').get(n, u.id)) {
-      upd.run(n, u.id)
-      fixed++
+// توحيد صيغة الجوالات إلى +9665XXXXXXXX
+function normalizePhones() {
+  try {
+    const users = db.prepare('SELECT id, phone FROM users WHERE phone IS NOT NULL').all()
+    const upd = db.prepare('UPDATE users SET phone = ? WHERE id = ?')
+    let fixed = 0
+    for (const u of users) {
+      const n = normalizePhone(u.phone)
+      if (n && n !== u.phone && !db.prepare('SELECT 1 FROM users WHERE phone = ? AND id != ?').get(n, u.id)) {
+        upd.run(n, u.id)
+        fixed++
+      }
     }
+    if (fixed) console.log(`normalized ${fixed} phone numbers`)
+  } catch (e) {
+    console.error('phone normalize failed', e.message)
   }
-  if (fixed) console.log(`normalized ${fixed} phone numbers`)
-} catch (e) {
-  console.error('phone normalize failed', e.message)
 }
+normalizePhones()
 
 /* ---------- auth (phone + OTP) ---------- */
 
@@ -1350,6 +1353,7 @@ app.post('/api/admin/restore', adminRequired, (req, res) => {
       seedCats.forEach((c, i) => ins.run(c[0], c[1], c[2], c[3], i))
     }
     backfillNumbers()
+    normalizePhones()
     seedBots()
     if (req.body?.files && typeof req.body.files === 'object') {
       for (const [name, b64] of Object.entries(req.body.files)) {
