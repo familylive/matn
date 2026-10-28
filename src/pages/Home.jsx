@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import experts from '../data/experts.json'
 import { useCategories, catLabel } from '../hooks/useCategories.js'
 import ExpertCard from '../components/ExpertCard.jsx'
+import LocationSetup from '../components/LocationSetup.jsx'
 import AdsCarousel from '../components/AdsCarousel.jsx'
 import { useLang } from '../i18n/LanguageContext.jsx'
 
@@ -40,6 +41,7 @@ export default function Home() {
 
   return (
     <div className="pb-8">
+      <LocationSetup />
       <div className="relative px-4 pt-5 pb-6 bg-gradient-to-b from-[#006C35] to-[#004d26] text-white overflow-hidden">
         <div className="absolute -top-10 -end-10 w-40 h-40 rounded-full bg-white/5" />
         <div className="absolute -bottom-14 -start-8 w-36 h-36 rounded-full bg-[#C9A227]/20" />

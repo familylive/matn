@@ -42,6 +42,8 @@ export const api = {
     request('/api/auth/verify', { method: 'POST', body: { phone, code, name } }),
   me: () => request('/api/me', { auth: true }),
   register: (payload) => request('/api/auth/register', { method: 'POST', body: payload, auth: true }),
+  patch: (path, body) => request(path, { method: 'PATCH', body, auth: true }),
+  cancelRequest: (id) => request(`/api/requests/${id}/cancel`, { method: 'POST', auth: true }),
   setSound: (sound_on) => request('/api/me/sound', { method: 'PATCH', body: { sound_on }, auth: true }),
   uploadAvatar: async (file) => {
     const fd = new FormData()

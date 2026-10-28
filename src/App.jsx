@@ -13,6 +13,7 @@ import Register from './pages/Register.jsx'
 import Verify from './pages/Verify.jsx'
 import MyRequests from './pages/MyRequests.jsx'
 import Invoice from './pages/Invoice.jsx'
+import Terms from './pages/Terms.jsx'
 import { useAuth } from './context/AuthContext.jsx'
 
 function RequireAuth({ children }) {
@@ -48,6 +49,7 @@ export default function App() {
       <Route path="/verify" element={<Layout><Verify /></Layout>} />
       <Route path="/my-requests" element={<Layout><MyRequests /></Layout>} />
       <Route path="/invoice/:id/:type" element={<Invoice />} />
+      <Route path="/terms" element={<Layout><Terms /></Layout>} />
       <Route path="/admin/*" element={<Admin />} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

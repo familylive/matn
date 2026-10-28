@@ -198,6 +198,18 @@ app.post('/api/auth/register', authRequired, (req, res) => {
   res.json(fullUser(req.userId))
 })
 
+app.patch('/api/me/profile', authRequired, (req, res) => {
+  const b = req.body || {}
+  const sets = []
+  const params = []
+  for (const f of ['name', 'city', 'lat', 'lng', 'email', 'nationality', 'specialty', 'phone']) {
+    if (b[f] !== undefined) { sets.push(`${f} = ?`); params.push(b[f]) }
+  }
+  if (!sets.length) return res.status(400).json({ error: 'nothing_to_update' })
+  db.prepare(`UPDATE users SET ${sets.join(', ')} WHERE id = ?`).run(...params, req.userId)
+  res.json(fullUser(req.userId))
+})
+
 app.patch('/api/me/sound', authRequired, (req, res) => {
   db.prepare('UPDATE users SET sound_on = ? WHERE id = ?').run(req.body?.sound_on ? 1 : 0, req.userId)
   res.json({ ok: true, sound_on: req.body?.sound_on ? 1 : 0 })
@@ -227,6 +239,24 @@ app.get('/api/me/expert', authRequired, (req, res) => {
   const e = db.prepare('SELECT * FROM experts WHERE user_id = ?').get(req.userId)
   if (!e) return res.json(null)
   res.json({ ...e, skills: e.skills ? JSON.parse(e.skills) : [] })
+})
+
+app.get('/api/experts/:id/contact', authRequired, (req, res) => {
+  const expert = db.prepare('SELECT * FROM experts WHERE id = ?').get(req.params.id)
+  if (!expert) return res.status(404).json({ error: 'not_found' })
+
+  const paid = db
+    .prepare(
+      `SELECT 1 FROM requests r
+       JOIN bids b ON b.id = r.accepted_bid_id
+       JOIN payments p ON p.request_id = r.id
+       WHERE r.user_id = ? AND b.expert_id = ? AND p.kind = 'service'
+       LIMIT 1`,
+    )
+    .get(req.userId, expert.id)
+
+  if (!paid) return res.json({ allowed: false })
+  res.json({ allowed: true, phone: expert.phone, whatsapp: expert.phone?.replace(/[^\d]/g, '') })
 })
 
 app.get('/api/experts/:id/reviews', (req, res) => {
@@ -594,6 +624,20 @@ app.post('/api/requests/:id/complete', authRequired, (req, res) => {
   ).run(days, days, request.id)
   const invoice = issueInvoice(request.id)
   res.json({ ...requestWithBids(request.id), invoice })
+})
+
+app.post('/api/requests/:id/cancel', authRequired, (req, res) => {
+  const request = db.prepare('SELECT * FROM requests WHERE id = ?').get(req.params.id)
+  if (!request) return res.status(404).json({ error: 'not_found' })
+  if (request.user_id !== req.userId) return res.status(403).json({ error: 'forbidden' })
+  if (request.status !== 'open') return res.status(409).json({ error: 'not_open' })
+
+  const created = new Date(request.created_at.replace(' ', 'T') + 'Z').getTime()
+  if (Date.now() - created > 3 * 60 * 1000) {
+    return res.status(409).json({ error: 'cancel_window_passed' })
+  }
+  db.prepare("UPDATE requests SET status = 'canceled' WHERE id = ?").run(request.id)
+  res.json(requestWithBids(request.id))
 })
 
 app.post('/api/requests/:id/close', authRequired, (req, res) => {

@@ -4,6 +4,8 @@ import experts from '../data/experts.json'
 import FavoriteButton from '../components/FavoriteButton.jsx'
 import { useLang } from '../i18n/LanguageContext.jsx'
 import { expertName } from '../i18n/display.js'
+import { useAuth } from '../context/AuthContext.jsx'
+import { api } from '../lib/api.js'
 
 export default function ExpertDetail() {
   const { id } = useParams()
@@ -11,6 +13,12 @@ export default function ExpertDetail() {
   const navigate = useNavigate()
   const { t, lang } = useLang()
   const [reviews, setReviews] = useState([])
+  const [contact, setContact] = useState(null)
+  const { isAuthenticated } = useAuth()
+
+  useEffect(() => {
+    if (isAuthenticated) api.get(`/api/experts/${id}/contact`).then(setContact).catch(() => {})
+  }, [id, isAuthenticated])
 
   useEffect(() => {
     fetch(`/api/experts/${id}/reviews`).then((r) => r.json()).then(setReviews).catch(() => {})
@@ -101,18 +109,25 @@ export default function ExpertDetail() {
           </div>
         )}
 
-        <div className="grid grid-cols-2 gap-3 mt-6">
-          <a href={`tel:${tel}`} className="bg-blue-500 text-white text-center py-3 rounded-xl font-medium">
-            {t('expert.call')}
-          </a>
-          <a
-            href={`https://wa.me/${wa}`}
-            target="_blank" rel="noreferrer"
-            className="bg-white border border-gray-300 text-gray-800 text-center py-3 rounded-xl font-medium"
-          >
-            {t('expert.whatsapp')}
-          </a>
-        </div>
+        {contact?.allowed ? (
+          <div className="grid grid-cols-2 gap-3 mt-6">
+            <a href={`tel:${contact.phone?.replace(/\s/g, '')}`} className="bg-[#006C35] text-white text-center py-3 rounded-xl font-bold">
+              📞 اتصال
+            </a>
+            <a
+              href={`https://wa.me/${contact.whatsapp}`}
+              target="_blank" rel="noreferrer"
+              className="bg-white border border-[#E3D9BF] text-gray-800 text-center py-3 rounded-xl font-bold"
+            >
+              💬 واتساب
+            </a>
+          </div>
+        ) : (
+          <div className="mt-6 rounded-xl bg-[#FBF5E3] border border-[#EADFC8] p-3 text-center">
+            <p className="text-xs font-bold text-[#8a6d13]">🔒 بيانات التواصل تظهر بعد سداد الطلب</p>
+            <p className="text-[10px] text-gray-500 mt-1">اطلب خدمتك وسوم معه — وبعد الدفع يظهر الجوال والواتساب</p>
+          </div>
+        )}
       </div>
     </div>
   )

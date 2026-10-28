@@ -180,6 +180,10 @@ export default function Login() {
         </Link>
       </div>
 
+      <div className="text-center mt-4">
+        <Link to="/terms" className="text-[11px] text-gray-500 underline">الشروط والأحكام</Link>
+      </div>
+
       <Link
         to="/admin"
         className="block text-center mt-6 text-xs font-bold text-[#8a6d13] bg-[#FBF5E3] border border-[#EADFC8] py-2.5 rounded-xl"

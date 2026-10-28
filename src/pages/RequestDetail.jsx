@@ -311,6 +311,9 @@ export default function RequestDetail() {
   const endMs = data.ends_at ? new Date(data.ends_at.replace(' ', 'T') + 'Z').getTime() : null
   const remaining = endMs ? endMs - now : null
   const ended = remaining !== null && remaining <= 0
+  const createdMs = data.created_at ? new Date(data.created_at.replace(' ', 'T') + 'Z').getTime() : null
+  const cancelLeft = createdMs ? 3 * 60 * 1000 - (now - createdMs) : 0
+
   const mmss = remaining && remaining > 0
     ? `${String(Math.floor(remaining / 60000)).padStart(2, '0')}:${String(Math.floor((remaining % 60000) / 1000)).padStart(2, '0')}`
     : null
@@ -358,6 +361,23 @@ export default function RequestDetail() {
             <p className="font-semibold text-green-600">{lowest ?? '—'} {t('common.tnd')}</p>
           </div>
         </div>
+
+        {isOwner && data.status === 'open' && cancelLeft > 0 && (
+          <button
+            onClick={async () => {
+              if (!confirm('إلغاء الطلب؟')) return
+              try {
+                const updated = await api.cancelRequest(id)
+                setData(updated)
+              } catch (e) {
+                alert(e.message === 'cancel_window_passed' ? 'انتهت مدة الإلغاء (٣ دقائق)' : 'تعذّر الإلغاء')
+              }
+            }}
+            className="w-full mb-3 border border-red-200 text-red-500 py-2 rounded-xl text-xs font-bold"
+          >
+            إلغاء الطلب — متبقي {Math.floor(cancelLeft / 60000)}:{String(Math.floor((cancelLeft % 60000) / 1000)).padStart(2, '0')}
+          </button>
+        )}
 
         {isOwner && data.status === 'open' && data.bids.length > 0 && (
           <div className="card-lux p-4 mb-3">
