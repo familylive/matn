@@ -97,35 +97,27 @@ export default function Home() {
             <button
               key={c.name}
               onClick={() => navigate(`/search?category=${encodeURIComponent(c.name)}`)}
-              className="card-lux active:scale-[.98] transition p-4 flex flex-col items-center gap-2"
+              className="card-ornate active:scale-[.98] p-5 pt-6 flex flex-col items-center gap-2.5"
             >
               {c.image ? (
-                <img src={c.image} alt={c.ar} className="w-14 h-14 rounded-full object-cover border border-[#EADFC8]" />
+                <img src={c.image} alt={c.ar} className="w-16 h-16 rounded-2xl object-cover ring-2 ring-[#C9A227]/40 shadow-sm" />
               ) : (
-                <span className="w-12 h-12 rounded-full bg-[#FBF5E3] border border-[#EADFC8] grid place-items-center text-2xl">
+                <span className="w-16 h-16 rounded-2xl bg-[#FBF5E3] border border-[#EADFC8] grid place-items-center text-3xl shadow-inner">
                   {c.icon}
                 </span>
               )}
-              <span className="text-[#11221A] font-bold">{catLabel(c, lang)}</span>
+              <span className="text-[16px] font-extrabold text-[#0B0A08] tracking-tight leading-tight text-center">
+                {catLabel(c, lang)}
+              </span>
+              {kids.length > 0 && (
+                <span className="text-[11px] font-bold text-[#8a6d13]">{kids.length} خدمة</span>
+              )}
               {counts.byCategory?.[c.name] ? (
-                <span className="absolute top-2 end-2 min-w-6 h-6 px-1.5 rounded-full bg-red-500 text-white text-[11px] font-bold grid place-items-center shadow">
+                <span className="absolute top-3 end-3 min-w-7 h-7 px-1.5 rounded-full bg-[#B3261E] text-white text-[12px] font-bold grid place-items-center shadow">
                   {counts.byCategory[c.name]}
                 </span>
               ) : null}
-              {kids.length > 0 && (
-                <span className="flex flex-wrap justify-center gap-1 mt-1">
-                  {kids.map((k) => (
-                    <span
-                      key={k.id}
-                      onClick={(ev) => { ev.stopPropagation(); navigate(`/search?category=${encodeURIComponent(k.name)}`) }}
-                      className="text-[10px] bg-[#FBF5E3] text-[#8a6d13] border border-[#EADFC8] px-2 py-0.5 rounded-full"
-                    >
-                      {catLabel(k, lang)}
-                    </span>
-                  ))}
-                </span>
-              )}
-              <span className="text-[10px] text-[#8a6d13]">اطلب الآن ←</span>
+              <span className="mt-0.5 text-[12px] font-bold text-[#006C35]">اطلب الآن ←</span>
             </button>
           )})}
         </div>

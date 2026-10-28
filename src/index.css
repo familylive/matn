@@ -31,6 +31,33 @@ body {
   .gold-bar {
     @apply h-1 w-full bg-gradient-to-r from-[#006C35] via-[#C9A227] to-[#BFC5CB];
   }
+  /* بطاقة مزخرفة: إطار ذهبي مزدوج + زوايا */
+  .card-ornate {
+    @apply relative bg-white rounded-[18px] overflow-hidden transition;
+    border: 1px solid rgba(201, 162, 39, 0.55);
+    background-image: linear-gradient(180deg, #FFFDF6 0%, #FFFFFF 45%, #FFFCF2 100%);
+    box-shadow: 0 6px 20px rgba(0, 60, 30, 0.07);
+  }
+  .card-ornate::before {
+    content: '';
+    position: absolute;
+    inset: 5px;
+    border: 1px solid rgba(201, 162, 39, 0.30);
+    border-radius: 14px;
+    pointer-events: none;
+  }
+  .card-ornate::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: 18px;
+    pointer-events: none;
+    background:
+      radial-gradient(circle at 0 0, rgba(201, 162, 39, 0.45) 0 5px, transparent 6px),
+      radial-gradient(circle at 100% 0, rgba(201, 162, 39, 0.45) 0 5px, transparent 6px),
+      radial-gradient(circle at 0 100%, rgba(201, 162, 39, 0.45) 0 5px, transparent 6px),
+      radial-gradient(circle at 100% 100%, rgba(201, 162, 39, 0.45) 0 5px, transparent 6px);
+  }
   .chip-gold {
     @apply inline-flex items-center gap-1 rounded-full bg-[#FBF5E3] text-[#8a6d13] border border-[#EADFC8] px-2.5 py-1 text-xs font-semibold;
   }
