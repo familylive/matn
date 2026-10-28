@@ -204,10 +204,12 @@ const requestWithBids = (id) => {
     )
     .all(id)
     .map((b) => ({ ...b, distance_km: haversineKm(request.lat, request.lng, b.lat, b.lng) }))
+  const extras = db.prepare('SELECT * FROM request_extras WHERE request_id = ? ORDER BY id').all(id)
+  const extrasTotal = extras.reduce((a, e) => a + e.amount, 0)
   const nearest = bids
     .filter((b) => b.distance_km !== null)
     .sort((a, z) => a.distance_km - z.distance_km)[0]
-  return { ...request, bids, nearest_bid_id: nearest?.id ?? null }
+  return { ...request, bids, extras, extras_total: extrasTotal, nearest_bid_id: nearest?.id ?? null }
 }
 
 app.get('/api/requests/counts', (_req, res) => {
@@ -242,10 +244,11 @@ app.get('/api/requests/:id', (req, res) => {
 app.post('/api/requests', authRequired, (req, res) => {
   const { title, category, description, city, budget, subcategory, warranty_days } = req.body || {}
   if (!title || !category) return res.status(400).json({ error: 'title_and_category_required' })
+  const nextNumber = db.prepare('SELECT COALESCE(MAX(number), 1054) + 1 n FROM requests').get().n
   const info = db
     .prepare(
-      `INSERT INTO requests (user_id, title, category, description, city, budget, lat, lng, ends_at, subcategory, warranty_days)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now', '+60 minutes'), ?, ?)`,
+      `INSERT INTO requests (user_id, title, category, description, city, budget, lat, lng, ends_at, subcategory, warranty_days, number)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now', '+60 minutes'), ?, ?, ?)`,
     )
     .run(
       req.userId,
@@ -258,6 +261,7 @@ app.post('/api/requests', authRequired, (req, res) => {
       req.body?.lng != null ? Number(req.body.lng) : null,
       subcategory || null,
       Number(warranty_days) || 3,
+      nextNumber,
     )
   const request = requestWithBids(info.lastInsertRowid)
   io.emit('request:new', request)
@@ -305,6 +309,35 @@ app.post('/api/requests/:id/bids', authRequired, (req, res) => {
     amount: bid.amount,
   })
   res.status(201).json(bid)
+})
+
+app.post('/api/requests/:id/extras', authRequired, (req, res) => {
+  const request = db.prepare('SELECT * FROM requests WHERE id = ?').get(req.params.id)
+  if (!request) return res.status(404).json({ error: 'not_found' })
+  if (request.user_id !== req.userId) return res.status(403).json({ error: 'forbidden' })
+  if (!['assigned', 'awaiting_payment', 'done'].includes(request.status))
+    return res.status(409).json({ error: 'not_editable' })
+
+  const title = String(req.body?.title || '').trim()
+  const amount = Number(req.body?.amount)
+  if (!title || !(amount > 0)) return res.status(400).json({ error: 'invalid_extra' })
+
+  const info = db.prepare('INSERT INTO request_extras (request_id, title, amount) VALUES (?, ?, ?)').run(request.id, title, amount)
+
+  // عمولة مؤجلة تُخصم من الطلب القادم
+  const custPct = commissionCustomer()
+  const expPct = commissionExpert()
+  const bid = request.accepted_bid_id ? db.prepare('SELECT * FROM bids WHERE id = ?').get(request.accepted_bid_id) : null
+  const ins = db.prepare(
+    'INSERT INTO commission_ledger (user_id, expert_id, source_request_id, side, amount) VALUES (?, ?, ?, ?, ?)',
+  )
+  ins.run(request.user_id, null, request.id, 'customer', round2(amount * custPct / 100))
+  if (bid) ins.run(null, bid.expert_id, request.id, 'expert', round2(amount * expPct / 100))
+
+  res.status(201).json({
+    extra: db.prepare('SELECT * FROM request_extras WHERE id = ?').get(info.lastInsertRowid),
+    request: requestWithBids(request.id),
+  })
 })
 
 app.post('/api/requests/:id/accept', authRequired, (req, res) => {
@@ -904,36 +937,61 @@ app.get('/api/requests/:id/invoices', authRequired, (req, res) => {
     : null
   const isExpert = !!(myExpert && accepted && accepted.expert_id === myExpert.id)
   if (!isOwner && !isExpert) return res.status(403).json({ error: 'forbidden' })
+
   const inv = db.prepare('SELECT * FROM invoices WHERE request_id = ?').get(request.id)
   if (!inv) return res.status(404).json({ error: 'no_invoice' })
-  const bid = db.prepare('SELECT b.*, e.name_ar AS expert_name FROM bids b JOIN experts e ON e.id = b.expert_id WHERE b.id = ?').get(request.accepted_bid_id)
+
+  const bid = db
+    .prepare('SELECT b.*, e.name_ar AS expert_name FROM bids b JOIN experts e ON e.id = b.expert_id WHERE b.id = ?')
+    .get(request.accepted_bid_id)
   const user = db.prepare('SELECT name, phone FROM users WHERE id = ?').get(request.user_id)
-  const pctC = commissionCustomer()
-  const pctE = commissionExpert()
+
+  const extras = db.prepare('SELECT * FROM request_extras WHERE request_id = ? ORDER BY id').all(request.id)
+  const applied = db
+    .prepare(
+      `SELECT l.*, r.number AS source_number FROM commission_ledger l
+       JOIN requests r ON r.id = l.source_request_id
+       WHERE l.applied_request_id = ?`,
+    )
+    .all(request.id)
+
+  const custPct = commissionCustomer()
+  const expPct = commissionExpert()
+
+  const custItems = [{ label: 'قيمة الخدمة', amount: bid?.amount || inv.amount }]
+  if (inv.extras_total > 0) {
+    for (const e of extras) custItems.push({ label: `عمل إضافي — ${e.title}`, amount: e.amount })
+    custItems.push({ label: 'إجمالي الأعمال الإضافية', amount: inv.extras_total })
+  }
+  custItems.push({ label: `رسوم خدمة الموقع (${custPct}%)`, amount: inv.customer_fee })
+  for (const l of applied.filter((x) => x.side === 'customer')) {
+    custItems.push({ label: `عمولة أعمال إضافية للطلب #${l.source_number}`, amount: l.amount })
+  }
+
+  const expItems = [{ label: 'قيمة الخدمة', amount: bid?.amount || inv.amount }]
+  if (inv.extras_total > 0) expItems.push({ label: 'أعمال إضافية', amount: inv.extras_total })
+  expItems.push({ label: `عمولة الموقع (${expPct}%)`, amount: -inv.expert_fee })
+  for (const l of applied.filter((x) => x.side === 'expert')) {
+    expItems.push({ label: `عمولة أعمال إضافية للطلب #${l.source_number}`, amount: -l.amount })
+  }
 
   res.json({
     customer: {
       number: inv.number + '-C',
       title: 'فاتورة العميل',
       to: user?.name || 'العميل',
-      items: [
-        { label: 'قيمة الخدمة', amount: inv.amount },
-        { label: `رسوم خدمة الموقع (${pctC}%)`, amount: inv.customer_fee },
-      ],
+      items: custItems,
       total: inv.total_paid,
     },
     expert: {
       number: inv.number + '-E',
       title: 'فاتورة الفني (مستخلص)',
       to: bid?.expert_name || 'الفني',
-      items: [
-        { label: 'قيمة الخدمة', amount: inv.amount },
-        { label: `عمولة الموقع (${pctE}%)`, amount: -inv.expert_fee },
-      ],
+      items: expItems,
       total: inv.net,
     },
     issued_at: inv.issued_at,
-    request: { id: request.id, title: request.title, city: request.city },
+    request: { id: request.id, number: request.number, title: request.title, city: request.city },
   })
 })
 

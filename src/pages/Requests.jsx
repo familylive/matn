@@ -219,7 +219,10 @@ export default function Requests() {
         {items.map((r) => (
           <Link key={r.id} to={`/requests/${r.id}`} className="block card-lux p-4">
             <div className="flex items-start justify-between gap-2">
-              <h3 className="font-bold text-[#11221A]">{r.title}</h3>
+              <h3 className="font-bold text-[#11221A]">
+                {r.number ? <span className="text-[10px] text-gray-400 me-1">#{r.number}</span> : null}
+                {r.title}
+              </h3>
               <span className={`text-[11px] px-2 py-1 rounded-full font-semibold whitespace-nowrap ${statusStyles[r.status] || 'bg-gray-100 text-gray-600'}`}>
                 {statusAr[r.status] || r.status}
               </span>

@@ -129,6 +129,25 @@ CREATE TABLE IF NOT EXISTS categories (
   sort INTEGER DEFAULT 0
 );
 
+CREATE TABLE IF NOT EXISTS request_extras (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  request_id INTEGER NOT NULL REFERENCES requests(id) ON DELETE CASCADE,
+  title TEXT NOT NULL,
+  amount REAL NOT NULL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS commission_ledger (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id INTEGER,
+  expert_id INTEGER,
+  source_request_id INTEGER NOT NULL,
+  side TEXT NOT NULL,
+  amount REAL NOT NULL,
+  applied_request_id INTEGER,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
 CREATE TABLE IF NOT EXISTS payments (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   request_id INTEGER NOT NULL REFERENCES requests(id),
@@ -189,6 +208,10 @@ addColumn('requests', 'warranty_until', 'TEXT')
 addColumn('requests', 'closed_at', 'TEXT')
 addColumn('requests', 'close_reason', 'TEXT')
 addColumn('requests', 'closed_by', 'TEXT')
+addColumn('requests', 'number', 'INTEGER')
+addColumn('invoices', 'extras_total', 'REAL DEFAULT 0')
+addColumn('invoices', 'deferred_customer', 'REAL DEFAULT 0')
+addColumn('invoices', 'deferred_expert', 'REAL DEFAULT 0')
 addColumn('users', 'status', "TEXT DEFAULT 'active'")
 addColumn('invoices', 'commission', 'REAL DEFAULT 0')
 addColumn('invoices', 'net', 'REAL DEFAULT 0')

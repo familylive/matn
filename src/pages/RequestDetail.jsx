@@ -7,6 +7,51 @@ import { useLang } from '../i18n/LanguageContext.jsx'
 
 const socket = io({ autoConnect: false })
 
+function ExtraForm({ requestId, onAdded }) {
+  const [open, setOpen] = useState(false)
+  const [form, setForm] = useState({ title: '', amount: '' })
+  const [err, setErr] = useState('')
+
+  const submit = async (e) => {
+    e.preventDefault()
+    setErr('')
+    try {
+      const r = await api.addExtra(requestId, { title: form.title, amount: Number(form.amount) })
+      onAdded(r.request)
+      setForm({ title: '', amount: '' })
+      setOpen(false)
+    } catch {
+      setErr('تعذّر إضافة العمل')
+    }
+  }
+
+  if (!open) {
+    return (
+      <button onClick={() => setOpen(true)} className="w-full mt-3 border border-dashed border-[#C9A227] text-[#8a6d13] py-2.5 rounded-xl text-sm font-bold">
+        ➕ إضافة عمل إضافي
+      </button>
+    )
+  }
+
+  return (
+    <form onSubmit={submit} className="card-lux p-4 mt-3 space-y-2">
+      <p className="font-extrabold text-sm text-[#11221A]">عمل إضافي غير متفق عليه</p>
+      <input required placeholder="اسم العمل (مثال: تغيير فلتر)" value={form.title}
+        onChange={(e) => setForm({ ...form, title: e.target.value })}
+        className="w-full px-3 py-2 border border-[#E3D9BF] rounded-lg text-sm" />
+      <input required type="number" min="1" placeholder="السعر (ريال)" value={form.amount}
+        onChange={(e) => setForm({ ...form, amount: e.target.value })}
+        className="w-full px-3 py-2 border border-[#E3D9BF] rounded-lg text-sm" />
+      <p className="text-[10px] text-gray-500">تُحسب عمولة المنصة عليه وتُضاف لفاتورتك القادمة.</p>
+      {err && <p className="text-xs text-red-500">{err}</p>}
+      <div className="flex gap-2">
+        <button className="flex-1 bg-[#006C35] text-white py-2 rounded-lg text-sm font-bold">إضافة</button>
+        <button type="button" onClick={() => setOpen(false)} className="px-3 py-2 rounded-lg text-sm border border-gray-200">إلغاء</button>
+      </div>
+    </form>
+  )
+}
+
 export default function RequestDetail() {
   const { id } = useParams()
   const navigate = useNavigate()
@@ -168,7 +213,10 @@ export default function RequestDetail() {
     <div className="min-h-screen bg-gray-50 max-w-sm mx-auto">
       <div className="bg-white border-b border-gray-100 px-4 py-4 flex items-center gap-3">
         <button onClick={() => navigate(-1)} className="text-gray-500" aria-label={t('expert.back')}>←</button>
-        <h1 className="font-semibold text-gray-900 truncate">{data.title}</h1>
+        <h1 className="font-semibold text-gray-900 truncate">
+          {data.number ? <span className="text-xs text-gray-400 me-1">#{data.number}</span> : null}
+          {data.title}
+        </h1>
         <span className={`ms-auto text-xs font-bold ${ended ? 'text-red-500' : 'text-[#006C35]'}`}>
           {ended ? 'انتهى المزاد' : mmss ? `⏱ ${mmss}` : ''}
         </span>
@@ -270,6 +318,25 @@ export default function RequestDetail() {
               {t('rd.send')}
             </button>
           </form>
+        )}
+
+        {data.extras?.length > 0 && (
+          <div className="card-lux p-4 mt-4">
+            <p className="font-extrabold text-sm text-[#11221A]">➕ أعمال إضافية</p>
+            {data.extras.map((e) => (
+              <div key={e.id} className="flex justify-between text-xs py-1 text-gray-600">
+                <span>{e.title}</span>
+                <span className="font-bold">{e.amount} ر.س</span>
+              </div>
+            ))}
+            <div className="flex justify-between text-sm font-bold text-[#006C35] border-t border-dashed border-[#EADFC8] mt-2 pt-2">
+              <span>الإجمالي</span><span>{data.extras_total} ر.س</span>
+            </div>
+          </div>
+        )}
+
+        {isOwner && ['assigned', 'done'].includes(data.status) && (
+          <ExtraForm requestId={id} onAdded={setData} />
         )}
 
         {isOwner && data.status === 'awaiting_payment' && (

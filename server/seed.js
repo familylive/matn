@@ -65,3 +65,13 @@ for (const [k, v] of defaults) {
   const row = db.prepare('SELECT value FROM settings WHERE key = ?').get(k)
   if (!row) db.prepare('INSERT INTO settings (key, value) VALUES (?, ?)').run(k, v)
 }
+
+
+const missing = db.prepare('SELECT id FROM requests WHERE number IS NULL ORDER BY id').all()
+if (missing.length) {
+  const max = db.prepare('SELECT COALESCE(MAX(number), 1054) m FROM requests').get().m
+  let n = max
+  const up = db.prepare('UPDATE requests SET number = ? WHERE id = ?')
+  for (const r of missing) up.run(++n, r.id)
+  console.log(`numbered ${missing.length} requests from ${max + 1}`)
+}
