@@ -634,11 +634,11 @@ function Categories() {
           </label>
         </div>
         <div>
-          <label className="text-[11px] text-gray-500">سعر أساسي للقسم (ر.س) — مرجع المزاد</label>
+          <label className="text-[11px] text-gray-500">سعر أساسي للقسم (اختياري) — مرجع البوتات فقط</label>
           <input type="number" min="0" placeholder="مثال: 100" value={form.min_price}
             onChange={(e) => setForm({ ...form, min_price: e.target.value })}
             className="w-full mt-1 px-3 py-2 border border-[#E3D9BF] rounded-lg text-sm" />
-          <p className="text-[10px] text-gray-400 mt-1">يبدأ منه المزاد وينزل حتى ٧٥٪ منه. العميل ما يحدد السعر.</p>
+          <p className="text-[10px] text-gray-400 mt-1">اتركه فاضي = بدون حد. الفنيون يسومون بحرية، والعميل يختار. لا يمنع أي فني من السوم.</p>
         </div>
         {form.image && <img src={form.image} alt="preview" className="h-16 rounded-lg object-cover" />}
         {err && <p className="text-xs text-red-500">{err}</p>}

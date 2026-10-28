@@ -82,9 +82,9 @@ function basePrice(request) {
   return 250
 }
 
-// أرضية المزاد: ٧٥٪ من سعر القسم الأساسي
+// أرضية المزاد للبوتات فقط (ما تمنع الفنيين) — ٥٠٪ من المرجع
 function floorPrice(request) {
-  return Math.max(50, Math.round(basePrice(request) * 0.75))
+  return Math.max(30, Math.round(basePrice(request) * 0.5))
 }
 
 function placeBotBid(io, request, bot, amount, note) {
