@@ -376,6 +376,12 @@ export default function RequestDetail() {
           </div>
         )}
 
+        {isAuthenticated && !isOwner && !isAssignedExpert && (
+          <div className="rounded-xl bg-[#FBF5E3] border border-[#EADFC8] p-3 text-[11px] text-[#8a6d13]">
+            👁️ هذا الطلب ليس لك — عرض فقط. أزرار القبول والرفض تظهر لصاحب الطلب فقط.
+          </div>
+        )}
+
         <h2 className="font-bold text-gray-900 mb-3">{t('rd.bids')} ({data.bids.length})</h2>
         <div className="space-y-3">
           {data.bids.map((b) => (

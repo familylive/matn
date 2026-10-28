@@ -207,6 +207,9 @@ export default function Requests() {
               <h3 className="font-bold text-[#11221A]">
                 {r.number ? <span className="text-[10px] text-gray-400 me-1">#{r.number}</span> : null}
                 {r.title}
+                {user?.id && Number(r.user_id) === Number(user.id) ? (
+                  <span className="ms-2 text-[9px] bg-[#E9F5EE] text-[#006C35] px-1.5 py-0.5 rounded-full">طلبي</span>
+                ) : null}
               </h3>
               <span className={`text-[11px] px-2 py-1 rounded-full font-semibold whitespace-nowrap ${statusStyles[r.status] || 'bg-gray-100 text-gray-600'}`}>
                 {statusAr[r.status] || r.status}

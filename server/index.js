@@ -276,7 +276,7 @@ const requestWithBids = (id) => {
     .prepare(
       `SELECT b.*, e.name AS expert_name, e.name_ar AS expert_name_ar, e.job AS expert_job, e.rating AS expert_rating, e.image AS expert_image, e.lat AS lat, e.lng AS lng
        FROM bids b JOIN experts e ON e.id = b.expert_id
-       WHERE b.request_id = ? ORDER BY b.amount ASC`,
+       WHERE b.request_id = ? AND COALESCE(b.status, 'active') = 'active' ORDER BY b.amount ASC`,
     )
     .all(id)
     .map((b) => ({ ...b, distance_km: haversineKm(request.lat, request.lng, b.lat, b.lng) }))
@@ -451,6 +451,17 @@ app.post('/api/requests/:id/messages', authRequired, (req, res) => {
     })
   }
   res.status(201).json(msg)
+})
+
+app.post('/api/requests/:id/bids/:bidId/reject', authRequired, (req, res) => {
+  const request = db.prepare('SELECT * FROM requests WHERE id = ?').get(req.params.id)
+  if (!request) return res.status(404).json({ error: 'not_found' })
+  if (request.user_id !== req.userId) return res.status(403).json({ error: 'forbidden' })
+  if (request.status !== 'open') return res.status(409).json({ error: 'request_closed' })
+  const bid = db.prepare('SELECT * FROM bids WHERE id = ? AND request_id = ?').get(req.params.bidId, request.id)
+  if (!bid) return res.status(404).json({ error: 'bid_not_found' })
+  db.prepare("UPDATE bids SET status = 'rejected' WHERE id = ?").run(bid.id)
+  res.json({ ok: true })
 })
 
 app.post('/api/requests/:id/extras', authRequired, (req, res) => {

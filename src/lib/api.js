@@ -70,6 +70,7 @@ export const api = {
   payExtra: (id, extraId, payload) => request(`/api/requests/${id}/extras/${extraId}/pay`, { method: 'POST', body: payload, auth: true }),
   addExtra: (id, payload) => request(`/api/requests/${id}/extras`, { method: 'POST', body: payload, auth: true }),
   closeRequest: (id) => request(`/api/requests/${id}/close`, { method: 'POST', auth: true }),
+  rejectBid: (id, bidId) => request(`/api/requests/${id}/bids/${bidId}/reject`, { method: 'POST', auth: true }),
   payRequest: (id, payload) => request(`/api/requests/${id}/pay`, { method: 'POST', body: payload, auth: true }),
   review: (id, payload) => request(`/api/requests/${id}/review`, { method: 'POST', body: payload, auth: true }),
 }
