@@ -76,6 +76,7 @@ const sections = [
   { key: 'requests', label: 'الطلبات', icon: '📋' },
   { key: 'invoices', label: 'الفواتير', icon: '🧾' },
   { key: 'cities', label: 'طلبات المدن', icon: '📍' },
+  { key: 'backup', label: 'النسخ الاحتياطي', icon: '💾' },
 ]
 
 function Stat({ label, value }) {
@@ -287,6 +288,76 @@ function CityRequests() {
   )
 }
 
+function Backup() {
+  const [msg, setMsg] = useState('')
+  const [busy, setBusy] = useState(false)
+
+  const download = async () => {
+    setBusy(true)
+    try {
+      const res = await fetch('/api/admin/backup', { headers: { authorization: `Bearer ${localStorage.getItem(TOKEN_KEY)}` } })
+      const blob = await res.blob()
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `mihnati-backup-${new Date().toISOString().slice(0, 10)}.json`
+      a.click()
+      URL.revokeObjectURL(url)
+      setMsg('تم تنزيل النسخة ✅ احفظها عندك')
+    } catch {
+      setMsg('تعذّر التنزيل')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const restore = async (file) => {
+    setBusy(true)
+    setMsg('')
+    try {
+      const text = await file.text()
+      const payload = JSON.parse(text)
+      await fetch('/api/admin/restore', {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          authorization: `Bearer ${localStorage.getItem(TOKEN_KEY)}`,
+        },
+        body: JSON.stringify(payload),
+      })
+      setMsg('تمت الاستعادة ✅ حدّث الصفحة')
+    } catch {
+      setMsg('الملف غير صالح')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <div className="space-y-3">
+      <div className="card-lux p-4">
+        <p className="font-extrabold text-[#11221A] mb-1">💾 نسخة احتياطية</p>
+        <p className="text-xs text-gray-500 mb-3">
+          نزّل نسخة من كل البيانات (الحسابات، الطلبات، السومات، الفواتير، الإعلانات) قبل أي نشر،
+          واستعدها بعد النشر. الحل هذا يخليك مستمر على الخطة المجانية بدون فقدان بيانات.
+        </p>
+        <button onClick={download} disabled={busy} className="btn-primary">تنزيل النسخة</button>
+      </div>
+
+      <div className="card-lux p-4">
+        <p className="font-extrabold text-[#11221A] mb-2">استعادة</p>
+        <input
+          type="file" accept="application/json"
+          onChange={(e) => e.target.files?.[0] && restore(e.target.files[0])}
+          className="text-sm w-full"
+        />
+      </div>
+
+      {msg && <p className="text-sm text-[#006C35] font-bold">{msg}</p>}
+    </div>
+  )
+}
+
 function Shell({ onLogout }) {
   const [open, setOpen] = useState(false)
   const [section, setSection] = useState('overview')
@@ -340,6 +411,7 @@ function Shell({ onLogout }) {
         {section === 'requests' && <Requests />}
         {section === 'invoices' && <Invoices />}
         {section === 'cities' && <CityRequests />}
+        {section === 'backup' && <Backup />}
       </main>
     </div>
   )

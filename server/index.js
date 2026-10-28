@@ -486,6 +486,47 @@ app.patch('/api/admin/city-requests/:id', adminRequired, (req, res) => {
   res.json({ ok: true })
 })
 
+/* ---------- نسخ احتياطي ---------- */
+
+const BACKUP_TABLES = ['users', 'experts', 'requests', 'bids', 'reviews', 'invoices', 'ads', 'city_requests']
+
+app.get('/api/admin/backup', adminRequired, (_req, res) => {
+  const data = { at: new Date().toISOString(), version: 1, tables: {} }
+  for (const t of BACKUP_TABLES) data.tables[t] = db.prepare(`SELECT * FROM ${t}`).all()
+  res.setHeader('content-disposition', `attachment; filename="mihnati-backup-${Date.now()}.json"`)
+  res.json(data)
+})
+
+app.post('/api/admin/restore', adminRequired, (req, res) => {
+  const tables = req.body?.tables
+  if (!tables || typeof tables !== 'object') return res.status(400).json({ error: 'invalid_backup' })
+
+  const order = ['reviews', 'bids', 'invoices', 'requests', 'city_requests', 'ads', 'experts', 'users']
+
+  db.pragma('foreign_keys = OFF')
+  try {
+    const tx = db.transaction(() => {
+      for (const t of order) db.prepare(`DELETE FROM ${t}`).run()
+      for (const t of [...order].reverse()) {
+        const rows = tables[t]
+        if (!Array.isArray(rows)) continue
+        for (const row of rows) {
+          const cols = Object.keys(row)
+          if (!cols.length) continue
+          const sql = `INSERT OR REPLACE INTO ${t} (${cols.join(',')}) VALUES (${cols.map(() => '?').join(',')})`
+          db.prepare(sql).run(...cols.map((c) => row[c]))
+        }
+      }
+    })
+    tx()
+    res.json({ ok: true, restored_at: new Date().toISOString() })
+  } catch (e) {
+    res.status(500).json({ error: 'restore_failed', detail: String(e.message) })
+  } finally {
+    db.pragma('foreign_keys = ON')
+  }
+})
+
 app.get('/api/health', (_req, res) => res.json({ ok: true, at: new Date().toISOString() }))
 
 const clientDist = path.join(__dirname, '..', 'dist')
