@@ -59,7 +59,13 @@ export default function Verify() {
       await api.post('/api/me/verify', { ...form, iqama_image: image })
       setStatus({ status: 'pending' })
     } catch (e2) {
-      setErr(e2.message === 'invalid_iqama' ? 'رقم الإقامة لازم ١٠ أرقام' : 'تعذّر الإرسال')
+      setErr(
+        e2.message === 'invalid_iqama'
+          ? 'رقم الإقامة لازم ١٠ أرقام'
+          : e2.message === 'iqama_used'
+            ? '🚫 هذا رقم الإقامة مسجّل مسبقاً في المنصة — لا يمكن إنشاء حساب ثانٍ بنفس الإقامة.'
+            : 'تعذّر الإرسال',
+      )
     } finally {
       setBusy(false)
     }

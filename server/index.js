@@ -1090,6 +1090,17 @@ app.post('/api/me/verify', authRequired, (req, res) => {
   if (iqama.length !== 10) return res.status(400).json({ error: 'invalid_iqama' })
   if (!b.iqama_name || !b.iqama_image) return res.status(400).json({ error: 'missing_fields' })
 
+  // 🚫 منع تكرار الإقامة: شخص واحد = حساب واحد
+  const dup = db
+    .prepare('SELECT id, name, user_id FROM experts WHERE iqama_number = ? AND id != ?')
+    .get(iqama, expert.id)
+  if (dup) {
+    return res.status(409).json({
+      error: 'iqama_used',
+      message: 'هذا رقم الإقامة مسجّل مسبقاً في المنصة — لا يمكن إنشاء حساب ثانٍ بنفس الإقامة.',
+    })
+  }
+
   db.prepare(
     `UPDATE experts SET iqama_number = ?, iqama_name = ?, iqama_issue = ?, iqama_expiry = ?,
       nationality = ?, profession = ?, iqama_image = ?, verify_status = 'pending', verify_note = NULL
