@@ -1413,7 +1413,7 @@ app.get('/api/admin/backup', adminRequired, (_req, res) => {
   res.json(data)
 })
 
-function applyBackup(tables) {
+function applyBackup(tables, files) {
   const order = ['reviews', 'payments', 'bids', 'invoices', 'requests', 'city_requests', 'ads', 'experts', 'users', 'categories', 'settings'].filter(t => BACKUP_TABLES.includes(t))
 
   db.pragma('foreign_keys = OFF')
@@ -1450,8 +1450,8 @@ function applyBackup(tables) {
     backfillNumbers()
     normalizePhones()
     seedBots()
-    if (req.body?.files && typeof req.body.files === 'object') {
-      for (const [name, b64] of Object.entries(req.body.files)) {
+    if (files && typeof files === 'object') {
+      for (const [name, b64] of Object.entries(files)) {
         if (typeof b64 !== 'string') continue
         try { fs.writeFileSync(path.join(uploadsDir, path.basename(name)), Buffer.from(b64, 'base64')) } catch {}
       }
@@ -1467,7 +1467,7 @@ function applyBackup(tables) {
 app.post('/api/admin/restore', adminRequired, (req, res) => {
   const tables = req.body?.tables
   if (!tables || typeof tables !== 'object') return res.status(400).json({ error: 'invalid_backup' })
-  const r = applyBackup(tables)
+  const r = applyBackup(tables, req.body?.files)
   if (!r.ok) return res.status(500).json({ error: 'restore_failed', detail: r.error })
   res.json({ ok: true, restored_at: new Date().toISOString() })
 })
@@ -1517,7 +1517,7 @@ app.post('/api/admin/snapshots/restore', adminRequired, async (req, res) => {
     if (!r.ok) return res.status(404).json({ error: 'snapshot_not_found' })
     const snap = await r.json()
     if (!snap?.tables) return res.status(400).json({ error: 'bad_snapshot' })
-    const out = applyBackup(snap.tables)
+    const out = applyBackup(snap.tables, snap.files)
     if (!out.ok) return res.status(500).json({ error: 'restore_failed', detail: out.error })
     res.json({ ok: true, restored_at: new Date().toISOString(), taken_at: snap.taken_at || null })
   } catch (e) {
