@@ -41,6 +41,16 @@ const upload = multer({
 seedAdmin()
 seedBots()
 
+function backfillNumbers() {
+  const rows = db.prepare('SELECT id FROM requests WHERE number IS NULL ORDER BY id').all()
+  if (!rows.length) return
+  let n = db.prepare('SELECT COALESCE(MAX(number), 1054) m FROM requests').get().m
+  const up = db.prepare('UPDATE requests SET number = ? WHERE id = ?')
+  for (const r of rows) up.run(++n, r.id)
+  console.log(`backfilled ${rows.length} request numbers`)
+}
+backfillNumbers()
+
 /* ---------- auth (phone + OTP) ---------- */
 
 const DEV_MODE = process.env.NODE_ENV !== 'production' || process.env.DEV_OTP === '1'
@@ -1060,6 +1070,7 @@ app.post('/api/admin/restore', adminRequired, (req, res) => {
       const ins = db.prepare('INSERT INTO categories (key, ar, en, icon, sort) VALUES (?, ?, ?, ?, ?)')
       seedCats.forEach((c, i) => ins.run(c[0], c[1], c[2], c[3], i))
     }
+    backfillNumbers()
     if (req.body?.files && typeof req.body.files === 'object') {
       for (const [name, b64] of Object.entries(req.body.files)) {
         if (typeof b64 !== 'string') continue
