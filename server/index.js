@@ -407,7 +407,10 @@ app.post('/api/requests/:id/bids', authRequired, (req, res) => {
 app.post('/api/requests/:id/extras', authRequired, (req, res) => {
   const request = db.prepare('SELECT * FROM requests WHERE id = ?').get(req.params.id)
   if (!request) return res.status(404).json({ error: 'not_found' })
-  if (request.user_id !== req.userId) return res.status(403).json({ error: 'forbidden' })
+  const mine = db.prepare('SELECT * FROM experts WHERE user_id = ?').get(req.userId)
+  const acc = request.accepted_bid_id ? db.prepare('SELECT * FROM bids WHERE id = ?').get(request.accepted_bid_id) : null
+  const isAssignedExpert = !!(mine && acc && acc.expert_id === mine.id)
+  if (request.user_id !== req.userId && !isAssignedExpert) return res.status(403).json({ error: 'forbidden' })
   if (!['assigned', 'awaiting_payment', 'done'].includes(request.status))
     return res.status(409).json({ error: 'not_editable' })
 
@@ -482,13 +485,20 @@ app.post('/api/requests/:id/accept', authRequired, (req, res) => {
 app.post('/api/requests/:id/complete', authRequired, (req, res) => {
   const request = db.prepare('SELECT * FROM requests WHERE id = ?').get(req.params.id)
   if (!request) return res.status(404).json({ error: 'not_found' })
-  if (request.user_id !== req.userId) return res.status(403).json({ error: 'forbidden' })
+  const mine = db.prepare('SELECT * FROM experts WHERE user_id = ?').get(req.userId)
+  const accepted = request.accepted_bid_id
+    ? db.prepare('SELECT * FROM bids WHERE id = ?').get(request.accepted_bid_id)
+    : null
+  const isAssignedExpert = !!(mine && accepted && accepted.expert_id === mine.id)
+  if (!isAssignedExpert && request.user_id !== req.userId) return res.status(403).json({ error: 'forbidden' })
   if (request.status !== 'assigned') return res.status(409).json({ error: 'not_assigned' })
+
+  const days = Math.max(1, Math.min(365, Number(req.body?.warranty_days) || request.warranty_days || 3))
   db.prepare(
-    `UPDATE requests SET status = 'done', completed_at = datetime('now'),
-      warranty_until = datetime('now', '+' || COALESCE(warranty_days, 3) || ' days')
+    `UPDATE requests SET status = 'done', completed_at = datetime('now'), warranty_days = ?,
+      warranty_until = datetime('now', '+' || ? || ' days')
      WHERE id = ?`,
-  ).run(request.id)
+  ).run(days, days, request.id)
   const invoice = issueInvoice(request.id)
   res.json({ ...requestWithBids(request.id), invoice })
 })

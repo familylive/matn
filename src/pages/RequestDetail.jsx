@@ -56,6 +56,45 @@ function ExtraPay({ requestId, extra, onPaid }) {
   )
 }
 
+function FinishWork({ requestId, onDone }) {
+  const [days, setDays] = useState(3)
+  const [busy, setBusy] = useState(false)
+  const [done, setDone] = useState(false)
+
+  const finish = async () => {
+    setBusy(true)
+    try {
+      const updated = await api.complete(requestId, { warranty_days: days })
+      onDone(updated)
+      setDone(true)
+    } catch {
+      alert('تعذّر إنهاء العمل')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  if (done) return <p className="mt-3 text-center text-sm font-bold text-[#006C35]">✅ تم إنهاء العمل وإصدار الفواتير</p>
+
+  return (
+    <div className="card-lux p-4 mt-3 space-y-2">
+      <div className="gold-bar absolute inset-x-0 top-0" />
+      <p className="font-extrabold text-sm text-[#11221A] pt-1">🛡️ إنهاء العمل + ضمان</p>
+      <label className="text-[11px] text-gray-600">مدة ضمانك على العمل</label>
+      <select value={days} onChange={(e) => setDays(Number(e.target.value))}
+        className="w-full px-3 py-2 border border-[#E3D9BF] rounded-lg text-sm bg-white">
+        <option value={1}>يوم واحد</option>
+        <option value={3}>٣ أيام</option>
+        <option value={7}>أسبوع</option>
+        <option value={30}>شهر</option>
+      </select>
+      <button onClick={finish} disabled={busy} className="btn-primary">
+        {busy ? 'جارٍ…' : 'إنهاء العمل وإصدار الفاتورة'}
+      </button>
+    </div>
+  )
+}
+
 function ExtraForm({ requestId, onAdded }) {
   const [open, setOpen] = useState(false)
   const [form, setForm] = useState({ title: '', amount: '' })
@@ -169,6 +208,12 @@ export default function RequestDetail() {
       socket.off('request:accepted', onAccepted)
     }
   }, [id])
+
+  const isAssignedExpert = useMemo(() => {
+    if (!data || !myExpert) return false
+    const accepted = data.bids?.find((b) => b.id === data.accepted_bid_id)
+    return !!accepted && Number(accepted.expert_id) === Number(myExpert.id)
+  }, [data, myExpert])
 
   const isOwner = useMemo(
     () => !!data && !!user && Number(data.user_id) === Number(user.id),
@@ -395,9 +440,11 @@ export default function RequestDetail() {
           </div>
         )}
 
-        {isOwner && ['assigned', 'done'].includes(data.status) && (
+        {(isOwner || isAssignedExpert) && ['assigned', 'done'].includes(data.status) && (
           <ExtraForm requestId={id} onAdded={setData} />
         )}
+
+        {isAssignedExpert && data.status === 'assigned' && <FinishWork requestId={id} onDone={setData} />}
 
         {isOwner && data.status === 'awaiting_payment' && (
           <div className="card-lux p-4 mt-4 space-y-3">
@@ -493,6 +540,14 @@ export default function RequestDetail() {
                     <span>{k === 'customer' ? 'الإجمالي المدفوع' : 'صافي المستحق'}</span>
                     <span>{inv.total} ر.س</span>
                   </div>
+                  <a
+                    href={`/invoice/${id}/${k}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="block mt-3 text-center text-xs font-bold text-[#006C35] bg-[#E9F5EE] border border-[#CDE9D8] py-2 rounded-lg"
+                  >
+                    📄 تحميل الفاتورة PDF
+                  </a>
                 </div>
               )
             })}

@@ -146,21 +146,6 @@ export default function Requests() {
               </select>
             )}
 
-            <div>
-              <label className="block text-xs font-semibold text-gray-600 mb-1">🛡️ مدة الضمان على الإصلاح</label>
-              <select
-                value={form.warranty_days}
-                onChange={(e) => setForm({ ...form, warranty_days: Number(e.target.value) })}
-                className="w-full px-3 py-2.5 border border-[#E3D9BF] rounded-xl bg-white text-sm"
-              >
-                <option value={1}>يوم واحد</option>
-                <option value={3}>٣ أيام</option>
-                <option value={7}>أسبوع</option>
-                <option value={30}>شهر</option>
-              </select>
-              <p className="text-[10px] text-gray-500 mt-1">الطلب ما يُغلق إلا بعد انتهاء الضمان وموافقتك على الإغلاق.</p>
-            </div>
-
             <CityGate value={form.city} onChange={(c) => setForm({ ...form, city: c })} />
 
             <div className="rounded-xl border border-[#E3D9BF] bg-[#FBF9F2] p-3">
