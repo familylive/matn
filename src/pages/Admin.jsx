@@ -73,6 +73,7 @@ const NAV = [
     { key: 'requests:closed', label: 'المغلقة', icon: '⚪' },
   ]},
   { key: 'reports', label: 'التقارير', icon: '📈' },
+  { key: 'commissions', label: 'تقرير العمولات', icon: '💰' },
   { key: 'categories', label: 'التصنيفات', icon: '🗂️' },
   { key: 'ads', label: 'الإعلانات', icon: '📣' },
   { key: 'invoices', label: 'الفواتير', icon: '🧾' },
@@ -83,7 +84,7 @@ const NAV = [
 
 const TITLES = {
   overview: 'نظرة عامة', reports: 'التقارير', ads: 'الإعلانات', invoices: 'الفواتير',
-  categories: 'التصنيفات', payments: 'المدفوعات',
+  categories: 'التصنيفات', payments: 'المدفوعات', commissions: 'تقرير العمولات',
   cities: 'طلبات المدن', backup: 'النسخ الاحتياطي',
   'users:admins': 'المستخدمون — الإدارة', 'users:experts': 'المستخدمون — الفنيون',
   'users:customers': 'المستخدمون — العملاء', 'users:support': 'المستخدمون — الدعم الفني',
@@ -536,6 +537,60 @@ function Payments() {
   )
 }
 
+function Commissions() {
+  const [d, setD] = useState(null)
+  useEffect(() => { api('/api/admin/commissions').then(setD).catch(() => {}) }, [])
+  if (!d) return <p className="text-gray-500">جارٍ التحميل…</p>
+  const t = d.totals
+  return (
+    <div className="space-y-3">
+      <div className="card-lux p-4 bg-gradient-to-br from-[#006C35] to-[#004d26] text-white">
+        <p className="text-xs text-white/70">إجمالي العمولات المحصّلة</p>
+        <p className="text-3xl font-extrabold mt-1">{t.commission} <span className="text-lg">ر.س</span></p>
+        <div className="grid grid-cols-2 gap-2 mt-3 text-[11px] text-white/85">
+          <p>على العملاء: {t.customer_fees} ر.س</p>
+          <p>على الفنيين: {t.expert_fees} ر.س</p>
+          <p>عدد الفواتير: {t.count}</p>
+          <p>صافي الفنيين: {t.net} ر.س</p>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-2 gap-3">
+        <Stat label="إجمالي المدفوع" value={`${t.total_paid} ر.س`} />
+        <Stat label="قيمة الخدمات" value={`${t.amount} ر.س`} />
+      </div>
+
+      <div className="card-lux p-4">
+        <p className="font-extrabold text-sm mb-2">حسب الشهر</p>
+        {d.byMonth.map((m) => (
+          <div key={m.m} className="flex items-center justify-between text-sm py-1">
+            <span className="text-gray-700">{m.m}</span>
+            <span className="text-[#8a6d13] font-bold">{m.commission} ر.س · {m.c} فاتورة</span>
+          </div>
+        ))}
+        {d.byMonth.length === 0 && <p className="text-xs text-gray-500">لا فواتير بعد.</p>}
+      </div>
+
+      <div className="space-y-2">
+        <p className="text-sm font-extrabold text-[#11221A]">تفصيل الفواتير</p>
+        {d.rows.map((r) => (
+          <div key={r.id} className="card-lux p-3">
+            <div className="flex items-center justify-between">
+              <p className="font-bold text-sm text-[#11221A]">{r.number}</p>
+              <span className="chip-gold">{r.commission} ر.س</span>
+            </div>
+            <p className="text-[11px] text-gray-500 mt-1">{r.request_title} · {r.owner_name} · {r.issued_at?.slice(0, 10)}</p>
+            <p className="text-[10px] text-gray-400 mt-1">
+              قيمة {r.amount} · مدفوع {r.total_paid} · عميل {r.customer_fee} · فني {r.expert_fee} · صافي {r.net}
+            </p>
+          </div>
+        ))}
+        {d.rows.length === 0 && <p className="text-sm text-gray-500">ما فيه فواتير.</p>}
+      </div>
+    </div>
+  )
+}
+
 function CommissionBox() {
   const [c, setC] = useState('')
   const [e, setE] = useState('')
@@ -688,6 +743,7 @@ function Shell({ onLogout }) {
       case 'ads': return <Ads />
       case 'invoices': return <Invoices />
       case 'categories': return <Categories />
+      case 'commissions': return <Commissions />
       case 'payments': return <Payments />
       case 'cities': return <CityRequests />
       case 'backup': return <Backup />

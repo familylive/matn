@@ -722,6 +722,37 @@ app.get('/api/admin/payments', adminRequired, (_req, res) => {
   )
 })
 
+/* ---------- تقرير العمولات ---------- */
+
+app.get('/api/admin/commissions', adminRequired, (_req, res) => {
+  const rows = db
+    .prepare(
+      `SELECT i.*, r.title AS request_title, r.city, u.name AS owner_name
+       FROM invoices i JOIN requests r ON r.id = i.request_id JOIN users u ON u.id = r.user_id
+       ORDER BY i.id DESC LIMIT 500`,
+    )
+    .all()
+  const totals = db
+    .prepare(
+      `SELECT COUNT(*) count,
+        COALESCE(SUM(amount),0) amount,
+        COALESCE(SUM(customer_fee),0) customer_fees,
+        COALESCE(SUM(expert_fee),0) expert_fees,
+        COALESCE(SUM(commission),0) commission,
+        COALESCE(SUM(net),0) net,
+        COALESCE(SUM(total_paid),0) total_paid
+       FROM invoices`,
+    )
+    .get()
+  const byMonth = db
+    .prepare(
+      `SELECT substr(issued_at,1,7) m, COUNT(*) c, COALESCE(SUM(commission),0) commission, COALESCE(SUM(total_paid),0) paid
+       FROM invoices GROUP BY m ORDER BY m DESC LIMIT 12`,
+    )
+    .all()
+  res.json({ totals, rows, byMonth })
+})
+
 /* ---------- نسخ احتياطي ---------- */
 
 const BACKUP_TABLES = ['users', 'experts', 'requests', 'bids', 'reviews', 'invoices', 'ads', 'city_requests', 'categories', 'payments', 'settings']
