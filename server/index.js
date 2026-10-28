@@ -11,7 +11,7 @@ import { signToken, verifyToken, authRequired } from './auth.js'
 import { cities } from './cities.js'
 import { seedAdmin, checkAdmin, adminToken, adminRequired, hashPassword } from './admin.js'
 import { seedBots, onNewRequest, resumeBots } from './bots.js'
-import { hashPassword as hashUserPassword, verifyPassword, findByIdentifier } from './accounts.js'
+import { hashPassword as hashUserPassword, verifyPassword, findByIdentifier, normalizePhone } from './accounts.js'
 import { issueInvoice, autoSettle, getSetting as getSet } from './flow.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
@@ -52,13 +52,30 @@ function backfillNumbers() {
 }
 backfillNumbers()
 
+// توحيد صيغة الجوالات القديمة إلى +9665XXXXXXXX
+try {
+  const users = db.prepare('SELECT id, phone FROM users WHERE phone IS NOT NULL').all()
+  const upd = db.prepare('UPDATE users SET phone = ? WHERE id = ?')
+  let fixed = 0
+  for (const u of users) {
+    const n = normalizePhone(u.phone)
+    if (n && n !== u.phone && !db.prepare('SELECT 1 FROM users WHERE phone = ? AND id != ?').get(n, u.id)) {
+      upd.run(n, u.id)
+      fixed++
+    }
+  }
+  if (fixed) console.log(`normalized ${fixed} phone numbers`)
+} catch (e) {
+  console.error('phone normalize failed', e.message)
+}
+
 /* ---------- auth (phone + OTP) ---------- */
 
 const DEV_MODE = process.env.NODE_ENV !== 'production' || process.env.DEV_OTP === '1'
 
 app.post('/api/auth/request-otp', (req, res) => {
-  const phone = String(req.body?.phone || '').replace(/[^\d+]/g, '')
-  if (phone.replace(/\D/g, '').length < 9) return res.status(400).json({ error: 'invalid_phone' })
+  const phone = normalizePhone(req.body?.phone)
+  if (!phone) return res.status(400).json({ error: 'invalid_phone' })
 
   const code = String(Math.floor(100000 + Math.random() * 900000))
   const expiresAt = Date.now() + 5 * 60 * 1000
@@ -83,7 +100,7 @@ app.post('/api/auth/signup', (req, res) => {
   const exists = db.prepare('SELECT id FROM users WHERE lower(username) = ?').get(username.toLowerCase())
   if (exists) return res.status(409).json({ error: 'username_taken' })
 
-  const phone = String(b.phone || '').replace(/[^\d+]/g, '') || null
+  const phone = normalizePhone(b.phone)
   if (phone && db.prepare('SELECT id FROM users WHERE phone = ?').get(phone)) {
     return res.status(409).json({ error: 'phone_taken' })
   }
@@ -121,8 +138,9 @@ app.post('/api/auth/login-local', (req, res) => {
 })
 
 app.post('/api/auth/verify', (req, res) => {
-  const phone = String(req.body?.phone || '').replace(/[^\d+]/g, '')
+  const phone = normalizePhone(req.body?.phone)
   const code = String(req.body?.code || '').trim()
+  if (!phone) return res.status(400).json({ error: 'invalid_phone' })
   const row = db.prepare('SELECT * FROM otps WHERE phone = ?').get(phone)
   if (!row) return res.status(400).json({ error: 'otp_not_requested' })
   if (Date.now() > row.expires_at) return res.status(400).json({ error: 'otp_expired' })
@@ -199,7 +217,8 @@ app.post('/api/auth/register', authRequired, (req, res) => {
 })
 
 app.patch('/api/me/profile', authRequired, (req, res) => {
-  const b = req.body || {}
+  const b = { ...(req.body || {}) }
+  if (b.phone !== undefined) b.phone = normalizePhone(b.phone)
   const sets = []
   const params = []
   for (const f of ['name', 'city', 'lat', 'lng', 'email', 'nationality', 'specialty', 'phone']) {
