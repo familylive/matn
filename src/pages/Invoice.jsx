@@ -87,7 +87,7 @@ export default function Invoice() {
           </div>
 
           <p className="text-[10px] text-gray-400 mt-5 text-center">
-            هذه الفاتورة صادرة إلكترونياً من منصة مهنتي · mihnati.onrender.com
+            هذه الفاتورة صادرة إلكترونياً من منصة مهنتي · mihnati.dellini.net
           </p>
         </div>
       </div>
