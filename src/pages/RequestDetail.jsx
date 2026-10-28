@@ -341,6 +341,11 @@ export default function RequestDetail() {
       <div className="px-4 py-5">
         <div className="flex items-center gap-2 mb-3">
           <span className="text-xs bg-blue-50 text-blue-600 px-2 py-1 rounded-full">{t(`cat.${data.category}`, data.category)}</span>
+          {data.subcategory && (
+            <span className="text-xs bg-[#FBF5E3] text-[#8a6d13] border border-[#EADFC8] px-2 py-1 rounded-full font-bold">
+              {data.subcategory}
+            </span>
+          )}
           <span className="text-xs bg-gray-100 text-gray-600 px-2 py-1 rounded-full">{t(`req.status.${data.status}`, data.status)}</span>
           {data.city && <span className="text-sm text-gray-500">📍 {data.city}</span>}
           {data.lat && data.lng && (
@@ -359,8 +364,8 @@ export default function RequestDetail() {
 
         <div className="grid grid-cols-2 gap-3 mb-5">
           <div className="bg-white rounded-xl p-3 border border-gray-100">
-            <p className="text-xs text-gray-500">{t('rd.budget')}</p>
-            <p className="font-semibold text-gray-900">{data.budget ?? '—'} {t('common.tnd')}</p>
+            <p className="text-xs text-gray-500">الخدمة</p>
+            <p className="font-semibold text-gray-900 text-sm">{data.subcategory || t(`cat.${data.category}`, data.category)}</p>
           </div>
           <div className="bg-white rounded-xl p-3 border border-gray-100">
             <p className="text-xs text-gray-500">{t('rd.lowest')}</p>

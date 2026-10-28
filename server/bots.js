@@ -66,9 +66,17 @@ export function markBotCars() {
 const botsForRequest = (category) =>
   db.prepare('SELECT * FROM experts WHERE job = ? AND is_bot = 1 ORDER BY has_car DESC, rating DESC').all(category)
 
-// السعر يأتي من المزاد: نستخدم «السعر الأساسي للقسم» (min_price) كمرجع للبوتات
+// السعر المرجعي: الخدمة الفرعية أولاً (لأن الأسعار تختلف من خدمة لخدمة)
 function basePrice(request) {
   try {
+    // 1) الخدمة الفرعية المختارة
+    if (request.subcategory) {
+      const sub = db
+        .prepare('SELECT min_price FROM categories WHERE (ar = ? OR key = ?) AND parent_id IS NOT NULL')
+        .get(request.subcategory, request.subcategory)
+      if (sub && Number(sub.min_price) > 0) return Number(sub.min_price)
+    }
+    // 2) القسم الرئيسي
     const row = db
       .prepare(
         `SELECT c.min_price AS own, p.min_price AS parent
