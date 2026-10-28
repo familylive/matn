@@ -404,6 +404,55 @@ app.post('/api/requests/:id/bids', authRequired, (req, res) => {
   res.status(201).json(bid)
 })
 
+/* ---------- المحادثة داخل الطلب ---------- */
+
+const canAccessRequest = (request, userId) => {
+  if (request.user_id === userId) return true
+  const mine = db.prepare('SELECT * FROM experts WHERE user_id = ?').get(userId)
+  if (!mine || !request.accepted_bid_id) return false
+  const acc = db.prepare('SELECT * FROM bids WHERE id = ?').get(request.accepted_bid_id)
+  return !!acc && acc.expert_id === mine.id
+}
+
+app.get('/api/requests/:id/messages', authRequired, (req, res) => {
+  const request = db.prepare('SELECT * FROM requests WHERE id = ?').get(req.params.id)
+  if (!request) return res.status(404).json({ error: 'not_found' })
+  if (!canAccessRequest(request, req.userId)) return res.status(403).json({ error: 'forbidden' })
+  res.json(
+    db.prepare(
+      `SELECT m.*, u.name AS sender_name FROM messages m JOIN users u ON u.id = m.sender_id
+       WHERE m.request_id = ? ORDER BY m.id`,
+    ).all(request.id),
+  )
+})
+
+app.post('/api/requests/:id/messages', authRequired, (req, res) => {
+  const request = db.prepare('SELECT * FROM requests WHERE id = ?').get(req.params.id)
+  if (!request) return res.status(404).json({ error: 'not_found' })
+  if (!canAccessRequest(request, req.userId)) return res.status(403).json({ error: 'forbidden' })
+  const body = String(req.body?.body || '').trim()
+  if (!body) return res.status(400).json({ error: 'empty' })
+
+  const info = db.prepare('INSERT INTO messages (request_id, sender_id, body) VALUES (?, ?, ?)').run(request.id, req.userId, body)
+  const msg = db
+    .prepare('SELECT m.*, u.name AS sender_name FROM messages m JOIN users u ON u.id = m.sender_id WHERE m.id = ?')
+    .get(info.lastInsertRowid)
+
+  io.to(`request:${request.id}`).emit('message:new', msg)
+  const other = request.user_id === req.userId
+    ? db.prepare('SELECT user_id FROM experts WHERE id = (SELECT expert_id FROM bids WHERE id = ?)').get(request.accepted_bid_id)?.user_id
+    : request.user_id
+  if (other) {
+    io.to(`user:${other}`).emit('notify', {
+      type: 'message',
+      title: 'رسالة جديدة',
+      body: body.slice(0, 60),
+      requestId: request.id,
+    })
+  }
+  res.status(201).json(msg)
+})
+
 app.post('/api/requests/:id/extras', authRequired, (req, res) => {
   const request = db.prepare('SELECT * FROM requests WHERE id = ?').get(req.params.id)
   if (!request) return res.status(404).json({ error: 'not_found' })

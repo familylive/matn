@@ -154,6 +154,8 @@ export default function RequestDetail() {
   const [pay, setPay] = useState({ method: 'cash', phone: '', busy: false, done: false })
   const [fees, setFees] = useState({ customer: 7.5, expert: 7.5 })
   const [myExpert, setMyExpert] = useState(null)
+  const [messages, setMessages] = useState([])
+  const [text, setText] = useState('')
   const [invoices, setInvoices] = useState(null)
 
   useEffect(() => {
@@ -166,6 +168,12 @@ export default function RequestDetail() {
   useEffect(() => {
     if (isAuthenticated) api.get('/api/me/expert').then(setMyExpert).catch(() => {})
   }, [isAuthenticated])
+
+  useEffect(() => {
+    if (isAuthenticated && data?.accepted_bid_id) {
+      api.get(`/api/requests/${id}/messages`).then(setMessages).catch(() => {})
+    }
+  }, [isAuthenticated, data?.accepted_bid_id, id])
 
   useEffect(() => {
     const timer = setInterval(() => setNow(Date.now()), 1000)
@@ -200,11 +208,14 @@ export default function RequestDetail() {
       })
     }
     const onAccepted = (updated) => setData(updated)
+    const onMsg = (m) => setMessages((prev) => (prev.some((x) => x.id === m.id) ? prev : [...prev, m]))
+    socket.on('message:new', onMsg)
     socket.on('bid:new', onBid)
     socket.on('request:accepted', onAccepted)
     return () => {
       socket.emit('leave', id)
       socket.off('bid:new', onBid)
+      socket.off('message:new', onMsg)
       socket.off('request:accepted', onAccepted)
     }
   }, [id])
@@ -347,6 +358,23 @@ export default function RequestDetail() {
             <p className="font-semibold text-green-600">{lowest ?? '—'} {t('common.tnd')}</p>
           </div>
         </div>
+
+        {isOwner && data.status === 'open' && data.bids.length > 0 && (
+          <div className="card-lux p-4 mb-3">
+            <div className="gold-bar absolute inset-x-0 top-0" />
+            <p className="text-[11px] text-gray-500 pt-1">أرخص سومة الآن</p>
+            <div className="flex items-center justify-between mt-1">
+              <p className="text-2xl font-extrabold text-[#006C35]">{data.bids[0].amount} ر.س</p>
+              <button
+                onClick={() => accept(data.bids[0].id)}
+                className="bg-[#006C35] text-white text-sm font-bold px-4 py-2 rounded-xl"
+              >
+                اقبل الأرخص
+              </button>
+            </div>
+            <p className="text-[10px] text-gray-400 mt-1">{data.bids[0].expert_name_ar || data.bids[0].expert_name}</p>
+          </div>
+        )}
 
         <h2 className="font-bold text-gray-900 mb-3">{t('rd.bids')} ({data.bids.length})</h2>
         <div className="space-y-3">
@@ -551,6 +579,46 @@ export default function RequestDetail() {
                 </div>
               )
             })}
+          </div>
+        )}
+
+        {(isOwner || isAssignedExpert) && data.accepted_bid_id && (
+          <div className="card-lux p-4 mt-4">
+            <p className="font-extrabold text-sm text-[#11221A] mb-2">💬 المحادثة</p>
+            <div className="max-h-56 overflow-y-auto space-y-2 mb-2">
+              {messages.map((m) => {
+                const mine = Number(m.sender_id) === Number(user?.id)
+                return (
+                  <div key={m.id} className={`text-xs p-2 rounded-xl max-w-[85%] ${mine ? 'bg-[#E9F5EE] ms-auto' : 'bg-gray-100'}`}>
+                    <p className="text-[10px] text-gray-500">{m.sender_name}</p>
+                    <p className="text-gray-800">{m.body}</p>
+                  </div>
+                )
+              })}
+              {messages.length === 0 && <p className="text-[11px] text-gray-400">ابدأ المحادثة مع الطرف الآخر</p>}
+            </div>
+            <div className="flex gap-2">
+              <input
+                value={text}
+                onChange={(e) => setText(e.target.value)}
+                placeholder="اكتب رسالة…"
+                className="flex-1 px-3 py-2 border border-[#E3D9BF] rounded-lg text-sm"
+                onKeyDown={(e) => { if (e.key === 'Enter') document.getElementById('send-msg')?.click() }}
+              />
+              <button
+                id="send-msg"
+                onClick={async () => {
+                  if (!text.trim()) return
+                  try {
+                    await api.post(`/api/requests/${id}/messages`, { body: text })
+                    setText('')
+                  } catch {}
+                }}
+                className="bg-[#006C35] text-white text-sm font-bold px-4 rounded-lg"
+              >
+                إرسال
+              </button>
+            </div>
           </div>
         )}
 
