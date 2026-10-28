@@ -46,7 +46,7 @@ export default function Requests() {
   const load = async () => {
     try {
       const data = await api.requests()
-      setItems(data)
+      setItems(Array.isArray(data) ? data : [])
     } catch (e) {
       setError(e.message)
     } finally {

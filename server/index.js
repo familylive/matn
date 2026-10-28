@@ -311,24 +311,57 @@ app.get('/api/requests/counts', (_req, res) => {
   res.json({ total: rows.reduce((a, r) => a + r.c, 0), byCategory })
 })
 
-app.get('/api/requests', (req, res) => {
-  const { status } = req.query
-  const rows = db
-    .prepare(
-      `SELECT r.*, u.name AS owner_name,
-        (SELECT COUNT(*) FROM bids b WHERE b.request_id = r.id) AS bids_count,
-        (SELECT MIN(b.amount) FROM bids b WHERE b.request_id = r.id) AS lowest_bid
-       FROM requests r JOIN users u ON u.id = r.user_id
-       ${status ? 'WHERE r.status = ?' : ''}
-       ORDER BY r.created_at DESC LIMIT 50`,
-    )
-    .all(...(status ? [status] : []))
+app.get('/api/requests', authRequired, (req, res) => {
+  const me = db.prepare('SELECT * FROM users WHERE id = ?').get(req.userId)
+  const mine = db.prepare('SELECT * FROM experts WHERE user_id = ?').get(req.userId)
+
+  let rows
+  if (mine) {
+    // الفني: الطلبات المفتوحة في تخصصه + طلباته هو
+    rows = db
+      .prepare(
+        `SELECT r.*, u.name AS owner_name,
+          (SELECT COUNT(*) FROM bids b WHERE b.request_id = r.id AND COALESCE(b.status,'active')='active') AS bids_count,
+          (SELECT MIN(b.amount) FROM bids b WHERE b.request_id = r.id AND COALESCE(b.status,'active')='active') AS lowest_bid
+         FROM requests r JOIN users u ON u.id = r.user_id
+         WHERE (r.category = ? AND r.status = 'open') OR r.user_id = ?
+         ORDER BY r.id DESC LIMIT 100`,
+      )
+      .all(mine.job, req.userId)
+  } else {
+    // العميل: طلباته فقط
+    rows = db
+      .prepare(
+        `SELECT r.*, u.name AS owner_name,
+          (SELECT COUNT(*) FROM bids b WHERE b.request_id = r.id AND COALESCE(b.status,'active')='active') AS bids_count,
+          (SELECT MIN(b.amount) FROM bids b WHERE b.request_id = r.id AND COALESCE(b.status,'active')='active') AS lowest_bid
+         FROM requests r JOIN users u ON u.id = r.user_id
+         WHERE r.user_id = ?
+         ORDER BY r.id DESC LIMIT 100`,
+      )
+      .all(req.userId)
+  }
   res.json(rows)
 })
 
 app.get('/api/requests/:id', (req, res) => {
   const data = requestWithBids(req.params.id)
   if (!data) return res.status(404).json({ error: 'not_found' })
+
+  // من يحق له العرض: صاحب الطلب، الفني المسند، أو فني بنفس التخصص (ليسوم)
+  const token = (req.headers.authorization || '').replace('Bearer ', '')
+  const viewer = token ? verifyToken(token) : null
+  if (viewer && !String(viewer.uid).startsWith('admin:')) {
+    const uid = viewer.uid
+    const isOwner = data.user_id === uid
+    const mine = db.prepare('SELECT * FROM experts WHERE user_id = ?').get(uid)
+    const accepted = data.bids.find((b) => b.id === data.accepted_bid_id)
+    const isAssigned = !!(mine && accepted && accepted.expert_id === mine.id)
+    const sameSpecialty = !!(mine && mine.job === data.category && data.status === 'open')
+    if (!isOwner && !isAssigned && !sameSpecialty) {
+      return res.status(403).json({ error: 'forbidden' })
+    }
+  }
   res.json(data)
 })
 

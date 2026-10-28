@@ -61,7 +61,7 @@ export const api = {
     return request(`/api/experts${qs ? `?${qs}` : ''}`)
   },
 
-  requests: (status) => request(`/api/requests${status ? `?status=${status}` : ''}`),
+  requests: (status) => request(`/api/requests${status ? `?status=${status}` : ''}`, { auth: true }),
   request: (id) => request(`/api/requests/${id}`),
   createRequest: (payload) => request('/api/requests', { method: 'POST', body: payload, auth: true }),
   placeBid: (id, payload) => request(`/api/requests/${id}/bids`, { method: 'POST', body: payload, auth: true }),
