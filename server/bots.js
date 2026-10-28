@@ -106,7 +106,8 @@ function placeBotBid(io, request, bot, amount, note) {
        FROM bids b JOIN experts e ON e.id = b.expert_id WHERE b.id = ?`,
     )
     .get(info.lastInsertRowid)
-  io.to(`request:${request.id}`).emit('bid:new', bid)
+  // سري: للعميل فقط
+  io.to(`user:${request.user_id}`).emit('bid:new', bid)
   return bid
 }
 

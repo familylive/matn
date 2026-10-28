@@ -263,7 +263,7 @@ export default function Requests() {
             <div className="flex items-center gap-3 mt-2 text-xs">
               <span className="text-gray-500">{r.bids_count} {t('req.bids')}</span>
               {r.lowest_bid != null && (
-                <span className="chip-gold">{t('req.lowest')} {r.lowest_bid} {t('common.tnd')}</span>
+                <span className="chip-gold">سومتك {r.lowest_bid} {t('common.tnd')}</span>
               )}
             </div>
           </Link>

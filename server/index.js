@@ -385,12 +385,13 @@ app.get('/api/requests', authRequired, (req, res) => {
       .prepare(
         `SELECT r.*, u.name AS owner_name,
           (SELECT COUNT(*) FROM bids b WHERE b.request_id = r.id AND COALESCE(b.status,'active')='active') AS bids_count,
-          (SELECT MIN(b.amount) FROM bids b WHERE b.request_id = r.id AND COALESCE(b.status,'active')='active') AS lowest_bid
+          (SELECT MIN(b.amount) FROM bids b WHERE b.request_id = r.id AND b.expert_id = ?) AS lowest_bid,
+          (SELECT amount FROM bids b WHERE b.request_id = r.id AND b.expert_id = ? ORDER BY b.id DESC LIMIT 1) AS my_bid
          FROM requests r JOIN users u ON u.id = r.user_id
          WHERE (r.category = ? AND r.status = 'open') OR r.user_id = ?
          ORDER BY r.id DESC LIMIT 100`,
       )
-      .all(mine.job, req.userId)
+      .all(mine.id, mine.id, mine.job, req.userId)
   } else {
     // العميل: طلباته فقط
     rows = db
@@ -504,7 +505,9 @@ app.post('/api/requests/:id/bids', authRequired, (req, res) => {
        FROM bids b JOIN experts e ON e.id = b.expert_id WHERE b.id = ?`,
     )
     .get(info.lastInsertRowid)
-  io.to(`request:${request.id}`).emit('bid:new', bid)
+  // سري: السومة تذهب للعميل وصاحبها فقط (مو لكل الفنيين)
+  io.to(`user:${request.user_id}`).emit('bid:new', bid)
+  io.to(`user:${req.userId}`).emit('bid:new', bid)
   io.to(`user:${request.user_id}`).emit('notify', {
     type: 'bid',
     title: 'سومة جديدة',
