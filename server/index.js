@@ -231,12 +231,12 @@ app.get('/api/requests/:id', (req, res) => {
 })
 
 app.post('/api/requests', authRequired, (req, res) => {
-  const { title, category, description, city, budget } = req.body || {}
+  const { title, category, description, city, budget, subcategory } = req.body || {}
   if (!title || !category) return res.status(400).json({ error: 'title_and_category_required' })
   const info = db
     .prepare(
-      `INSERT INTO requests (user_id, title, category, description, city, budget, lat, lng, ends_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now', '+60 minutes'))`,
+      `INSERT INTO requests (user_id, title, category, description, city, budget, lat, lng, ends_at, subcategory)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now', '+60 minutes'), ?)`,
     )
     .run(
       req.userId,
@@ -247,6 +247,7 @@ app.post('/api/requests', authRequired, (req, res) => {
       budget ? Number(budget) : null,
       req.body?.lat != null ? Number(req.body.lat) : null,
       req.body?.lng != null ? Number(req.body.lng) : null,
+      subcategory || null,
     )
   const request = requestWithBids(info.lastInsertRowid)
   io.emit('request:new', request)
@@ -707,16 +708,22 @@ app.get('/api/categories', (_req, res) => {
   res.json(db.prepare('SELECT * FROM categories WHERE active = 1 ORDER BY sort, id').all())
 })
 
+app.get('/api/categories/tree', (_req, res) => {
+  const all = db.prepare('SELECT * FROM categories WHERE active = 1 ORDER BY sort, id').all()
+  const parents = all.filter((c) => !c.parent_id)
+  res.json(parents.map((p) => ({ ...p, children: all.filter((c) => c.parent_id === p.id) })))
+})
+
 app.get('/api/admin/categories', adminRequired, (_req, res) => {
   res.json(db.prepare('SELECT * FROM categories ORDER BY sort, id').all())
 })
 
 app.post('/api/admin/categories', adminRequired, (req, res) => {
-  const { key, ar, en, icon, sort, image } = req.body || {}
+  const { key, ar, en, icon, sort, image, parent_id } = req.body || {}
   if (!key || !ar) return res.status(400).json({ error: 'key_and_ar_required' })
   try {
-    const info = db.prepare('INSERT INTO categories (key, ar, en, icon, sort, image) VALUES (?, ?, ?, ?, ?, ?)')
-      .run(key.trim(), ar.trim(), en || null, icon || '🛠️', Number(sort) || 99, image || null)
+    const info = db.prepare('INSERT INTO categories (key, ar, en, icon, sort, image, parent_id) VALUES (?, ?, ?, ?, ?, ?, ?)')
+      .run(key.trim(), ar.trim(), en || null, icon || '🛠️', Number(sort) || 99, image || null, parent_id || null)
     res.status(201).json(db.prepare('SELECT * FROM categories WHERE id = ?').get(info.lastInsertRowid))
   } catch {
     res.status(409).json({ error: 'key_exists' })
@@ -729,7 +736,7 @@ app.patch('/api/admin/categories/:id', adminRequired, (req, res) => {
   const b = req.body || {}
   const sets = []
   const params = []
-  for (const f of ['ar', 'en', 'icon', 'active', 'sort', 'image']) {
+  for (const f of ['ar', 'en', 'icon', 'active', 'sort', 'image', 'parent_id']) {
     if (b[f] !== undefined) { sets.push(`${f} = ?`); params.push(f === 'active' ? (b[f] ? 1 : 0) : b[f]) }
   }
   if (sets.length) db.prepare(`UPDATE categories SET ${sets.join(', ')} WHERE id = ?`).run(...params, c.id)

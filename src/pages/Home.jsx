@@ -53,7 +53,7 @@ export default function Home() {
       <div className="px-4 mt-6">
         <h3 className="section-title mb-3">{t('home.categories')}</h3>
         <div className="grid grid-cols-2 gap-3">
-          {categories.map((c) => (
+          {categories.filter((c) => !c.parent_id).map((c) => { const kids = categories.filter((k) => k.parent_id === c.id); return (
             <button
               key={c.name}
               onClick={() => navigate(`/search?category=${encodeURIComponent(c.name)}`)}
@@ -67,9 +67,22 @@ export default function Home() {
                 </span>
               )}
               <span className="text-[#11221A] font-bold">{catLabel(c, lang)}</span>
+              {kids.length > 0 && (
+                <span className="flex flex-wrap justify-center gap-1 mt-1">
+                  {kids.map((k) => (
+                    <span
+                      key={k.id}
+                      onClick={(ev) => { ev.stopPropagation(); navigate(`/search?category=${encodeURIComponent(k.name)}`) }}
+                      className="text-[10px] bg-[#FBF5E3] text-[#8a6d13] border border-[#EADFC8] px-2 py-0.5 rounded-full"
+                    >
+                      {catLabel(k, lang)}
+                    </span>
+                  ))}
+                </span>
+              )}
               <span className="text-[10px] text-[#8a6d13]">اطلب الآن ←</span>
             </button>
-          ))}
+          )})}
         </div>
       </div>
 

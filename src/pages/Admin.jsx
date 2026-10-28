@@ -450,7 +450,7 @@ function Ads() {
 
 function Categories() {
   const [rows, setRows] = useState([])
-  const [form, setForm] = useState({ key: '', ar: '', en: '', icon: '🛠️', image: '' })
+  const [form, setForm] = useState({ key: '', ar: '', en: '', icon: '🛠️', image: '', parent_id: '' })
   const [editId, setEditId] = useState(null)
   const [err, setErr] = useState('')
   const load = () => api('/api/admin/categories').then(setRows).catch(() => {})
@@ -468,7 +468,7 @@ function Categories() {
     setErr('')
     try {
       await api('/api/admin/categories', { method: 'POST', body: form })
-      setForm({ key: '', ar: '', en: '', icon: '🛠️', image: '' })
+      setForm({ key: '', ar: '', en: '', icon: '🛠️', image: '', parent_id: '' })
       load()
     } catch (e2) { setErr(e2.message === 'key_exists' ? 'المفتاح مستخدم' : 'تعذّر الإضافة') }
   }
@@ -505,6 +505,16 @@ function Categories() {
         </div>
         <input placeholder="English name" value={form.en} onChange={(e) => setForm({ ...form, en: e.target.value })}
           className="w-full px-3 py-2 border border-[#E3D9BF] rounded-lg text-sm" />
+        <div>
+          <label className="text-[11px] text-gray-500">تحت قسم (اختياري)</label>
+          <select value={form.parent_id} onChange={(e) => setForm({ ...form, parent_id: e.target.value })}
+            className="w-full px-3 py-2 border border-[#E3D9BF] rounded-lg text-sm bg-white">
+            <option value="">— قسم رئيسي —</option>
+            {rows.filter((r) => !r.parent_id).map((r) => (
+              <option key={r.id} value={r.id}>{r.ar}</option>
+            ))}
+          </select>
+        </div>
         <div className="grid grid-cols-2 gap-2 items-center">
           <input placeholder="أيقونة (إيموجي)" value={form.icon} onChange={(e) => setForm({ ...form, icon: e.target.value })}
             className="px-3 py-2 border border-[#E3D9BF] rounded-lg text-sm" />
@@ -551,7 +561,8 @@ function Categories() {
               </div>
             </div>
           ) : (
-            <div className="flex items-center gap-3">
+            <div className={`flex items-center gap-3 ${c.parent_id ? 'ps-5' : ''}`}>
+              {c.parent_id ? <span className="text-gray-400 text-xs">↳</span> : null}
               {c.image ? (
                 <img src={c.image} alt={c.ar} className="w-12 h-12 rounded-lg object-cover" />
               ) : (
@@ -559,7 +570,10 @@ function Categories() {
               )}
               <div className="flex-1">
                 <p className="font-bold text-sm text-[#11221A]">{c.ar}</p>
-                <p className="text-[11px] text-gray-500">{c.key} · {c.en || '—'}</p>
+                <p className="text-[11px] text-gray-500">
+                  {c.key} · {c.en || '—'}
+                  {c.parent_id ? ` · تابع لـ${rows.find((r) => r.id === c.parent_id)?.ar || ''}` : ''}
+                </p>
               </div>
               <button onClick={() => setEditId(c.id)} className="text-[11px] bg-[#FBF5E3] text-[#8a6d13] px-2 py-1 rounded-lg font-bold">تعديل</button>
               <button onClick={() => toggle(c)} className={`text-[11px] px-2 py-1 rounded-lg font-bold ${c.active ? 'bg-[#E9F5EE] text-[#006C35]' : 'bg-gray-100 text-gray-500'}`}>

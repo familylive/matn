@@ -19,12 +19,14 @@ const statusStyles = {
   done: 'bg-gray-100 text-gray-600',
 }
 
+const catId = (categories, key) => categories.find((c) => c.name === key)?.id || null
+
 export default function Requests() {
   const [items, setItems] = useState([])
   const [loading, setLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
   const [error, setError] = useState('')
-  const [form, setForm] = useState({ title: '', category: 'Plumber', city: '', budget: '', description: '' })
+  const [form, setForm] = useState({ title: '', category: 'Plumber', subcategory: '', city: '', budget: '', description: '' })
   const [loc, setLoc] = useState({ lat: null, lng: null, status: 'idle', accuracy: null })
   const { isAuthenticated, user } = useAuth()
   const { t, lang } = useLang()
@@ -64,7 +66,7 @@ export default function Requests() {
         lng: loc.lng,
       })
       setShowForm(false)
-      setForm({ title: '', category: 'Plumber', city: '', budget: '', description: '' })
+      setForm({ title: '', category: 'Plumber', subcategory: '', city: '', budget: '', description: '' })
       navigate(`/requests/${created.id}`)
     } catch (err) {
       if (err.code === 'unauthorized') {
@@ -120,6 +122,19 @@ export default function Requests() {
                 className="px-3 py-2.5 border border-[#E3D9BF] rounded-xl outline-none focus:border-[#006C35]"
               />
             </div>
+
+            {categories.filter((x) => x.parent_id === catId(categories, form.category)).length > 0 && (
+              <select
+                value={form.subcategory}
+                onChange={(e) => setForm({ ...form, subcategory: e.target.value })}
+                className="w-full px-3 py-2.5 border border-[#E3D9BF] rounded-xl bg-white text-sm"
+              >
+                <option value="">القسم الفرعي (اختياري)</option>
+                {categories.filter((x) => x.parent_id === catId(categories, form.category)).map((k) => (
+                  <option key={k.id} value={k.name}>{catLabel(k, lang)}</option>
+                ))}
+              </select>
+            )}
 
             <CityGate value={form.city} onChange={(c) => setForm({ ...form, city: c })} />
 
