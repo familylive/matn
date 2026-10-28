@@ -19,6 +19,11 @@ export default function RequestDetail() {
   const [bid, setBid] = useState({ expertId: '', amount: '', note: '' })
   const [now, setNow] = useState(Date.now())
   const [pay, setPay] = useState({ method: 'cash', phone: '', busy: false, done: false })
+  const [commission, setCommission] = useState(10)
+
+  useEffect(() => {
+    fetch('/api/settings').then((r) => r.json()).then((d) => setCommission(Number(d.commission_percent) || 0)).catch(() => {})
+  }, [])
 
   useEffect(() => {
     const timer = setInterval(() => setNow(Date.now()), 1000)
@@ -256,6 +261,7 @@ export default function RequestDetail() {
                 { k: 'cash', label: '💵 كاش عند الاستلام', desc: 'تدفع للمعلم بعد تنفيذ العمل' },
                 { k: 'card', label: '💳 بطاقة (مدى/فيزا)', desc: 'دفع إلكتروني آمن' },
                 { k: 'urpay', label: '📱 urpay برقم الجوال', desc: 'حوّل عبر محفظة urpay' },
+                { k: 'stcpay', label: '📲 STC Pay', desc: 'حوّل من محفظة STC Pay على رقم جوالك' },
               ].map((m) => (
                 <button
                   key={m.k}
@@ -268,11 +274,11 @@ export default function RequestDetail() {
               ))}
             </div>
 
-            {pay.method === 'urpay' && (
+            {['urpay', 'stcpay'].includes(pay.method) && (
               <input
                 value={pay.phone}
                 onChange={(e) => setPay({ ...pay, phone: e.target.value })}
-                placeholder="رقم جوال urpay (05xxxxxxxx)"
+                placeholder={pay.method === 'stcpay' ? 'رقم جوال STC Pay' : 'رقم جوال urpay (05xxxxxxxx)'}
                 className="w-full px-3 py-2 border border-[#E3D9BF] rounded-lg text-sm"
               />
             )}
@@ -280,8 +286,12 @@ export default function RequestDetail() {
             <button onClick={submitPayment} disabled={pay.busy} className="btn-primary">
               {pay.busy ? 'جارٍ التنفيذ…' : pay.method === 'cash' ? 'تأكيد الطلب (كاش)' : `ادفع ${lowest ?? 0} ريال`}
             </button>
+            <div className="rounded-lg bg-[#FBF9F2] border border-[#EADFC8] p-2 text-[11px] text-[#8a6d13] leading-relaxed">
+              عمولة المنصة: <b>{commission}%</b> ({Math.round(((lowest ?? 0) * commission)) / 100} ريال) — تُخصم من مبلغ الفني.
+              {pay.method === 'cash' && <><br />الفني يحوّل العمولة للمنصة بعد استلام الكاش.</>}
+            </div>
             <p className="text-[10px] text-gray-400 text-center">
-              الدفع بالبطاقة/urpay تجريبي حالياً — نربط بوابة حقيقية (Moyasar) عند الحاجة.
+              الدفع الإلكتروني تجريبي — نربط بوابة (Moyasar) عند الحاجة.
             </p>
           </div>
         )}

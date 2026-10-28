@@ -307,6 +307,7 @@ function Reports() {
         <Stat label="متوسط السومة" value={`${r.totals.avg_bid} ر.س`} />
         <Stat label="الإيراد (فواتير)" value={`${r.totals.revenue} ر.س`} />
         <Stat label="الفنيون" value={r.totals.experts} />
+        <Stat label="عمولة المنصة" value={`${r.totals.commission || 0} ر.س`} accent="text-[#8a6d13]" />
       </div>
 
       <div className="card-lux p-4">
@@ -535,6 +536,34 @@ function Payments() {
   )
 }
 
+function CommissionBox() {
+  const [pct, setPct] = useState('')
+  const [saved, setSaved] = useState(false)
+  useEffect(() => {
+    api('/api/admin/settings').then((d) => setPct(String(d.commission_percent))).catch(() => {})
+  }, [])
+  const save = async () => {
+    await api('/api/admin/settings', { method: 'PATCH', body: { commission_percent: Number(pct) } })
+    setSaved(true)
+    setTimeout(() => setSaved(false), 2000)
+  }
+  return (
+    <div className="card-lux p-4 space-y-2">
+      <p className="font-extrabold text-sm text-[#11221A]">💰 عمولة المنصة</p>
+      <div className="flex items-center gap-2">
+        <input
+          type="number" min="0" max="50" value={pct} onChange={(e) => setPct(e.target.value)}
+          className="w-24 px-3 py-2 border border-[#E3D9BF] rounded-lg text-sm"
+        />
+        <span className="text-sm text-gray-500">%</span>
+        <button onClick={save} className="ms-auto bg-[#006C35] text-white text-xs font-bold px-3 py-2 rounded-lg">حفظ</button>
+      </div>
+      <p className="text-[11px] text-gray-500">تُخصم من مبلغ الفني عند إكمال الطلب وتظهر في الفاتورة.</p>
+      {saved && <p className="text-[11px] text-[#006C35] font-bold">تم الحفظ ✅</p>}
+    </div>
+  )
+}
+
 function Invoices() {
   const [rows, setRows] = useState([])
   useEffect(() => { api('/api/admin/invoices').then(setRows).catch(() => {}) }, [])
@@ -546,7 +575,12 @@ function Invoices() {
             <p className="font-bold text-sm text-[#11221A]">{i.number}</p>
             <p className="text-[11px] text-gray-500">{i.request_title} · {i.owner_name} · {i.issued_at}</p>
           </div>
-          <span className="chip-gold">{i.amount} ر.س</span>
+          <div className="text-end">
+            <span className="chip-gold">{i.amount} ر.س</span>
+            {i.commission ? (
+              <p className="text-[10px] text-gray-500 mt-1">عمولة {i.commission} · صافي {i.net}</p>
+            ) : null}
+          </div>
         </div>
       ))}
       {rows.length === 0 && <p className="text-sm text-gray-500">ما فيه فواتير بعد.</p>}
@@ -633,7 +667,7 @@ function Shell({ onLogout }) {
     if (section.startsWith('users:')) return <Users type={section.split(':')[1]} />
     if (section.startsWith('requests:')) return <Requests scope={section.split(':')[1]} />
     switch (section) {
-      case 'overview': return <Overview />
+      case 'overview': return (<><Overview /><div className="mt-4"><CommissionBox /></div></>)
       case 'reports': return <Reports />
       case 'ads': return <Ads />
       case 'invoices': return <Invoices />

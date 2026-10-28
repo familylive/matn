@@ -170,6 +170,9 @@ app.get('/api/experts/:id', (req, res) => {
 
 /* ---------- requests + live bidding ---------- */
 
+const getSetting = (k, d) => db.prepare('SELECT value FROM settings WHERE key = ?').get(k)?.value ?? d
+const commissionPct = () => Number(getSetting('commission_percent', 10))
+
 const R_EARTH_KM = 6371
 function haversineKm(aLat, aLng, bLat, bLng) {
   if ([aLat, aLng, bLat, bLng].some((v) => v === null || v === undefined)) return null
@@ -314,7 +317,11 @@ function issueInvoice(requestId) {
   const year = new Date().getFullYear()
   const count = db.prepare("SELECT COUNT(*) c FROM invoices WHERE number LIKE ?").get(`MIH-${year}-%`).c
   const number = `MIH-${year}-${String(count + 1).padStart(4, '0')}`
-  db.prepare('INSERT INTO invoices (number, request_id, amount) VALUES (?, ?, ?)').run(number, requestId, bid.amount)
+  const pct = commissionPct()
+  const commission = Math.round(bid.amount * pct) / 100
+  const net = Math.round((bid.amount - commission) * 100) / 100
+  db.prepare('INSERT INTO invoices (number, request_id, amount, commission, net) VALUES (?, ?, ?, ?, ?)')
+    .run(number, requestId, bid.amount, commission, net)
   return db.prepare('SELECT * FROM invoices WHERE number = ?').get(number)
 }
 
@@ -510,6 +517,7 @@ app.get('/api/admin/reports', adminRequired, (_req, res) => {
       bids: one('SELECT COUNT(*) c FROM bids').c,
       invoices: one('SELECT COUNT(*) c FROM invoices').c,
       revenue: one('SELECT COALESCE(SUM(amount),0) s FROM invoices').s,
+      commission: one('SELECT COALESCE(SUM(commission),0) s FROM invoices').s,
       avg_bid: Math.round(one('SELECT COALESCE(AVG(amount),0) a FROM bids').a),
     },
     byCategory,
@@ -593,6 +601,23 @@ app.patch('/api/admin/city-requests/:id', adminRequired, (req, res) => {
   res.json({ ok: true })
 })
 
+/* ---------- الإعدادات ---------- */
+
+app.get('/api/settings', (_req, res) => {
+  res.json({ commission_percent: commissionPct() })
+})
+
+app.get('/api/admin/settings', adminRequired, (_req, res) => {
+  res.json({ commission_percent: commissionPct() })
+})
+
+app.patch('/api/admin/settings', adminRequired, (req, res) => {
+  const pct = Number(req.body?.commission_percent)
+  if (!(pct >= 0 && pct <= 50)) return res.status(400).json({ error: 'invalid_percent' })
+  db.prepare("INSERT INTO settings (key, value) VALUES ('commission_percent', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value").run(String(pct))
+  res.json({ commission_percent: pct })
+})
+
 /* ---------- التصنيفات ---------- */
 
 app.get('/api/categories', (_req, res) => {
@@ -642,9 +667,10 @@ app.post('/api/requests/:id/pay', authRequired, (req, res) => {
   if (request.status !== 'awaiting_payment') return res.status(409).json({ error: 'not_awaiting_payment' })
 
   const method = String(req.body?.method || '')
-  if (!['cash', 'card', 'urpay'].includes(method)) return res.status(400).json({ error: 'invalid_method' })
-  const phone = method === 'urpay' ? String(req.body?.phone || '').replace(/[^\d+]/g, '') : null
-  if (method === 'urpay' && phone.replace(/\D/g, '').length < 9) return res.status(400).json({ error: 'phone_required' })
+  if (!['cash', 'card', 'urpay', 'stcpay'].includes(method)) return res.status(400).json({ error: 'invalid_method' })
+  const needsPhone = ['urpay', 'stcpay'].includes(method)
+  const phone = needsPhone ? String(req.body?.phone || '').replace(/[^\d+]/g, '') : null
+  if (needsPhone && phone.replace(/\D/g, '').length < 9) return res.status(400).json({ error: 'phone_required' })
 
   const bid = db.prepare('SELECT * FROM bids WHERE id = ?').get(request.accepted_bid_id)
   const amount = bid?.amount || 0
@@ -678,7 +704,7 @@ app.get('/api/admin/payments', adminRequired, (_req, res) => {
 
 /* ---------- نسخ احتياطي ---------- */
 
-const BACKUP_TABLES = ['users', 'experts', 'requests', 'bids', 'reviews', 'invoices', 'ads', 'city_requests', 'categories', 'payments']
+const BACKUP_TABLES = ['users', 'experts', 'requests', 'bids', 'reviews', 'invoices', 'ads', 'city_requests', 'categories', 'payments', 'settings']
 
 app.get('/api/admin/backup', adminRequired, (_req, res) => {
   const data = { at: new Date().toISOString(), version: 1, tables: {} }

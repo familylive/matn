@@ -140,6 +140,11 @@ CREATE TABLE IF NOT EXISTS payments (
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
+CREATE TABLE IF NOT EXISTS settings (
+  key TEXT PRIMARY KEY,
+  value TEXT
+);
+
 CREATE INDEX IF NOT EXISTS idx_bids_request ON bids(request_id);
 
 CREATE INDEX IF NOT EXISTS idx_requests_status ON requests(status);
@@ -167,6 +172,8 @@ addColumn('users', 'avatar', 'TEXT')
 addColumn('users', 'sound_on', 'INTEGER DEFAULT 1')
 addColumn('experts', 'user_id', 'INTEGER')
 addColumn('users', 'status', "TEXT DEFAULT 'active'")
+addColumn('invoices', 'commission', 'REAL DEFAULT 0')
+addColumn('invoices', 'net', 'REAL DEFAULT 0')
 addColumn('admins', 'status', "TEXT DEFAULT 'active'")
 addColumn('admins', 'name', 'TEXT')
 

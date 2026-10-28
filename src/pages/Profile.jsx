@@ -44,6 +44,12 @@ export default function Profile() {
     <div className="px-4 py-5">
       <div className="card-lux p-5 text-center">
         <div className="gold-bar absolute inset-x-0 top-0" />
+        <button
+          onClick={() => { logout(); navigate('/') }}
+          className="absolute top-3 end-3 z-10 text-[11px] font-bold text-red-500 bg-red-50 border border-red-100 px-2.5 py-1 rounded-lg"
+        >
+          خروج
+        </button>
         <div className="relative inline-block pt-2">
           {profile.avatar ? (
             <img src={profile.avatar} alt={profile.name} className="w-20 h-20 rounded-full object-cover" />

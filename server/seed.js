@@ -58,3 +58,7 @@ if (catCount === 0) {
   cats.forEach((c, i) => ins.run(c[0], c[1], c[2], c[3], i))
   console.log('seeded categories')
 }
+
+
+const s1 = db.prepare("SELECT value FROM settings WHERE key = 'commission_percent'").get()
+if (!s1) db.prepare("INSERT INTO settings (key, value) VALUES ('commission_percent', '10')").run()
