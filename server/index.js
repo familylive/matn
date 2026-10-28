@@ -477,6 +477,14 @@ app.post('/api/requests/:id/bids', authRequired, (req, res) => {
   const expertId = mine.id
   const amount = Number(req.body?.amount)
   if (!amount || amount <= 0) return res.status(400).json({ error: 'invalid_bid' })
+
+  // حد أدنى للسومة: ما ينزل أكثر من ١٠٪ عن ميزانية العميل
+  const budget = Number(request.budget) || 0
+  const minBid = budget > 0 ? Math.round(budget * 0.9) : 0
+  if (minBid && amount < minBid) {
+    return res.status(422).json({ error: 'below_floor', min_bid: minBid, message: `الحد الأدنى للسومة ${minBid} ريال (٩٠٪ من ميزانية العميل)` })
+  }
+
   const expert = mine
 
   const info = db

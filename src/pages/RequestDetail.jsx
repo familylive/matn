@@ -231,10 +231,16 @@ export default function RequestDetail() {
     [data, user],
   )
 
+  const budget = Number(data?.budget) || 0
+  const minBid = budget > 0 ? Math.round(budget * 0.9) : 0
+
   const placeBid = async (e) => {
     e.preventDefault()
     setError('')
     if (!isAuthenticated) return navigate('/login')
+    if (minBid && Number(bid.amount) < minBid) {
+      return setError(`الحد الأدنى للسومة ${minBid} ريال — ما ينزل أكثر من ١٠٪ عن ميزانية العميل`)
+    }
     try {
       await api.placeBid(id, { amount: Number(bid.amount), note: bid.note })
       setBid({ expertId: '', amount: '', note: '' })
@@ -451,12 +457,17 @@ export default function RequestDetail() {
             <input
               required
               type="number"
-              min="1"
-              placeholder={t('rd.price')}
+              min={minBid || 1}
+              placeholder={minBid ? `أقل سومة ${minBid} ر.س` : t('rd.price')}
               value={bid.amount}
               onChange={(e) => setBid({ ...bid, amount: e.target.value })}
               className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm"
             />
+            {minBid > 0 && (
+              <p className="text-[11px] text-[#8a6d13] bg-[#FBF5E3] border border-[#EADFC8] rounded-lg px-2 py-1.5">
+                🔒 ميزانية العميل {budget} ر.س — أقل سومة مسموحة <b>{minBid} ر.س</b> (خصم ١٠٪ كحد أقصى)
+              </p>
+            )}
             <input
               placeholder={t('rd.note')}
               value={bid.note}

@@ -66,8 +66,9 @@ export function markBotCars() {
 const botsForRequest = (category) =>
   db.prepare('SELECT * FROM experts WHERE job = ? AND is_bot = 1 ORDER BY has_car DESC, rating DESC').all(category)
 
+// البوتات ملزمة بنفس القاعدة: ما تنزل أكثر من ١٠٪ عن ميزانية العميل
 function floorPrice(request) {
-  if (request.budget && request.budget > 0) return Math.max(60, Math.round(request.budget * 0.55))
+  if (request.budget && request.budget > 0) return Math.max(60, Math.round(request.budget * 0.9))
   return 90
 }
 
