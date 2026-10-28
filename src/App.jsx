@@ -11,6 +11,7 @@ import RequestDetail from './pages/RequestDetail.jsx'
 import Admin from './pages/Admin.jsx'
 import Register from './pages/Register.jsx'
 import Verify from './pages/Verify.jsx'
+import MyRequests from './pages/MyRequests.jsx'
 import { useAuth } from './context/AuthContext.jsx'
 
 function RequireAuth({ children }) {
@@ -44,6 +45,7 @@ export default function App() {
       <Route path="/expert/:id" element={<ExpertDetail />} />
       <Route path="/register" element={<Layout><Register /></Layout>} />
       <Route path="/verify" element={<Layout><Verify /></Layout>} />
+      <Route path="/my-requests" element={<Layout><MyRequests /></Layout>} />
       <Route path="/admin/*" element={<Admin />} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

@@ -288,6 +288,21 @@ const requestWithBids = (id) => {
   return { ...request, bids, extras, extras_total: extrasTotal, nearest_bid_id: nearest?.id ?? null }
 }
 
+app.get('/api/my/requests', authRequired, (req, res) => {
+  const rows = db
+    .prepare(
+      `SELECT r.*,
+        (SELECT COUNT(*) FROM bids b WHERE b.request_id = r.id) AS bids_count,
+        (SELECT MIN(amount) FROM bids b WHERE b.request_id = r.id) AS lowest_bid
+       FROM requests r WHERE r.user_id = ? ORDER BY r.id DESC`,
+    )
+    .all(req.userId)
+
+  const active = rows.filter((r) => ['open', 'awaiting_payment', 'assigned', 'done'].includes(r.status))
+  const archived = rows.filter((r) => ['closed', 'canceled'].includes(r.status))
+  res.json({ active, archived })
+})
+
 app.get('/api/requests/counts', (_req, res) => {
   const rows = db
     .prepare("SELECT category, COUNT(*) c FROM requests WHERE status = 'open' GROUP BY category")

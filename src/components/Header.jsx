@@ -9,6 +9,7 @@ const titleKeys = {
   '/profile': 'nav.profile',
   '/login': 'login.signin',
   '/requests': 'nav.requests',
+  '/my-requests': 'nav.myRequests',
 }
 
 export default function Header() {
