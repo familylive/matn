@@ -450,19 +450,36 @@ function Ads() {
 
 function Categories() {
   const [rows, setRows] = useState([])
-  const [form, setForm] = useState({ key: '', ar: '', en: '', icon: '🛠️' })
+  const [form, setForm] = useState({ key: '', ar: '', en: '', icon: '🛠️', image: '' })
+  const [editId, setEditId] = useState(null)
   const [err, setErr] = useState('')
   const load = () => api('/api/admin/categories').then(setRows).catch(() => {})
   useEffect(() => { load() }, [])
+
+  const uploadImage = async (file) => {
+    const fd = new FormData()
+    fd.append('image', file)
+    const r = await api('/api/admin/upload', { method: 'POST', form: fd })
+    return r.url
+  }
 
   const add = async (e) => {
     e.preventDefault()
     setErr('')
     try {
       await api('/api/admin/categories', { method: 'POST', body: form })
-      setForm({ key: '', ar: '', en: '', icon: '🛠️' })
+      setForm({ key: '', ar: '', en: '', icon: '🛠️', image: '' })
       load()
     } catch (e2) { setErr(e2.message === 'key_exists' ? 'المفتاح مستخدم' : 'تعذّر الإضافة') }
+  }
+
+  const saveEdit = async (c) => {
+    await api(`/api/admin/categories/${c.id}`, {
+      method: 'PATCH',
+      body: { ar: c.ar, en: c.en, icon: c.icon, image: c.image },
+    })
+    setEditId(null)
+    load()
   }
 
   const toggle = async (c) => {
@@ -479,34 +496,78 @@ function Categories() {
     <div className="space-y-3">
       <form onSubmit={add} className="card-lux p-4 space-y-2">
         <div className="gold-bar absolute inset-x-0 top-0" />
-        <p className="font-extrabold text-[#11221A] pt-1">إضافة تصنيف</p>
+        <p className="font-extrabold text-[#11221A] pt-1">إضافة قسم</p>
         <div className="grid grid-cols-2 gap-2">
           <input required placeholder="الاسم بالعربي" value={form.ar} onChange={(e) => setForm({ ...form, ar: e.target.value })}
             className="px-3 py-2 border border-[#E3D9BF] rounded-lg text-sm" />
           <input required placeholder="المفتاح (EN)" value={form.key} onChange={(e) => setForm({ ...form, key: e.target.value.replace(/\s/g, '') })}
             className="px-3 py-2 border border-[#E3D9BF] rounded-lg text-sm" />
         </div>
-        <div className="grid grid-cols-2 gap-2">
-          <input placeholder="English name" value={form.en} onChange={(e) => setForm({ ...form, en: e.target.value })}
+        <input placeholder="English name" value={form.en} onChange={(e) => setForm({ ...form, en: e.target.value })}
+          className="w-full px-3 py-2 border border-[#E3D9BF] rounded-lg text-sm" />
+        <div className="grid grid-cols-2 gap-2 items-center">
+          <input placeholder="أيقونة (إيموجي)" value={form.icon} onChange={(e) => setForm({ ...form, icon: e.target.value })}
             className="px-3 py-2 border border-[#E3D9BF] rounded-lg text-sm" />
-          <input placeholder="أيقونة" value={form.icon} onChange={(e) => setForm({ ...form, icon: e.target.value })}
-            className="px-3 py-2 border border-[#E3D9BF] rounded-lg text-sm" />
+          <label className="text-xs text-gray-600">
+            صورة القسم
+            <input type="file" accept="image/*" className="block w-full text-xs mt-1"
+              onChange={async (e) => {
+                const f = e.target.files?.[0]
+                if (f) setForm({ ...form, image: await uploadImage(f) })
+              }} />
+          </label>
         </div>
+        {form.image && <img src={form.image} alt="preview" className="h-16 rounded-lg object-cover" />}
         {err && <p className="text-xs text-red-500">{err}</p>}
-        <button className="btn-primary">إضافة</button>
+        <button className="btn-primary">إضافة القسم</button>
       </form>
 
       {rows.map((c) => (
-        <div key={c.id} className="card-lux p-3 flex items-center gap-3">
-          <span className="text-2xl">{c.icon}</span>
-          <div className="flex-1">
-            <p className="font-bold text-sm text-[#11221A]">{c.ar}</p>
-            <p className="text-[11px] text-gray-500">{c.key} · {c.en || '—'}</p>
-          </div>
-          <button onClick={() => toggle(c)} className={`text-[11px] px-2 py-1 rounded-lg ${c.active ? 'bg-[#E9F5EE] text-[#006C35]' : 'bg-gray-100 text-gray-500'}`}>
-            {c.active ? 'مفعّل' : 'موقوف'}
-          </button>
-          <button onClick={() => remove(c)} className="text-[11px] text-red-500 px-1">حذف</button>
+        <div key={c.id} className="card-lux p-3">
+          {editId === c.id ? (
+            <div className="space-y-2">
+              <input value={c.ar} onChange={(e) => setRows((r) => r.map((x) => x.id === c.id ? { ...x, ar: e.target.value } : x))}
+                className="w-full px-2 py-1.5 border border-[#E3D9BF] rounded-lg text-sm" />
+              <input value={c.en || ''} onChange={(e) => setRows((r) => r.map((x) => x.id === c.id ? { ...x, en: e.target.value } : x))}
+                placeholder="English" className="w-full px-2 py-1.5 border border-[#E3D9BF] rounded-lg text-sm" />
+              <div className="flex gap-2 items-center">
+                <input value={c.icon || ''} onChange={(e) => setRows((r) => r.map((x) => x.id === c.id ? { ...x, icon: e.target.value } : x))}
+                  className="w-20 px-2 py-1.5 border border-[#E3D9BF] rounded-lg text-sm" />
+                <label className="text-[11px] text-gray-600">
+                  صورة
+                  <input type="file" accept="image/*" className="block text-[11px]"
+                    onChange={async (e) => {
+                      const f = e.target.files?.[0]
+                      if (!f) return
+                      const url = await uploadImage(f)
+                      setRows((r) => r.map((x) => x.id === c.id ? { ...x, image: url } : x))
+                    }} />
+                </label>
+                {c.image && <img src={c.image} alt="" className="w-10 h-10 rounded-lg object-cover" />}
+              </div>
+              <div className="flex gap-2">
+                <button onClick={() => saveEdit(c)} className="flex-1 bg-[#006C35] text-white py-1.5 rounded-lg text-sm font-bold">حفظ</button>
+                <button onClick={() => setEditId(null)} className="px-3 py-1.5 rounded-lg text-sm border border-gray-200">إلغاء</button>
+              </div>
+            </div>
+          ) : (
+            <div className="flex items-center gap-3">
+              {c.image ? (
+                <img src={c.image} alt={c.ar} className="w-12 h-12 rounded-lg object-cover" />
+              ) : (
+                <span className="text-2xl">{c.icon}</span>
+              )}
+              <div className="flex-1">
+                <p className="font-bold text-sm text-[#11221A]">{c.ar}</p>
+                <p className="text-[11px] text-gray-500">{c.key} · {c.en || '—'}</p>
+              </div>
+              <button onClick={() => setEditId(c.id)} className="text-[11px] bg-[#FBF5E3] text-[#8a6d13] px-2 py-1 rounded-lg font-bold">تعديل</button>
+              <button onClick={() => toggle(c)} className={`text-[11px] px-2 py-1 rounded-lg font-bold ${c.active ? 'bg-[#E9F5EE] text-[#006C35]' : 'bg-gray-100 text-gray-500'}`}>
+                {c.active ? 'إيقاف' : 'تفعيل'}
+              </button>
+              <button onClick={() => remove(c)} className="text-[11px] text-red-500 px-1">حذف</button>
+            </div>
+          )}
         </div>
       ))}
       {rows.length === 0 && <p className="text-sm text-gray-500">ما فيه تصنيفات.</p>}

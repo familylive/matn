@@ -51,6 +51,21 @@ export default function Profile() {
           خروج
         </button>
         <div className="relative inline-block pt-2">
+          <label className="absolute -bottom-1 -start-1 z-10 w-7 h-7 rounded-full bg-[#C9A227] text-white grid place-items-center text-xs cursor-pointer shadow">
+            ✎
+            <input
+              type="file" accept="image/*" className="hidden"
+              onChange={async (e) => {
+                const f = e.target.files?.[0]
+                if (!f) return
+                try {
+                  const r = await api.uploadAvatar(f)
+                  setMe((m) => ({ ...(m || profile), avatar: r.url }))
+                  login({ ...user, avatar: r.url })
+                } catch {}
+              }}
+            />
+          </label>
           {profile.avatar ? (
             <img src={profile.avatar} alt={profile.name} className="w-20 h-20 rounded-full object-cover" />
           ) : (

@@ -59,9 +59,13 @@ export default function Home() {
               onClick={() => navigate(`/search?category=${encodeURIComponent(c.name)}`)}
               className="card-lux active:scale-[.98] transition p-4 flex flex-col items-center gap-2"
             >
-              <span className="w-12 h-12 rounded-full bg-[#FBF5E3] border border-[#EADFC8] grid place-items-center text-2xl">
-                {c.icon}
-              </span>
+              {c.image ? (
+                <img src={c.image} alt={c.ar} className="w-14 h-14 rounded-full object-cover border border-[#EADFC8]" />
+              ) : (
+                <span className="w-12 h-12 rounded-full bg-[#FBF5E3] border border-[#EADFC8] grid place-items-center text-2xl">
+                  {c.icon}
+                </span>
+              )}
               <span className="text-[#11221A] font-bold">{catLabel(c, lang)}</span>
               <span className="text-[10px] text-[#8a6d13]">اطلب الآن ←</span>
             </button>

@@ -41,6 +41,18 @@ export const api = {
   me: () => request('/api/me', { auth: true }),
   register: (payload) => request('/api/auth/register', { method: 'POST', body: payload, auth: true }),
   setSound: (sound_on) => request('/api/me/sound', { method: 'PATCH', body: { sound_on }, auth: true }),
+  uploadAvatar: async (file) => {
+    const fd = new FormData()
+    fd.append('avatar', file)
+    const res = await fetch('/api/me/avatar', {
+      method: 'POST',
+      headers: { authorization: `Bearer ${getToken()}` },
+      body: fd,
+    })
+    const data = await res.json().catch(() => ({}))
+    if (!res.ok) throw new Error(data.error || 'upload_failed')
+    return data
+  },
 
   experts: (params = {}) => {
     const qs = new URLSearchParams(Object.entries(params).filter(([, v]) => v)).toString()

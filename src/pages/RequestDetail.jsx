@@ -122,7 +122,7 @@ export default function RequestDetail() {
   }
 
   useEffect(() => {
-    if (data?.status === 'done' && !invoices) {
+    if (data?.status === 'done' && !invoices && isAuthenticated) {
       api.get(`/api/requests/${id}/invoices`).then(setInvoices).catch(() => {})
     }
   }, [data?.status])
@@ -326,7 +326,7 @@ export default function RequestDetail() {
           </button>
         )}
 
-        {isOwner && invoices && (
+        {invoices && (
           <div className="mt-4 space-y-3">
             {['customer', 'expert'].map((k) => {
               const inv = invoices[k]

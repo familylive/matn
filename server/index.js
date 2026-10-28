@@ -610,6 +610,15 @@ app.patch('/api/admin/city-requests/:id', adminRequired, (req, res) => {
   res.json({ ok: true })
 })
 
+/* ---------- صورة الملف الشخصي ---------- */
+
+app.post('/api/me/avatar', authRequired, upload.single('avatar'), (req, res) => {
+  if (!req.file) return res.status(400).json({ error: 'no_file' })
+  const url = `/uploads/${req.file.filename}`
+  db.prepare('UPDATE users SET avatar = ? WHERE id = ?').run(url, req.userId)
+  res.status(201).json({ url })
+})
+
 /* ---------- توثيق الإقامة (OCR) ---------- */
 
 app.post('/api/me/iqama', authRequired, upload.single('iqama'), async (req, res) => {
@@ -703,11 +712,11 @@ app.get('/api/admin/categories', adminRequired, (_req, res) => {
 })
 
 app.post('/api/admin/categories', adminRequired, (req, res) => {
-  const { key, ar, en, icon, sort } = req.body || {}
+  const { key, ar, en, icon, sort, image } = req.body || {}
   if (!key || !ar) return res.status(400).json({ error: 'key_and_ar_required' })
   try {
-    const info = db.prepare('INSERT INTO categories (key, ar, en, icon, sort) VALUES (?, ?, ?, ?, ?)')
-      .run(key.trim(), ar.trim(), en || null, icon || '🛠️', Number(sort) || 99)
+    const info = db.prepare('INSERT INTO categories (key, ar, en, icon, sort, image) VALUES (?, ?, ?, ?, ?, ?)')
+      .run(key.trim(), ar.trim(), en || null, icon || '🛠️', Number(sort) || 99, image || null)
     res.status(201).json(db.prepare('SELECT * FROM categories WHERE id = ?').get(info.lastInsertRowid))
   } catch {
     res.status(409).json({ error: 'key_exists' })
@@ -720,7 +729,7 @@ app.patch('/api/admin/categories/:id', adminRequired, (req, res) => {
   const b = req.body || {}
   const sets = []
   const params = []
-  for (const f of ['ar', 'en', 'icon', 'active', 'sort']) {
+  for (const f of ['ar', 'en', 'icon', 'active', 'sort', 'image']) {
     if (b[f] !== undefined) { sets.push(`${f} = ?`); params.push(f === 'active' ? (b[f] ? 1 : 0) : b[f]) }
   }
   if (sets.length) db.prepare(`UPDATE categories SET ${sets.join(', ')} WHERE id = ?`).run(...params, c.id)
@@ -839,7 +848,13 @@ app.get('/api/admin/commissions', adminRequired, (_req, res) => {
 app.get('/api/requests/:id/invoices', authRequired, (req, res) => {
   const request = db.prepare('SELECT * FROM requests WHERE id = ?').get(req.params.id)
   if (!request) return res.status(404).json({ error: 'not_found' })
-  if (request.user_id !== req.userId) return res.status(403).json({ error: 'forbidden' })
+  const isOwner = request.user_id === req.userId
+  const myExpert = db.prepare('SELECT * FROM experts WHERE user_id = ?').get(req.userId)
+  const accepted = request.accepted_bid_id
+    ? db.prepare('SELECT * FROM bids WHERE id = ?').get(request.accepted_bid_id)
+    : null
+  const isExpert = !!(myExpert && accepted && accepted.expert_id === myExpert.id)
+  if (!isOwner && !isExpert) return res.status(403).json({ error: 'forbidden' })
   const inv = db.prepare('SELECT * FROM invoices WHERE request_id = ?').get(request.id)
   if (!inv) return res.status(404).json({ error: 'no_invoice' })
   const bid = db.prepare('SELECT b.*, e.name_ar AS expert_name FROM bids b JOIN experts e ON e.id = b.expert_id WHERE b.id = ?').get(request.accepted_bid_id)
@@ -877,8 +892,25 @@ app.get('/api/requests/:id/invoices', authRequired, (req, res) => {
 
 const BACKUP_TABLES = ['users', 'experts', 'requests', 'bids', 'reviews', 'invoices', 'ads', 'city_requests', 'categories', 'payments', 'settings']
 
+const collectUploads = () => {
+  const refs = new Set()
+  const push = (v) => { if (typeof v === 'string' && v.startsWith('/uploads/')) refs.add(v.replace('/uploads/', '')) }
+  db.prepare('SELECT image FROM ads').all().forEach((r) => push(r.image))
+  db.prepare('SELECT avatar FROM users').all().forEach((r) => push(r.avatar))
+  db.prepare('SELECT image FROM categories').all().forEach((r) => push(r.image))
+  db.prepare('SELECT iqama_image FROM experts').all().forEach((r) => push(r.iqama_image))
+  const files = {}
+  for (const name of refs) {
+    const fp = path.join(uploadsDir, name)
+    try {
+      if (fs.existsSync(fp)) files[name] = fs.readFileSync(fp).toString('base64')
+    } catch {}
+  }
+  return files
+}
+
 app.get('/api/admin/backup', adminRequired, (_req, res) => {
-  const data = { at: new Date().toISOString(), version: 1, tables: {} }
+  const data = { at: new Date().toISOString(), version: 2, tables: {}, files: collectUploads() }
   for (const t of BACKUP_TABLES) data.tables[t] = db.prepare(`SELECT * FROM ${t}`).all()
   res.setHeader('content-disposition', `attachment; filename="mihnati-backup-${Date.now()}.json"`)
   res.json(data)
@@ -920,6 +952,12 @@ app.post('/api/admin/restore', adminRequired, (req, res) => {
       ]
       const ins = db.prepare('INSERT INTO categories (key, ar, en, icon, sort) VALUES (?, ?, ?, ?, ?)')
       seedCats.forEach((c, i) => ins.run(c[0], c[1], c[2], c[3], i))
+    }
+    if (req.body?.files && typeof req.body.files === 'object') {
+      for (const [name, b64] of Object.entries(req.body.files)) {
+        if (typeof b64 !== 'string') continue
+        try { fs.writeFileSync(path.join(uploadsDir, path.basename(name)), Buffer.from(b64, 'base64')) } catch {}
+      }
     }
     res.json({ ok: true, restored_at: new Date().toISOString() })
   } catch (e) {
