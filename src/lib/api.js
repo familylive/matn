@@ -21,7 +21,12 @@ async function request(path, { method = 'GET', body, auth = false } = {}) {
     localStorage.removeItem('authToken')
     localStorage.removeItem('currentUser')
     const err = new Error(data.error || 'unauthorized')
-    err.code = 'unauthorized'
+    err.code = data.error || 'unauthorized'
+    if (err.code === 'session_replaced') {
+      try {
+        window.dispatchEvent(new CustomEvent('session-replaced'))
+      } catch {}
+    }
     throw err
   }
   if (!res.ok) {

@@ -74,6 +74,13 @@ normalizePhones()
 
 /* ---------- auth (phone + OTP) ---------- */
 
+// يفتح جلسة جديدة ويبطل كل الأجهزة السابقة
+function startSession(userId) {
+  db.prepare('UPDATE users SET session_version = COALESCE(session_version, 0) + 1 WHERE id = ?').run(userId)
+  const v = db.prepare('SELECT session_version FROM users WHERE id = ?').get(userId)?.session_version || 1
+  return { token: signToken(userId, v), version: v }
+}
+
 const DEV_MODE = process.env.NODE_ENV !== 'production' || process.env.DEV_OTP === '1'
 
 app.post('/api/auth/request-otp', (req, res) => {
@@ -127,7 +134,7 @@ app.post('/api/auth/signup', (req, res) => {
       b.lat != null ? Number(b.lat) : null, b.lng != null ? Number(b.lng) : null, userId, b.has_car ? 1 : 0)
   }
 
-  res.status(201).json({ token: signToken(userId), user: fullUser(userId) })
+  res.status(201).json({ ...startSession(userId), user: fullUser(userId) })
 })
 
 app.post('/api/auth/login-local', (req, res) => {
@@ -137,7 +144,7 @@ app.post('/api/auth/login-local', (req, res) => {
   }
   if (user.status === 'suspended') return res.status(403).json({ error: 'account_suspended' })
   db.prepare("UPDATE users SET last_seen = datetime('now') WHERE id = ?").run(user.id)
-  res.json({ token: signToken(user.id), user: fullUser(user.id) })
+  res.json({ ...startSession(user.id), user: fullUser(user.id) })
 })
 
 app.post('/api/auth/verify', (req, res) => {
@@ -159,7 +166,7 @@ app.post('/api/auth/verify', (req, res) => {
     const info = db.prepare('INSERT INTO users (phone, name) VALUES (?, ?)').run(phone, req.body?.name || null)
     user = db.prepare('SELECT * FROM users WHERE id = ?').get(info.lastInsertRowid)
   }
-  res.json({ token: signToken(user.id), user })
+  res.json({ ...startSession(user.id), user })
 })
 
 const fullUser = (id) =>

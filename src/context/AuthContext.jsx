@@ -27,6 +27,20 @@ export function AuthProvider({ children }) {
     setToken(null)
   }
 
+  // تم الدخول من جهاز آخر → نخرج المستخدم من هذا الجهاز
+  useEffect(() => {
+    const onReplaced = () => {
+      setUser(null)
+      localStorage.removeItem('currentUser')
+      setToken(null)
+      try {
+        alert('تم تسجيل الدخول لحسابك من جهاز آخر — تم تسجيل خروجك من هذا الجهاز.')
+      } catch {}
+    }
+    window.addEventListener('session-replaced', onReplaced)
+    return () => window.removeEventListener('session-replaced', onReplaced)
+  }, [])
+
   const loginWithPhone = async (phone, code, name) => {
     const { token, user: account } = await api.verifyOtp(phone, code, name)
     setToken(token)
