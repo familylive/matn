@@ -893,6 +893,16 @@ function CommissionBox() {
       setDemo(!!d.demo_auto_accept)
     }).catch(() => {})
   }, [])
+  const toggleDemo = async () => {
+    const next = !demo
+    setDemo(next)
+    try {
+      await api('/api/admin/settings', { method: 'PATCH', body: { demo_auto_accept: next } })
+    } catch {
+      setDemo(!next)
+    }
+  }
+
   const save = async () => {
     await api('/api/admin/settings', {
       method: 'PATCH',
