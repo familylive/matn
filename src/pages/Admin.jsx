@@ -125,6 +125,12 @@ function UserRow({ u, type, onChanged }) {
   const [form, setForm] = useState(u)
   const active = u.status !== 'suspended'
 
+  const toggleDemo = async () => {
+    const next = !demo
+    setDemo(next)
+    await api('/api/admin/settings', { method: 'PATCH', body: { demo_auto_accept: next } })
+  }
+
   const save = async () => {
     if (type === 'admins') await api(`/api/admin/admins/${u.id}`, { method: 'PATCH', body: { name: form.name } })
     else await api(`/api/admin/users/${u.id}`, {
@@ -726,13 +732,21 @@ function Commissions() {
 function CommissionBox() {
   const [c, setC] = useState('')
   const [e, setE] = useState('')
+  const [demo, setDemo] = useState(false)
   const [saved, setSaved] = useState(false)
   useEffect(() => {
     api('/api/admin/settings').then((d) => {
       setC(String(d.commission_customer))
       setE(String(d.commission_expert))
+      setDemo(!!d.demo_auto_accept)
     }).catch(() => {})
   }, [])
+  const toggleDemo = async () => {
+    const next = !demo
+    setDemo(next)
+    await api('/api/admin/settings', { method: 'PATCH', body: { demo_auto_accept: next } })
+  }
+
   const save = async () => {
     await api('/api/admin/settings', {
       method: 'PATCH',
@@ -759,6 +773,16 @@ function CommissionBox() {
       <div className="flex items-center justify-between">
         <p className="text-[11px] text-gray-500">الإجمالي: {Number(c || 0) + Number(e || 0)}%</p>
         <button onClick={save} className="bg-[#006C35] text-white text-xs font-bold px-3 py-2 rounded-lg">حفظ</button>
+      </div>
+      <div className="border-t border-dashed border-[#EADFC8] pt-2 flex items-center justify-between">
+        <div>
+          <p className="text-xs font-bold text-[#11221A]">🤖 وضع العرض (بوت يقبل الطلب)</p>
+          <p className="text-[10px] text-gray-500">طلبات التكييف تُقبل تلقائياً بأقل سومة وتصدر فاتورتها</p>
+        </div>
+        <button onClick={toggleDemo}
+          className={`w-12 h-7 rounded-full relative transition ${demo ? 'bg-[#006C35]' : 'bg-gray-300'}`}>
+          <span className={`absolute top-0.5 w-6 h-6 bg-white rounded-full transition-all ${demo ? 'start-0.5' : 'end-0.5'}`} />
+        </button>
       </div>
       {saved && <p className="text-[11px] text-[#006C35] font-bold">تم الحفظ ✅</p>}
     </div>

@@ -11,6 +11,7 @@ import { signToken, verifyToken, authRequired } from './auth.js'
 import { cities } from './cities.js'
 import { seedAdmin, checkAdmin, adminToken, adminRequired, hashPassword } from './admin.js'
 import { seedBots, onNewRequest, resumeBots } from './bots.js'
+import { issueInvoice, autoSettle, getSetting as getSet } from './flow.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const app = express()
@@ -320,30 +321,6 @@ app.post('/api/requests/:id/accept', authRequired, (req, res) => {
   io.to(`request:${request.id}`).emit('request:accepted', updated)
   res.json(updated)
 })
-
-function issueInvoice(requestId) {
-  const existing = db.prepare('SELECT * FROM invoices WHERE request_id = ?').get(requestId)
-  if (existing) return existing
-  const bid = db
-    .prepare('SELECT * FROM bids WHERE id = (SELECT accepted_bid_id FROM requests WHERE id = ?)')
-    .get(requestId)
-  if (!bid) return null
-  const year = new Date().getFullYear()
-  const count = db.prepare("SELECT COUNT(*) c FROM invoices WHERE number LIKE ?").get(`MIH-${year}-%`).c
-  const number = `MIH-${year}-${String(count + 1).padStart(4, '0')}`
-  const custPct = commissionCustomer()
-  const expPct = commissionExpert()
-  const customerFee = round2(bid.amount * custPct / 100)
-  const expertFee = round2(bid.amount * expPct / 100)
-  const totalPaid = round2(bid.amount + customerFee)
-  const net = round2(bid.amount - expertFee)
-  const commission = round2(customerFee + expertFee)
-  db.prepare(
-    `INSERT INTO invoices (number, request_id, amount, commission, net, customer_fee, expert_fee, total_paid)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-  ).run(number, requestId, bid.amount, commission, net, customerFee, expertFee, totalPaid)
-  return db.prepare('SELECT * FROM invoices WHERE number = ?').get(number)
-}
 
 app.post('/api/requests/:id/complete', authRequired, (req, res) => {
   const request = db.prepare('SELECT * FROM requests WHERE id = ?').get(req.params.id)
@@ -691,6 +668,7 @@ app.get('/api/settings', (_req, res) => {
     commission_customer: commissionCustomer(),
     commission_expert: commissionExpert(),
     commission_total: round2(commissionCustomer() + commissionExpert()),
+    demo_auto_accept: getSet('demo_auto_accept', '0') === '1',
   })
 })
 
@@ -699,17 +677,29 @@ app.get('/api/admin/settings', adminRequired, (_req, res) => {
     commission_customer: commissionCustomer(),
     commission_expert: commissionExpert(),
     commission_total: round2(commissionCustomer() + commissionExpert()),
+    demo_auto_accept: getSet('demo_auto_accept', '0') === '1',
   })
 })
 
 app.patch('/api/admin/settings', adminRequired, (req, res) => {
+  if (req.body?.demo_auto_accept !== undefined) {
+    db.prepare("INSERT INTO settings (key, value) VALUES ('demo_auto_accept', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value")
+      .run(req.body.demo_auto_accept ? '1' : '0')
+  }
   const c = Number(req.body?.commission_customer)
   const e = Number(req.body?.commission_expert)
-  if (!(c >= 0 && c <= 30) || !(e >= 0 && e <= 30)) return res.status(400).json({ error: 'invalid_percent' })
+  if (Number.isFinite(c) && Number.isFinite(e)) {
+    if (!(c >= 0 && c <= 30) || !(e >= 0 && e <= 30)) return res.status(400).json({ error: 'invalid_percent' })
   const up = db.prepare("INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value")
-  up.run('commission_customer', String(c))
-  up.run('commission_expert', String(e))
-  res.json({ commission_customer: c, commission_expert: e, commission_total: round2(c + e) })
+    up.run('commission_customer', String(c))
+    up.run('commission_expert', String(e))
+  }
+  res.json({
+    commission_customer: commissionCustomer(),
+    commission_expert: commissionExpert(),
+    commission_total: round2(commissionCustomer() + commissionExpert()),
+    demo_auto_accept: getSet('demo_auto_accept', '0') === '1',
+  })
 })
 
 /* ---------- التصنيفات ---------- */

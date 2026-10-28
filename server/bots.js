@@ -1,4 +1,5 @@
 import { db } from './db.js'
+import { autoSettle } from './flow.js'
 
 const timers = new Map()
 
@@ -58,6 +59,7 @@ function placeBotBid(io, request, bot, amount, note) {
 function tick(io, requestId) {
   const request = db.prepare('SELECT * FROM requests WHERE id = ?').get(requestId)
   if (!request || request.status !== 'open') return stop(requestId)
+  const demo = db.prepare("SELECT value FROM settings WHERE key = 'demo_auto_accept'").get()?.value === '1'
 
   const endMs = request.ends_at ? new Date(request.ends_at.replace(' ', 'T') + 'Z').getTime() : null
   if (endMs && endMs < Date.now()) return stop(requestId)
@@ -68,7 +70,11 @@ function tick(io, requestId) {
   const floor = floorPrice(request)
   const lowest = bids[0]?.amount
 
-  if (lowest !== undefined && lowest <= floor) return stop(requestId)
+  if (lowest !== undefined && lowest <= floor) {
+    stop(requestId)
+    if (demo) autoSettle(io, requestId)
+    return
+  }
 
   const candidate = bots.find((b) => !botIds.has(b.id))
   if (candidate) {
@@ -91,9 +97,14 @@ export function onNewRequest(io, request) {
   if (request.category !== 'AC') return
   if (timers.has(request.id)) return
   let n = 0
+  const demoOn = () => db.prepare("SELECT value FROM settings WHERE key = 'demo_auto_accept'").get()?.value === '1'
   const timer = setInterval(() => {
     n += 1
-    if (n > 14) return stop(request.id)
+    if (n > 14) {
+      stop(request.id)
+      if (demoOn()) autoSettle(io, request.id)
+      return
+    }
     tick(io, request.id)
   }, 6000 + Math.random() * 3000)
   timers.set(request.id, timer)
