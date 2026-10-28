@@ -1,5 +1,6 @@
-import { useLocation } from 'react-router-dom'
+import { Link, useLocation } from 'react-router-dom'
 import { useLang } from '../i18n/LanguageContext.jsx'
+import { useAuth } from '../context/AuthContext.jsx'
 
 const titleKeys = {
   '/': 'nav.home',
@@ -13,21 +14,53 @@ const titleKeys = {
 export default function Header() {
   const { pathname } = useLocation()
   const { t, lang, toggleLang } = useLang()
+  const { user, isAuthenticated } = useAuth()
+
+  const name = user?.name || user?.userName || ''
+  const initial = name.trim().charAt(0) || '؟'
+
   return (
     <header className="bg-white border-b border-[#ECE3CE]">
-      <div className="px-4 py-3 flex items-center justify-between">
-        <div className="flex items-center gap-2">
+      <div className="px-3 py-2.5 flex items-center gap-2">
+        <Link to="/" className="flex items-center gap-1.5 shrink-0">
           <span className="w-8 h-8 rounded-lg bg-[#006C35] text-white grid place-items-center font-extrabold">م</span>
-          <span className="font-extrabold text-[#11221A]">{t('app.name')}</span>
-        </div>
-        <span className="text-sm text-gray-500">{t(titleKeys[pathname] || 'app.name')}</span>
+          <span className="font-extrabold text-[#11221A] hidden sm:inline">{t('app.name')}</span>
+        </Link>
+
+        <span className="flex-1 text-center text-[13px] text-gray-500 truncate">
+          {t(titleKeys[pathname] || 'app.name')}
+        </span>
+
         <button
           onClick={toggleLang}
           aria-label="Change language"
-          className="w-10 h-8 rounded-lg border border-[#E3D9BF] text-xs font-bold text-[#8a6d13] bg-[#FBF5E3]"
+          className="w-9 h-8 rounded-lg border border-[#E3D9BF] text-[11px] font-bold text-[#8a6d13] bg-[#FBF5E3] shrink-0"
         >
           {lang === 'ar' ? 'EN' : 'ع'}
         </button>
+
+        {isAuthenticated ? (
+          <Link
+            to="/profile"
+            className="flex items-center gap-1.5 shrink-0 max-w-[110px]"
+            aria-label="حسابي"
+          >
+            <span className="w-8 h-8 rounded-full bg-[#006C35] text-white grid place-items-center text-sm font-bold">
+              {initial}
+            </span>
+            <span className="text-[11px] font-bold text-[#11221A] truncate">{name.split(' ')[0]}</span>
+          </Link>
+        ) : (
+          <Link
+            to="/login"
+            className="flex items-center gap-1 shrink-0 bg-[#006C35] text-white text-[11px] font-bold px-2.5 py-1.5 rounded-lg"
+          >
+            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+            </svg>
+            دخول
+          </Link>
+        )}
       </div>
       <div className="gold-bar" />
     </header>
