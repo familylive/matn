@@ -721,10 +721,22 @@ app.post('/api/city-requests', (req, res) => {
 
 /* ---------- ads (public) ---------- */
 
+// وقت الرياض (UTC+3) → UTC بصيغة SQLite
+function localToUtc(v) {
+  if (!v) return null
+  const m = String(v).match(/^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})/)
+  if (!m) return null
+  const d = new Date(Date.UTC(+m[1], +m[2] - 1, +m[3], +m[4] - 3, +m[5]))
+  return d.toISOString().slice(0, 16).replace('T', ' ')
+}
+const utcNow = () => new Date().toISOString().slice(0, 16).replace('T', ' ')
+
 const activeAds = () =>
   db
     .prepare(
-      `SELECT * FROM ads WHERE active = 1 AND (ends_at IS NULL OR ends_at >= datetime('now'))
+      `SELECT * FROM ads WHERE active = 1
+         AND (starts_at IS NULL OR starts_at <= datetime('now'))
+         AND (ends_at IS NULL OR ends_at >= datetime('now'))
        ORDER BY featured DESC, id DESC`,
     )
     .all()
@@ -918,13 +930,19 @@ app.get('/api/admin/ads', adminRequired, (_req, res) => {
 })
 
 app.post('/api/admin/ads', adminRequired, (req, res) => {
-  const { title, image, link, price, duration_days, featured, active } = req.body || {}
+  const { title, image, link, price, duration_days, featured, active, starts_at, ends_at } = req.body || {}
   if (!title) return res.status(400).json({ error: 'title_required' })
   const days = Number(duration_days) || 30
+  const start = localToUtc(starts_at) || utcNow()
+  // نهاية صريحة، أو حسابها من المدة
+  const end =
+    localToUtc(ends_at) ||
+    new Date(Date.now() + days * 86400000).toISOString().slice(0, 16).replace('T', ' ')
+
   const info = db
     .prepare(
-      `INSERT INTO ads (title, image, link, price, duration_days, ends_at, featured, active)
-       VALUES (?, ?, ?, ?, ?, datetime('now', ?), ?, ?)`,
+      `INSERT INTO ads (title, image, link, price, duration_days, starts_at, ends_at, featured, active)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     )
     .run(
       title,
@@ -932,7 +950,8 @@ app.post('/api/admin/ads', adminRequired, (req, res) => {
       link || null,
       price ? Number(price) : null,
       days,
-      `+${days} days`,
+      start,
+      end,
       featured ? 1 : 0,
       active === false ? 0 : 1,
     )
@@ -942,13 +961,15 @@ app.post('/api/admin/ads', adminRequired, (req, res) => {
 app.patch('/api/admin/ads/:id', adminRequired, (req, res) => {
   const ad = db.prepare('SELECT * FROM ads WHERE id = ?').get(req.params.id)
   if (!ad) return res.status(404).json({ error: 'not_found' })
-  const fields = ['title', 'image', 'link', 'price', 'duration_days', 'featured', 'active']
+  const fields = ['title', 'image', 'link', 'price', 'duration_days', 'featured', 'active', 'starts_at', 'ends_at']
   const updates = []
   const params = []
   for (const f of fields) {
     if (req.body?.[f] !== undefined) {
       updates.push(`${f} = ?`)
-      params.push(['featured', 'active'].includes(f) ? (req.body[f] ? 1 : 0) : req.body[f])
+      if (['featured', 'active'].includes(f)) params.push(req.body[f] ? 1 : 0)
+      else if (f === 'starts_at' || f === 'ends_at') params.push(localToUtc(req.body[f]))
+      else params.push(req.body[f])
     }
   }
   if (updates.length) {

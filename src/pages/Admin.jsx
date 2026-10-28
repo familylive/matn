@@ -383,7 +383,7 @@ function Reports() {
 
 function Ads() {
   const [ads, setAds] = useState([])
-  const [form, setForm] = useState({ title: '', link: '', price: '', duration_days: 30, featured: true })
+  const [form, setForm] = useState({ title: '', link: '', price: '', duration_days: 30, featured: true, starts_at: '', ends_at: '' })
   const [image, setImage] = useState('')
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState('')
@@ -408,7 +408,7 @@ function Ads() {
         method: 'POST',
         body: { ...form, price: form.price ? Number(form.price) : null, image },
       })
-      setForm({ title: '', link: '', price: '', duration_days: 30, featured: true })
+      setForm({ title: '', link: '', price: '', duration_days: 30, featured: true, starts_at: '', ends_at: '' })
       setImage('')
       load()
     } catch (e2) { setErr(e2.message) } finally { setBusy(false) }
@@ -446,6 +446,21 @@ function Ads() {
             onChange={(e) => setForm({ ...form, duration_days: e.target.value })}
             className="px-3 py-2 border border-[#E3D9BF] rounded-lg text-sm" />
         </div>
+        <div className="grid grid-cols-2 gap-2">
+          <div>
+            <label className="text-[11px] text-gray-500">يبدأ (تاريخ ووقت)</label>
+            <input type="datetime-local" value={form.starts_at}
+              onChange={(e) => setForm({ ...form, starts_at: e.target.value })}
+              className="w-full mt-1 px-2 py-2 border border-[#E3D9BF] rounded-lg text-xs" />
+          </div>
+          <div>
+            <label className="text-[11px] text-gray-500">ينتهي (تاريخ ووقت)</label>
+            <input type="datetime-local" value={form.ends_at}
+              onChange={(e) => setForm({ ...form, ends_at: e.target.value })}
+              className="w-full mt-1 px-2 py-2 border border-[#E3D9BF] rounded-lg text-xs" />
+          </div>
+        </div>
+        <p className="text-[10px] text-gray-400 -mt-1">اتركهما فاضيين = يبدأ الآن وينتهي حسب المدة بالأيام</p>
         <input placeholder="رابط (اختياري)" value={form.link}
           onChange={(e) => setForm({ ...form, link: e.target.value })}
           className="w-full px-3 py-2 border border-[#E3D9BF] rounded-lg text-sm" />
@@ -464,8 +479,16 @@ function Ads() {
             <div className="flex-1 min-w-0">
               <p className="font-bold text-sm text-[#11221A] truncate">{ad.title}</p>
               <p className="text-[11px] text-gray-500">
-                {ad.price ? `${ad.price} ر.س · ` : ''}ينتهي {ad.ends_at?.slice(0, 10)}{ad.featured ? ' · ★' : ''}
+                {ad.price ? `${ad.price} ر.س · ` : ''}
+                {ad.starts_at?.slice(0, 10)} ← {ad.ends_at?.slice(0, 10)}{ad.featured ? ' · ★' : ''}
               </p>
+              {(() => {
+                const now = new Date().toISOString().slice(0, 16).replace('T', ' ')
+                const st = ad.starts_at && ad.starts_at > now ? 'sched' : ad.ends_at && ad.ends_at < now ? 'ended' : 'live'
+                const map = { sched: ['⏳ مجدول', 'bg-amber-50 text-amber-600'], ended: ['⏹ منتهي', 'bg-gray-100 text-gray-500'], live: ['● يعمل الآن', 'bg-[#E9F5EE] text-[#006C35]'] }
+                const [txt, cls] = map[st]
+                return <span className={`inline-block mt-1 text-[10px] font-bold px-1.5 py-0.5 rounded ${cls}`}>{txt}</span>
+              })()}
             </div>
             <button onClick={() => toggle(ad, 'active')} className={`text-[11px] px-2 py-1 rounded-lg ${ad.active ? 'bg-[#E9F5EE] text-[#006C35]' : 'bg-gray-100 text-gray-500'}`}>
               {ad.active ? 'مفعّل' : 'موقوف'}
