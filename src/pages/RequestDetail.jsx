@@ -114,6 +114,7 @@ export default function RequestDetail() {
   const [now, setNow] = useState(Date.now())
   const [pay, setPay] = useState({ method: 'cash', phone: '', busy: false, done: false })
   const [fees, setFees] = useState({ customer: 7.5, expert: 7.5 })
+  const [myExpert, setMyExpert] = useState(null)
   const [invoices, setInvoices] = useState(null)
 
   useEffect(() => {
@@ -122,6 +123,10 @@ export default function RequestDetail() {
       .then((d) => setFees({ customer: Number(d.commission_customer) || 0, expert: Number(d.commission_expert) || 0 }))
       .catch(() => {})
   }, [])
+
+  useEffect(() => {
+    if (isAuthenticated) api.get('/api/me/expert').then(setMyExpert).catch(() => {})
+  }, [isAuthenticated])
 
   useEffect(() => {
     const timer = setInterval(() => setNow(Date.now()), 1000)
@@ -175,11 +180,7 @@ export default function RequestDetail() {
     setError('')
     if (!isAuthenticated) return navigate('/login')
     try {
-      await api.placeBid(id, {
-        expertId: Number(bid.expertId),
-        amount: Number(bid.amount),
-        note: bid.note,
-      })
+      await api.placeBid(id, { amount: Number(bid.amount), note: bid.note })
       setBid({ expertId: '', amount: '', note: '' })
     } catch (err) {
       setError(err.message)
@@ -266,7 +267,7 @@ export default function RequestDetail() {
           {data.number ? <span className="text-xs text-gray-400 me-1">#{data.number}</span> : null}
           {data.title}
         </h1>
-        <span className={`ms-auto text-xs font-bold ${ended ? 'text-red-500' : 'text-[#006C35]'}`}>
+        <span className={`ms-auto text-xs font-extrabold px-2 py-1 rounded-lg ${ended ? 'bg-red-100 text-red-600' : 'bg-red-50 text-red-600'}`}>
           {ended ? 'انتهى المزاد' : mmss ? `⏱ ${mmss}` : ''}
         </span>
         {live && <span className="text-xs text-green-600">●</span>}
@@ -334,9 +335,9 @@ export default function RequestDetail() {
           {data.bids.length === 0 && <p className="text-sm text-gray-500">{t('rd.none')}</p>}
         </div>
 
-        {data.status === 'open' && !ended && (
+        {data.status === 'open' && !ended && myExpert && (
           <form onSubmit={placeBid} className="bg-white rounded-xl p-4 border border-gray-100 mt-5 space-y-3">
-            <h3 className="font-semibold text-gray-900 text-sm">{t('rd.placeBid')}</h3>
+            <h3 className="font-semibold text-gray-900 text-sm">قدّم سومتك</h3>
             <select
               required
               value={bid.expertId}

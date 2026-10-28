@@ -223,6 +223,12 @@ app.get('/api/experts', (req, res) => {
   res.json(rows.map((r) => ({ ...r, skills: r.skills ? JSON.parse(r.skills) : [] })))
 })
 
+app.get('/api/me/expert', authRequired, (req, res) => {
+  const e = db.prepare('SELECT * FROM experts WHERE user_id = ?').get(req.userId)
+  if (!e) return res.json(null)
+  res.json({ ...e, skills: e.skills ? JSON.parse(e.skills) : [] })
+})
+
 app.get('/api/experts/:id/reviews', (req, res) => {
   res.json(
     db.prepare(
@@ -318,7 +324,7 @@ app.post('/api/requests', authRequired, (req, res) => {
   const info = db
     .prepare(
       `INSERT INTO requests (user_id, title, category, description, city, budget, lat, lng, ends_at, subcategory, warranty_days, number)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now', '+60 minutes'), ?, ?, ?)`,
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now', '+2 minutes'), ?, ?, ?)`,
     )
     .run(
       req.userId,
@@ -354,11 +360,13 @@ app.post('/api/requests/:id/bids', authRequired, (req, res) => {
   if (request.ends_at && new Date(request.ends_at.replace(' ', 'T') + 'Z') < new Date())
     return res.status(409).json({ error: 'auction_ended' })
 
-  const expertId = Number(req.body?.expertId)
+  const mine = db.prepare('SELECT * FROM experts WHERE user_id = ?').get(req.userId)
+  if (!mine) return res.status(403).json({ error: 'not_an_expert' })
+  if ((mine.verify_status || 'approved') !== 'approved') return res.status(403).json({ error: 'not_verified' })
+  const expertId = mine.id
   const amount = Number(req.body?.amount)
-  if (!expertId || !amount || amount <= 0) return res.status(400).json({ error: 'invalid_bid' })
-  const expert = db.prepare('SELECT * FROM experts WHERE id = ?').get(expertId)
-  if (!expert) return res.status(404).json({ error: 'expert_not_found' })
+  if (!amount || amount <= 0) return res.status(400).json({ error: 'invalid_bid' })
+  const expert = mine
 
   const info = db
     .prepare('INSERT INTO bids (request_id, expert_id, amount, note) VALUES (?, ?, ?, ?)')
