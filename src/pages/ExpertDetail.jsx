@@ -53,7 +53,7 @@ export default function ExpertDetail() {
 
         <div className="flex items-center gap-2 mt-3">
           <span className="text-yellow-500">★</span>
-          <span className="font-medium text-gray-900">{expert.rating}</span>
+          <span className="font-medium text-gray-900">{Number(expert.rating).toFixed(1)}</span>
           <span className="text-gray-400">•</span>
           <span className="text-gray-600 text-sm">{expert.reviews} {t('expert.reviews')}</span>
           {expert.emergency && (

@@ -311,7 +311,7 @@ export default function RequestDetail() {
               <div className="flex-1">
                 <p className="font-medium text-gray-900 text-sm">{(lang === 'ar' && b.expert_name_ar) || b.expert_name}</p>
                 <p className="text-xs text-gray-500">
-                  {t(`cat.${b.expert_job}`, b.expert_job)} · ★ {b.expert_rating}
+                  {t(`cat.${b.expert_job}`, b.expert_job)} · ★ {Number(b.expert_rating).toFixed(1)}
                   {b.distance_km != null ? ` · 📍 ${b.distance_km} كم` : ''}
                 </p>
                 {data.nearest_bid_id === b.id && (

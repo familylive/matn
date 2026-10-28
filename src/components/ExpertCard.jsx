@@ -25,7 +25,7 @@ export default function ExpertCard({ expert }) {
             <p className="text-[#006C35] text-sm font-semibold">{t(`cat.${expert.jobName}`, expert.jobName)}</p>
             <div className="flex items-center gap-2 mt-1.5">
               <span className="text-[#C9A227]">★</span>
-              <span className="text-sm font-bold text-gray-900">{expert.rating}</span>
+              <span className="text-sm font-bold text-gray-900">{Number(expert.rating).toFixed(1)}</span>
               <span className="text-gray-300">•</span>
               <span className="text-xs text-gray-500">{expert.reviews} {t('expert.reviews')}</span>
             </div>
