@@ -9,7 +9,7 @@ import multer from 'multer'
 import { db } from './db.js'
 import { signToken, verifyToken, authRequired } from './auth.js'
 import { cities } from './cities.js'
-import { seedAdmin, checkAdmin, adminToken, adminRequired } from './admin.js'
+import { seedAdmin, checkAdmin, adminToken, adminRequired, hashPassword } from './admin.js'
 import { seedBots, onNewRequest, resumeBots } from './bots.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
@@ -100,7 +100,7 @@ app.post('/api/auth/register', authRequired, (req, res) => {
   const b = req.body || {}
   const name = String(b.name || '').trim()
   if (!name) return res.status(400).json({ error: 'name_required' })
-  const role = b.role === 'expert' ? 'expert' : 'customer'
+  const role = ['expert', 'support', 'customer'].includes(b.role) ? b.role : 'customer'
 
   db.prepare(
     `UPDATE users SET name = ?, city = ?, role = ?, email = ?, nationality = ?, specialty = ?,
@@ -398,17 +398,124 @@ app.get('/api/admin/overview', adminRequired, (_req, res) => {
   })
 })
 
-app.get('/api/admin/requests', adminRequired, (_req, res) => {
+app.get('/api/admin/requests', adminRequired, (req, res) => {
+  const scope = req.query.scope
+  const where =
+    scope === 'active' ? "WHERE r.status IN ('open','assigned')"
+    : scope === 'closed' ? "WHERE r.status IN ('done','canceled')"
+    : ''
   res.json(
     db
       .prepare(
         `SELECT r.*, u.name AS owner_name, u.phone AS owner_phone,
           (SELECT COUNT(*) FROM bids b WHERE b.request_id = r.id) AS bids_count,
           (SELECT MIN(amount) FROM bids b WHERE b.request_id = r.id) AS lowest_bid
-         FROM requests r JOIN users u ON u.id = r.user_id ORDER BY r.id DESC LIMIT 200`,
+         FROM requests r JOIN users u ON u.id = r.user_id ${where} ORDER BY r.id DESC LIMIT 300`,
       )
       .all(),
   )
+})
+
+/* ---------- users & admins management ---------- */
+
+const publicUser = (u) => ({
+  id: u.id, name: u.name, phone: u.phone, city: u.city, role: u.role,
+  email: u.email, status: u.status, created_at: u.created_at, last_seen: u.last_seen,
+  online: u.last_seen && new Date(u.last_seen.replace(' ', 'T') + 'Z').getTime() > Date.now() - 120000 ? 1 : 0,
+})
+
+app.get('/api/admin/users', adminRequired, (req, res) => {
+  const role = req.query.role
+  const rows = role
+    ? db.prepare('SELECT * FROM users WHERE role = ? ORDER BY id DESC').all(role)
+    : db.prepare('SELECT * FROM users ORDER BY id DESC').all()
+  res.json(rows.map(publicUser))
+})
+
+app.patch('/api/admin/users/:id', adminRequired, (req, res) => {
+  const u = db.prepare('SELECT * FROM users WHERE id = ?').get(req.params.id)
+  if (!u) return res.status(404).json({ error: 'not_found' })
+  const b = req.body || {}
+  const fields = ['name', 'phone', 'city', 'role', 'status', 'email', 'specialty']
+  const sets = []
+  const params = []
+  for (const f of fields) if (b[f] !== undefined) { sets.push(`${f} = ?`); params.push(b[f]) }
+  if (sets.length) db.prepare(`UPDATE users SET ${sets.join(', ')} WHERE id = ?`).run(...params, u.id)
+  res.json(publicUser(db.prepare('SELECT * FROM users WHERE id = ?').get(u.id)))
+})
+
+app.delete('/api/admin/users/:id', adminRequired, (req, res) => {
+  const u = db.prepare('SELECT * FROM users WHERE id = ?').get(req.params.id)
+  if (!u) return res.status(404).json({ error: 'not_found' })
+  db.prepare('DELETE FROM bids WHERE expert_id IN (SELECT id FROM experts WHERE user_id = ?)').run(u.id)
+  db.prepare('DELETE FROM experts WHERE user_id = ?').run(u.id)
+  db.prepare('DELETE FROM requests WHERE user_id = ?').run(u.id)
+  db.prepare('DELETE FROM users WHERE id = ?').run(u.id)
+  res.json({ ok: true })
+})
+
+app.get('/api/admin/admins', adminRequired, (_req, res) => {
+  res.json(db.prepare('SELECT id, email, name, status, id AS created_at FROM admins ORDER BY id').all())
+})
+
+app.post('/api/admin/admins', adminRequired, (req, res) => {
+  const { email, password, name } = req.body || {}
+  if (!email || !password) return res.status(400).json({ error: 'email_and_password_required' })
+  const exists = db.prepare('SELECT id FROM admins WHERE email = ?').get(email.trim().toLowerCase())
+  if (exists) return res.status(409).json({ error: 'email_exists' })
+  const info = db.prepare('INSERT INTO admins (email, password_hash, name) VALUES (?, ?, ?)').run(
+    email.trim().toLowerCase(), hashPassword(password), name || null,
+  )
+  res.status(201).json({ id: info.lastInsertRowid, email, name, status: 'active' })
+})
+
+app.patch('/api/admin/admins/:id', adminRequired, (req, res) => {
+  const a = db.prepare('SELECT * FROM admins WHERE id = ?').get(req.params.id)
+  if (!a) return res.status(404).json({ error: 'not_found' })
+  const { status, name } = req.body || {}
+  if (status) db.prepare('UPDATE admins SET status = ? WHERE id = ?').run(status, a.id)
+  if (name !== undefined) db.prepare('UPDATE admins SET name = ? WHERE id = ?').run(name, a.id)
+  res.json(db.prepare('SELECT id, email, name, status FROM admins WHERE id = ?').get(a.id))
+})
+
+app.delete('/api/admin/admins/:id', adminRequired, (req, res) => {
+  const count = db.prepare('SELECT COUNT(*) c FROM admins').get().c
+  if (count <= 1) return res.status(409).json({ error: 'last_admin' })
+  db.prepare('DELETE FROM admins WHERE id = ?').run(req.params.id)
+  res.json({ ok: true })
+})
+
+/* ---------- reports ---------- */
+
+app.get('/api/admin/reports', adminRequired, (_req, res) => {
+  const one = (sql, ...p) => db.prepare(sql).get(...p)
+  const byCategory = db.prepare(
+    `SELECT category, COUNT(*) c, COALESCE(SUM(CASE WHEN status='done' THEN 1 ELSE 0 END),0) done
+     FROM requests GROUP BY category ORDER BY c DESC`,
+  ).all()
+  const byCity = db.prepare(
+    `SELECT COALESCE(city,'غير محدد') city, COUNT(*) c FROM requests GROUP BY city ORDER BY c DESC LIMIT 10`,
+  ).all()
+  const daily = db.prepare(
+    `SELECT substr(created_at,1,10) d, COUNT(*) c FROM requests
+     WHERE created_at >= datetime('now','-14 days') GROUP BY d ORDER BY d`,
+  ).all()
+  res.json({
+    totals: {
+      requests: one('SELECT COUNT(*) c FROM requests').c,
+      done: one("SELECT COUNT(*) c FROM requests WHERE status='done'").c,
+      open: one("SELECT COUNT(*) c FROM requests WHERE status IN ('open','assigned')").c,
+      users: one('SELECT COUNT(*) c FROM users').c,
+      experts: one('SELECT COUNT(*) c FROM experts').c,
+      bids: one('SELECT COUNT(*) c FROM bids').c,
+      invoices: one('SELECT COUNT(*) c FROM invoices').c,
+      revenue: one('SELECT COALESCE(SUM(amount),0) s FROM invoices').s,
+      avg_bid: Math.round(one('SELECT COALESCE(AVG(amount),0) a FROM bids').a),
+    },
+    byCategory,
+    byCity,
+    daily,
+  })
 })
 
 app.get('/api/admin/invoices', adminRequired, (_req, res) => {

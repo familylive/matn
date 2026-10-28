@@ -9,11 +9,7 @@ async function api(path, { method = 'GET', body, form } = {}) {
   const token = getToken()
   if (token) headers.authorization = `Bearer ${token}`
   if (!form) headers['content-type'] = 'application/json'
-  const res = await fetch(path, {
-    method,
-    headers,
-    body: form ? form : body ? JSON.stringify(body) : undefined,
-  })
+  const res = await fetch(path, { method, headers, body: form ? form : body ? JSON.stringify(body) : undefined })
   const data = await res.json().catch(() => ({}))
   if (!res.ok) throw new Error(data.error || `http_${res.status}`)
   return data
@@ -49,41 +45,53 @@ function Login({ onDone }) {
           <p className="text-white/60 text-sm">الدخول للإدارة فقط</p>
         </div>
         <form onSubmit={submit} className="bg-white rounded-2xl p-5 space-y-3">
-          <input
-            type="email" required placeholder="الإيميل"
-            value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })}
-            className="w-full px-3 py-2.5 border border-[#E3D9BF] rounded-xl outline-none focus:border-[#006C35]"
-          />
-          <input
-            type="password" required placeholder="كلمة المرور"
-            value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })}
-            className="w-full px-3 py-2.5 border border-[#E3D9BF] rounded-xl outline-none focus:border-[#006C35]"
-          />
+          <input type="email" required placeholder="الإيميل" value={form.email}
+            onChange={(e) => setForm({ ...form, email: e.target.value })}
+            className="w-full px-3 py-2.5 border border-[#E3D9BF] rounded-xl outline-none focus:border-[#006C35]" />
+          <input type="password" required placeholder="كلمة المرور" value={form.password}
+            onChange={(e) => setForm({ ...form, password: e.target.value })}
+            className="w-full px-3 py-2.5 border border-[#E3D9BF] rounded-xl outline-none focus:border-[#006C35]" />
           {error && <p className="text-red-500 text-sm">{error}</p>}
           <button disabled={busy} className="btn-primary">{busy ? 'جارٍ الدخول…' : 'دخول'}</button>
-          <button type="button" onClick={() => navigate('/')} className="w-full text-center text-sm text-gray-500 py-1">
-            ← رجوع للتطبيق
-          </button>
+          <button type="button" onClick={() => navigate('/')} className="w-full text-center text-sm text-gray-500 py-1">← رجوع للتطبيق</button>
         </form>
       </div>
     </div>
   )
 }
 
-const sections = [
+const NAV = [
   { key: 'overview', label: 'نظرة عامة', icon: '📊' },
+  { group: 'المستخدمون', items: [
+    { key: 'users:admins', label: 'الإدارة', icon: '🛡️' },
+    { key: 'users:experts', label: 'الفنيون', icon: '🧰' },
+    { key: 'users:customers', label: 'العملاء', icon: '🧑‍💼' },
+    { key: 'users:support', label: 'الدعم الفني', icon: '🎧' },
+  ]},
+  { group: 'الطلبات', items: [
+    { key: 'requests:active', label: 'النشطة', icon: '🟢' },
+    { key: 'requests:closed', label: 'المغلقة', icon: '⚪' },
+  ]},
+  { key: 'reports', label: 'التقارير', icon: '📈' },
   { key: 'ads', label: 'الإعلانات', icon: '📣' },
-  { key: 'requests', label: 'الطلبات', icon: '📋' },
   { key: 'invoices', label: 'الفواتير', icon: '🧾' },
   { key: 'cities', label: 'طلبات المدن', icon: '📍' },
   { key: 'backup', label: 'النسخ الاحتياطي', icon: '💾' },
 ]
 
-function Stat({ label, value }) {
+const TITLES = {
+  overview: 'نظرة عامة', reports: 'التقارير', ads: 'الإعلانات', invoices: 'الفواتير',
+  cities: 'طلبات المدن', backup: 'النسخ الاحتياطي',
+  'users:admins': 'المستخدمون — الإدارة', 'users:experts': 'المستخدمون — الفنيون',
+  'users:customers': 'المستخدمون — العملاء', 'users:support': 'المستخدمون — الدعم الفني',
+  'requests:active': 'الطلبات — النشطة', 'requests:closed': 'الطلبات — المغلقة',
+}
+
+function Stat({ label, value, accent }) {
   return (
     <div className="card-lux p-4">
       <p className="text-xs text-gray-500">{label}</p>
-      <p className="text-2xl font-extrabold text-[#006C35] mt-1">{value}</p>
+      <p className={`text-2xl font-extrabold mt-1 ${accent || 'text-[#006C35]'}`}>{value}</p>
     </div>
   )
 }
@@ -98,11 +106,240 @@ function Overview() {
       <Stat label="طلبات مفتوحة" value={s.open_requests} />
       <Stat label="السومات" value={s.bids} />
       <Stat label="المستخدمون" value={s.users} />
-      <Stat label="الحرفيون" value={s.experts} />
+      <Stat label="الفنيون" value={s.experts} />
       <Stat label="الإعلانات" value={s.ads} />
       <Stat label="الفواتير" value={s.invoices} />
-      <Stat label="إجمالي الفواتير" value={`${s.invoices_total} د`} />
-      <Stat label="طلبات مدن جديدة" value={s.city_requests} />
+      <Stat label="إجمالي الفواتير" value={`${s.invoices_total} ر.س`} />
+      <Stat label="طلبات مدن جديدة" value={s.city_requests} accent="text-[#8a6d13]" />
+    </div>
+  )
+}
+
+function UserRow({ u, type, onChanged }) {
+  const [edit, setEdit] = useState(false)
+  const [form, setForm] = useState(u)
+  const active = u.status !== 'suspended'
+
+  const save = async () => {
+    if (type === 'admins') await api(`/api/admin/admins/${u.id}`, { method: 'PATCH', body: { name: form.name } })
+    else await api(`/api/admin/users/${u.id}`, {
+      method: 'PATCH',
+      body: { name: form.name, phone: form.phone, city: form.city, role: form.role, email: form.email },
+    })
+    setEdit(false)
+    onChanged()
+  }
+
+  const toggle = async () => {
+    const status = active ? 'suspended' : 'active'
+    if (type === 'admins') await api(`/api/admin/admins/${u.id}`, { method: 'PATCH', body: { status } })
+    else await api(`/api/admin/users/${u.id}`, { method: 'PATCH', body: { status } })
+    onChanged()
+  }
+
+  const remove = async () => {
+    if (!confirm(`حذف ${u.name || u.email}؟`)) return
+    try {
+      if (type === 'admins') await api(`/api/admin/admins/${u.id}`, { method: 'DELETE' })
+      else await api(`/api/admin/users/${u.id}`, { method: 'DELETE' })
+      onChanged()
+    } catch (e) {
+      alert(e.message === 'last_admin' ? 'ما يمكن حذف آخر مدير' : 'تعذّر الحذف')
+    }
+  }
+
+  return (
+    <div className="card-lux p-3">
+      {!edit ? (
+        <>
+          <div className="flex items-start justify-between gap-2">
+            <div className="min-w-0">
+              <p className="font-bold text-sm text-[#11221A] truncate">
+                {u.name || u.email || u.phone || 'بدون اسم'}
+                {u.online ? <span className="ms-2 text-green-500 text-xs">●</span> : null}
+              </p>
+              <p className="text-[11px] text-gray-500">
+                {u.email || u.phone} {u.city ? `· ${u.city}` : ''}
+              </p>
+            </div>
+            <span className={`text-[10px] px-2 py-1 rounded-full font-bold whitespace-nowrap ${active ? 'bg-[#E9F5EE] text-[#006C35]' : 'bg-red-50 text-red-500'}`}>
+              {active ? 'مفعّل' : 'موقوف'}
+            </span>
+          </div>
+          <div className="flex gap-2 mt-2">
+            <button onClick={() => { setForm(u); setEdit(true) }} className="text-[11px] bg-[#FBF5E3] text-[#8a6d13] px-2.5 py-1 rounded-lg font-bold">تعديل</button>
+            <button onClick={toggle} className="text-[11px] bg-[#E9F5EE] text-[#006C35] px-2.5 py-1 rounded-lg font-bold">
+              {active ? 'إيقاف' : 'تفعيل'}
+            </button>
+            <button onClick={remove} className="text-[11px] bg-red-50 text-red-500 px-2.5 py-1 rounded-lg font-bold">حذف</button>
+          </div>
+        </>
+      ) : (
+        <div className="space-y-2">
+          <input value={form.name || ''} onChange={(e) => setForm({ ...form, name: e.target.value })}
+            placeholder="الاسم" className="w-full px-2 py-1.5 border border-[#E3D9BF] rounded-lg text-sm" />
+          {type !== 'admins' && (
+            <>
+              <input value={form.phone || ''} onChange={(e) => setForm({ ...form, phone: e.target.value })}
+                placeholder="الجوال" className="w-full px-2 py-1.5 border border-[#E3D9BF] rounded-lg text-sm" />
+              <input value={form.city || ''} onChange={(e) => setForm({ ...form, city: e.target.value })}
+                placeholder="المدينة" className="w-full px-2 py-1.5 border border-[#E3D9BF] rounded-lg text-sm" />
+              <input value={form.email || ''} onChange={(e) => setForm({ ...form, email: e.target.value })}
+                placeholder="الإيميل" className="w-full px-2 py-1.5 border border-[#E3D9BF] rounded-lg text-sm" />
+              <select value={form.role || 'customer'} onChange={(e) => setForm({ ...form, role: e.target.value })}
+                className="w-full px-2 py-1.5 border border-[#E3D9BF] rounded-lg text-sm bg-white">
+                <option value="customer">عميل</option>
+                <option value="expert">فني</option>
+                <option value="support">دعم فني</option>
+              </select>
+            </>
+          )}
+          <div className="flex gap-2">
+            <button onClick={save} className="flex-1 bg-[#006C35] text-white py-1.5 rounded-lg text-sm font-bold">حفظ</button>
+            <button onClick={() => setEdit(false)} className="px-3 py-1.5 rounded-lg text-sm border border-gray-200">إلغاء</button>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function Users({ type }) {
+  const [rows, setRows] = useState([])
+  const [addOpen, setAddOpen] = useState(false)
+  const [nf, setNf] = useState({ email: '', password: '', name: '' })
+  const [err, setErr] = useState('')
+
+  const load = () => {
+    const path = type === 'admins' ? '/api/admin/admins' : `/api/admin/users?role=${type}`
+    api(path).then(setRows).catch(() => {})
+  }
+  useEffect(load, [type])
+
+  const addAdmin = async (e) => {
+    e.preventDefault()
+    setErr('')
+    try {
+      await api('/api/admin/admins', { method: 'POST', body: nf })
+      setAddOpen(false)
+      setNf({ email: '', password: '', name: '' })
+      load()
+    } catch (e2) {
+      setErr(e2.message === 'email_exists' ? 'الإيميل مستخدم' : 'تعذّر الإضافة')
+    }
+  }
+
+  return (
+    <div className="space-y-2">
+      {type === 'admins' && (
+        <div className="mb-2">
+          {!addOpen ? (
+            <button onClick={() => setAddOpen(true)} className="btn-primary">+ إضافة مدير</button>
+          ) : (
+            <form onSubmit={addAdmin} className="card-lux p-3 space-y-2">
+              <input placeholder="الاسم" value={nf.name} onChange={(e) => setNf({ ...nf, name: e.target.value })}
+                className="w-full px-2 py-1.5 border border-[#E3D9BF] rounded-lg text-sm" />
+              <input placeholder="الإيميل" type="email" required value={nf.email} onChange={(e) => setNf({ ...nf, email: e.target.value })}
+                className="w-full px-2 py-1.5 border border-[#E3D9BF] rounded-lg text-sm" />
+              <input placeholder="كلمة المرور" type="text" required value={nf.password} onChange={(e) => setNf({ ...nf, password: e.target.value })}
+                className="w-full px-2 py-1.5 border border-[#E3D9BF] rounded-lg text-sm" />
+              {err && <p className="text-xs text-red-500">{err}</p>}
+              <div className="flex gap-2">
+                <button className="flex-1 bg-[#006C35] text-white py-1.5 rounded-lg text-sm font-bold">حفظ</button>
+                <button type="button" onClick={() => setAddOpen(false)} className="px-3 py-1.5 rounded-lg text-sm border border-gray-200">إلغاء</button>
+              </div>
+            </form>
+          )}
+        </div>
+      )}
+
+      {rows.map((u) => <UserRow key={u.id} u={u} type={type} onChanged={load} />)}
+      {rows.length === 0 && <p className="text-sm text-gray-500">ما فيه بيانات.</p>}
+    </div>
+  )
+}
+
+function Requests({ scope }) {
+  const [rows, setRows] = useState([])
+  useEffect(() => {
+    api(`/api/admin/requests?scope=${scope}`).then(setRows).catch(() => {})
+  }, [scope])
+
+  const statusAr = { open: 'مفتوح', assigned: 'مُسند', done: 'مكتمل', canceled: 'ملغي' }
+
+  return (
+    <div className="space-y-2">
+      <p className="text-xs text-gray-500">{rows.length} طلب</p>
+      {rows.map((r) => (
+        <div key={r.id} className="card-lux p-3">
+          <div className="flex items-center justify-between gap-2">
+            <p className="font-bold text-sm text-[#11221A] truncate">{r.title}</p>
+            <span className="text-[10px] px-2 py-1 rounded-full bg-gray-100 text-gray-600 whitespace-nowrap">
+              {statusAr[r.status] || r.status}
+            </span>
+          </div>
+          <p className="text-[11px] text-gray-500 mt-1">
+            {r.owner_name || 'بدون اسم'} · {r.city || '—'} · {r.bids_count} سومة
+            {r.lowest_bid ? ` · الأقل ${r.lowest_bid}` : ''}
+          </p>
+          <p className="text-[10px] text-gray-400 mt-1">{r.created_at}</p>
+        </div>
+      ))}
+      {rows.length === 0 && <p className="text-sm text-gray-500">ما فيه طلبات.</p>}
+    </div>
+  )
+}
+
+function Reports() {
+  const [r, setR] = useState(null)
+  useEffect(() => { api('/api/admin/reports').then(setR).catch(() => {}) }, [])
+  if (!r) return <p className="text-gray-500">جارٍ التحميل…</p>
+  const max = Math.max(1, ...r.daily.map((d) => d.c))
+  return (
+    <div className="space-y-4">
+      <div className="grid grid-cols-2 gap-3">
+        <Stat label="إجمالي الطلبات" value={r.totals.requests} />
+        <Stat label="مكتملة" value={r.totals.done} />
+        <Stat label="نشطة" value={r.totals.open} accent="text-[#8a6d13]" />
+        <Stat label="متوسط السومة" value={`${r.totals.avg_bid} ر.س`} />
+        <Stat label="الإيراد (فواتير)" value={`${r.totals.revenue} ر.س`} />
+        <Stat label="الفنيون" value={r.totals.experts} />
+      </div>
+
+      <div className="card-lux p-4">
+        <p className="font-extrabold text-sm mb-3">آخر ١٤ يوم</p>
+        <div className="flex items-end gap-1 h-24">
+          {r.daily.map((d) => (
+            <div key={d.d} className="flex-1 flex flex-col items-center gap-1">
+              <div className="w-full bg-[#006C35] rounded-t" style={{ height: `${(d.c / max) * 80}px` }} />
+              <span className="text-[8px] text-gray-400">{d.d.slice(5)}</span>
+            </div>
+          ))}
+          {r.daily.length === 0 && <p className="text-xs text-gray-500">لا بيانات</p>}
+        </div>
+      </div>
+
+      <div className="card-lux p-4">
+        <p className="font-extrabold text-sm mb-2">حسب التخصص</p>
+        {r.byCategory.map((c) => (
+          <div key={c.category} className="flex items-center justify-between text-sm py-1">
+            <span className="text-gray-700">{c.category}</span>
+            <span className="text-gray-500">{c.c} طلب · {c.done} مكتمل</span>
+          </div>
+        ))}
+        {r.byCategory.length === 0 && <p className="text-xs text-gray-500">لا بيانات</p>}
+      </div>
+
+      <div className="card-lux p-4">
+        <p className="font-extrabold text-sm mb-2">أعلى المدن</p>
+        {r.byCity.map((c) => (
+          <div key={c.city} className="flex items-center justify-between text-sm py-1">
+            <span className="text-gray-700">{c.city}</span>
+            <span className="text-gray-500">{c.c}</span>
+          </div>
+        ))}
+        {r.byCity.length === 0 && <p className="text-xs text-gray-500">لا بيانات</p>}
+      </div>
     </div>
   )
 }
@@ -120,14 +357,15 @@ function Ads() {
   const upload = async (file) => {
     const fd = new FormData()
     fd.append('image', file)
-    const r = await api('/api/admin/upload', { method: 'POST', form: fd })
-    setImage(r.url)
+    try {
+      const r = await api('/api/admin/upload', { method: 'POST', form: fd })
+      setImage(r.url)
+    } catch { setErr('تعذّر رفع الصورة') }
   }
 
   const create = async (e) => {
     e.preventDefault()
-    setBusy(true)
-    setErr('')
+    setBusy(true); setErr('')
     try {
       await api('/api/admin/ads', {
         method: 'POST',
@@ -136,18 +374,13 @@ function Ads() {
       setForm({ title: '', link: '', price: '', duration_days: 30, featured: true })
       setImage('')
       load()
-    } catch (e2) {
-      setErr(e2.message)
-    } finally {
-      setBusy(false)
-    }
+    } catch (e2) { setErr(e2.message) } finally { setBusy(false) }
   }
 
   const toggle = async (ad, field) => {
     await api(`/api/admin/ads/${ad.id}`, { method: 'PATCH', body: { [field]: ad[field] ? 0 : 1 } })
     load()
   }
-
   const remove = async (ad) => {
     if (!confirm('حذف الإعلان؟')) return
     await api(`/api/admin/ads/${ad.id}`, { method: 'DELETE' })
@@ -164,18 +397,15 @@ function Ads() {
           className="w-full px-3 py-2 border border-[#E3D9BF] rounded-lg text-sm" />
         <div>
           <label className="text-xs text-gray-500">صورة الإعلان (من جوالك)</label>
-          <input
-            type="file" accept="image/*"
-            onChange={(e) => e.target.files?.[0] && upload(e.target.files[0])}
-            className="w-full text-sm mt-1"
-          />
+          <input type="file" accept="image/*" onChange={(e) => e.target.files?.[0] && upload(e.target.files[0])}
+            className="w-full text-sm mt-1" />
           {image && <img src={image} alt="preview" className="mt-2 h-24 rounded-lg object-cover" />}
         </div>
         <div className="grid grid-cols-2 gap-2">
-          <input type="number" placeholder="السعر (دينار)" value={form.price}
+          <input type="number" placeholder="السعر (ريال)" value={form.price}
             onChange={(e) => setForm({ ...form, price: e.target.value })}
             className="px-3 py-2 border border-[#E3D9BF] rounded-lg text-sm" />
-          <input type="number" min="1" placeholder="مدة العرض (أيام)" value={form.duration_days}
+          <input type="number" min="1" placeholder="المدة (أيام)" value={form.duration_days}
             onChange={(e) => setForm({ ...form, duration_days: e.target.value })}
             className="px-3 py-2 border border-[#E3D9BF] rounded-lg text-sm" />
         </div>
@@ -193,50 +423,21 @@ function Ads() {
       <div className="space-y-2">
         {ads.map((ad) => (
           <div key={ad.id} className="card-lux p-3 flex items-center gap-3">
-            {ad.image ? (
-              <img src={ad.image} alt={ad.title} className="w-16 h-12 rounded-lg object-cover" />
-            ) : (
-              <div className="w-16 h-12 rounded-lg bg-gray-100" />
-            )}
+            {ad.image ? <img src={ad.image} alt={ad.title} className="w-16 h-12 rounded-lg object-cover" /> : <div className="w-16 h-12 rounded-lg bg-gray-100" />}
             <div className="flex-1 min-w-0">
               <p className="font-bold text-sm text-[#11221A] truncate">{ad.title}</p>
               <p className="text-[11px] text-gray-500">
-                {ad.price ? `${ad.price} د · ` : ''}ينتهي {ad.ends_at?.slice(0, 10)}
-                {ad.featured ? ' · ★ مميز' : ''}
+                {ad.price ? `${ad.price} ر.س · ` : ''}ينتهي {ad.ends_at?.slice(0, 10)}{ad.featured ? ' · ★' : ''}
               </p>
             </div>
             <button onClick={() => toggle(ad, 'active')} className={`text-[11px] px-2 py-1 rounded-lg ${ad.active ? 'bg-[#E9F5EE] text-[#006C35]' : 'bg-gray-100 text-gray-500'}`}>
               {ad.active ? 'مفعّل' : 'موقوف'}
-            </button>
-            <button onClick={() => toggle(ad, 'featured')} className="text-[11px] px-2 py-1 rounded-lg bg-[#FBF5E3] text-[#8a6d13]">
-              {ad.featured ? '★' : '☆'}
             </button>
             <button onClick={() => remove(ad)} className="text-[11px] text-red-500 px-1">حذف</button>
           </div>
         ))}
         {ads.length === 0 && <p className="text-sm text-gray-500">ما فيه إعلانات بعد.</p>}
       </div>
-    </div>
-  )
-}
-
-function Requests() {
-  const [rows, setRows] = useState([])
-  useEffect(() => { api('/api/admin/requests').then(setRows).catch(() => {}) }, [])
-  return (
-    <div className="space-y-2">
-      {rows.map((r) => (
-        <div key={r.id} className="card-lux p-3">
-          <div className="flex items-center justify-between">
-            <p className="font-bold text-sm text-[#11221A]">{r.title}</p>
-            <span className="text-[11px] text-gray-500">{r.status}</span>
-          </div>
-          <p className="text-[11px] text-gray-500 mt-1">
-            {r.owner_name} · {r.city} · {r.bids_count} سومة · {r.created_at}
-          </p>
-        </div>
-      ))}
-      {rows.length === 0 && <p className="text-sm text-gray-500">ما فيه طلبات.</p>}
     </div>
   )
 }
@@ -252,7 +453,7 @@ function Invoices() {
             <p className="font-bold text-sm text-[#11221A]">{i.number}</p>
             <p className="text-[11px] text-gray-500">{i.request_title} · {i.owner_name} · {i.issued_at}</p>
           </div>
-          <span className="chip-gold">{i.amount} د</span>
+          <span className="chip-gold">{i.amount} ر.س</span>
         </div>
       ))}
       {rows.length === 0 && <p className="text-sm text-gray-500">ما فيه فواتير بعد.</p>}
@@ -278,9 +479,7 @@ function CityRequests() {
           </div>
           {c.status === 'new' ? (
             <button onClick={() => done(c.id)} className="text-[11px] bg-[#E9F5EE] text-[#006C35] px-2 py-1 rounded-lg">تمّت الإضافة</button>
-          ) : (
-            <span className="text-[11px] text-gray-400">مكتمل</span>
-          )}
+          ) : <span className="text-[11px] text-gray-400">مكتمل</span>}
         </div>
       ))}
       {rows.length === 0 && <p className="text-sm text-gray-500">ما فيه طلبات مدن.</p>}
@@ -295,7 +494,7 @@ function Backup() {
   const download = async () => {
     setBusy(true)
     try {
-      const res = await fetch('/api/admin/backup', { headers: { authorization: `Bearer ${localStorage.getItem(TOKEN_KEY)}` } })
+      const res = await fetch('/api/admin/backup', { headers: { authorization: `Bearer ${getToken()}` } })
       const blob = await res.blob()
       const url = URL.createObjectURL(blob)
       const a = document.createElement('a')
@@ -303,56 +502,30 @@ function Backup() {
       a.download = `mihnati-backup-${new Date().toISOString().slice(0, 10)}.json`
       a.click()
       URL.revokeObjectURL(url)
-      setMsg('تم تنزيل النسخة ✅ احفظها عندك')
-    } catch {
-      setMsg('تعذّر التنزيل')
-    } finally {
-      setBusy(false)
-    }
+      setMsg('تم تنزيل النسخة ✅')
+    } catch { setMsg('تعذّر التنزيل') } finally { setBusy(false) }
   }
 
   const restore = async (file) => {
-    setBusy(true)
-    setMsg('')
+    setBusy(true); setMsg('')
     try {
-      const text = await file.text()
-      const payload = JSON.parse(text)
-      await fetch('/api/admin/restore', {
-        method: 'POST',
-        headers: {
-          'content-type': 'application/json',
-          authorization: `Bearer ${localStorage.getItem(TOKEN_KEY)}`,
-        },
-        body: JSON.stringify(payload),
-      })
+      const payload = JSON.parse(await file.text())
+      await api('/api/admin/restore', { method: 'POST', body: payload })
       setMsg('تمت الاستعادة ✅ حدّث الصفحة')
-    } catch {
-      setMsg('الملف غير صالح')
-    } finally {
-      setBusy(false)
-    }
+    } catch { setMsg('الملف غير صالح') } finally { setBusy(false) }
   }
 
   return (
     <div className="space-y-3">
       <div className="card-lux p-4">
         <p className="font-extrabold text-[#11221A] mb-1">💾 نسخة احتياطية</p>
-        <p className="text-xs text-gray-500 mb-3">
-          نزّل نسخة من كل البيانات (الحسابات، الطلبات، السومات، الفواتير، الإعلانات) قبل أي نشر،
-          واستعدها بعد النشر. الحل هذا يخليك مستمر على الخطة المجانية بدون فقدان بيانات.
-        </p>
+        <p className="text-xs text-gray-500 mb-3">نزّل نسخة من كل البيانات قبل أي نشر، واستعدها بعد النشر.</p>
         <button onClick={download} disabled={busy} className="btn-primary">تنزيل النسخة</button>
       </div>
-
       <div className="card-lux p-4">
         <p className="font-extrabold text-[#11221A] mb-2">استعادة</p>
-        <input
-          type="file" accept="application/json"
-          onChange={(e) => e.target.files?.[0] && restore(e.target.files[0])}
-          className="text-sm w-full"
-        />
+        <input type="file" accept="application/json" onChange={(e) => e.target.files?.[0] && restore(e.target.files[0])} className="text-sm w-full" />
       </div>
-
       {msg && <p className="text-sm text-[#006C35] font-bold">{msg}</p>}
     </div>
   )
@@ -363,7 +536,19 @@ function Shell({ onLogout }) {
   const [section, setSection] = useState('overview')
   const navigate = useNavigate()
 
-  const current = sections.find((s) => s.key === section)
+  const renderSection = () => {
+    if (section.startsWith('users:')) return <Users type={section.split(':')[1]} />
+    if (section.startsWith('requests:')) return <Requests scope={section.split(':')[1]} />
+    switch (section) {
+      case 'overview': return <Overview />
+      case 'reports': return <Reports />
+      case 'ads': return <Ads />
+      case 'invoices': return <Invoices />
+      case 'cities': return <CityRequests />
+      case 'backup': return <Backup />
+      default: return null
+    }
+  }
 
   return (
     <div className="min-h-screen bg-[#F6F7F6]">
@@ -377,10 +562,7 @@ function Shell({ onLogout }) {
       {open && (
         <div className="fixed inset-0 z-30" onClick={() => setOpen(false)}>
           <div className="absolute inset-0 bg-black/40" />
-          <aside
-            onClick={(e) => e.stopPropagation()}
-            className="absolute inset-y-0 start-0 w-72 bg-white shadow-2xl p-4 flex flex-col"
-          >
+          <aside onClick={(e) => e.stopPropagation()} className="absolute inset-y-0 start-0 w-72 bg-white shadow-2xl p-4 flex flex-col overflow-y-auto">
             <div className="flex items-center gap-2 mb-6">
               <span className="w-10 h-10 rounded-xl bg-[#006C35] text-white grid place-items-center font-extrabold">م</span>
               <div>
@@ -388,30 +570,36 @@ function Shell({ onLogout }) {
                 <p className="text-[11px] text-gray-500">الإدارة</p>
               </div>
             </div>
+
             <nav className="space-y-1 flex-1">
-              {sections.map((s) => (
-                <button
-                  key={s.key}
-                  onClick={() => { setSection(s.key); setOpen(false) }}
-                  className={`w-full text-start px-3 py-2.5 rounded-xl text-sm font-semibold ${section === s.key ? 'bg-[#E9F5EE] text-[#006C35]' : 'text-gray-600 hover:bg-gray-50'}`}
-                >
-                  <span className="me-2">{s.icon}</span>{s.label}
-                </button>
-              ))}
+              {NAV.map((item) =>
+                item.group ? (
+                  <div key={item.group} className="pt-2">
+                    <p className="px-3 py-1 text-[11px] font-bold text-gray-400">{item.group}</p>
+                    {item.items.map((s) => (
+                      <button key={s.key} onClick={() => { setSection(s.key); setOpen(false) }}
+                        className={`w-full text-start px-6 py-2 rounded-xl text-sm font-semibold ${section === s.key ? 'bg-[#E9F5EE] text-[#006C35]' : 'text-gray-600 hover:bg-gray-50'}`}>
+                        <span className="me-2">{s.icon}</span>{s.label}
+                      </button>
+                    ))}
+                  </div>
+                ) : (
+                  <button key={item.key} onClick={() => { setSection(item.key); setOpen(false) }}
+                    className={`w-full text-start px-3 py-2.5 rounded-xl text-sm font-semibold ${section === item.key ? 'bg-[#E9F5EE] text-[#006C35]' : 'text-gray-600 hover:bg-gray-50'}`}>
+                    <span className="me-2">{item.icon}</span>{item.label}
+                  </button>
+                ),
+              )}
             </nav>
+
             <button onClick={onLogout} className="text-sm text-red-500 py-2 font-semibold">تسجيل الخروج</button>
           </aside>
         </div>
       )}
 
       <main className="p-4 pb-16 max-w-3xl mx-auto">
-        <h2 className="text-lg font-extrabold text-[#11221A] mb-3">{current?.label}</h2>
-        {section === 'overview' && <Overview />}
-        {section === 'ads' && <Ads />}
-        {section === 'requests' && <Requests />}
-        {section === 'invoices' && <Invoices />}
-        {section === 'cities' && <CityRequests />}
-        {section === 'backup' && <Backup />}
+        <h2 className="text-lg font-extrabold text-[#11221A] mb-3">{TITLES[section]}</h2>
+        {renderSection()}
       </main>
     </div>
   )
@@ -420,12 +608,5 @@ function Shell({ onLogout }) {
 export default function Admin() {
   const [authed, setAuthed] = useState(!!getToken())
   if (!authed) return <Login onDone={() => setAuthed(true)} />
-  return (
-    <Shell
-      onLogout={() => {
-        localStorage.removeItem(TOKEN_KEY)
-        setAuthed(false)
-      }}
-    />
-  )
+  return <Shell onLogout={() => { localStorage.removeItem(TOKEN_KEY); setAuthed(false) }} />
 }

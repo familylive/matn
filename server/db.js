@@ -145,5 +145,8 @@ addColumn('users', 'last_seen', 'TEXT')
 addColumn('users', 'avatar', 'TEXT')
 addColumn('users', 'sound_on', 'INTEGER DEFAULT 1')
 addColumn('experts', 'user_id', 'INTEGER')
+addColumn('users', 'status', "TEXT DEFAULT 'active'")
+addColumn('admins', 'status', "TEXT DEFAULT 'active'")
+addColumn('admins', 'name', 'TEXT')
 
 export default db

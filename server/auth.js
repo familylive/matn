@@ -26,8 +26,9 @@ export function authRequired(req, res, next) {
   const token = header.startsWith('Bearer ') ? header.slice(7) : null
   const data = verifyToken(token)
   if (!data) return res.status(401).json({ error: 'unauthorized' })
-  const exists = db.prepare('SELECT id FROM users WHERE id = ?').get(data.uid)
+  const exists = db.prepare('SELECT id, status FROM users WHERE id = ?').get(data.uid)
   if (!exists) return res.status(401).json({ error: 'session_expired' })
+  if (exists.status === 'suspended') return res.status(403).json({ error: 'account_suspended' })
   req.userId = data.uid
   try {
     db.prepare('UPDATE users SET last_seen = datetime(\'now\') WHERE id = ?').run(data.uid)

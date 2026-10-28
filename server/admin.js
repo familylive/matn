@@ -8,10 +8,14 @@ export const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'Mihnati@2026'
 const hash = (password, salt) =>
   crypto.scryptSync(password, salt, 32).toString('hex')
 
+const SALT = 'mihnati-admin'
+export function hashPassword(password) {
+  return `${SALT}:${hash(password, SALT)}`
+}
+
 export function seedAdmin() {
   const existing = db.prepare('SELECT * FROM admins WHERE email = ?').get(ADMIN_EMAIL)
-  const salt = 'mihnati-admin'
-  const password_hash = `${salt}:${hash(ADMIN_PASSWORD, salt)}`
+  const password_hash = hashPassword(ADMIN_PASSWORD)
   if (!existing) {
     db.prepare('INSERT INTO admins (email, password_hash) VALUES (?, ?)').run(ADMIN_EMAIL, password_hash)
     console.log(`admin seeded: ${ADMIN_EMAIL}`)
@@ -23,7 +27,7 @@ export function seedAdmin() {
 
 export function checkAdmin(email, password) {
   const row = db.prepare('SELECT * FROM admins WHERE email = ?').get(String(email || '').trim().toLowerCase())
-  if (!row) return null
+  if (!row || row.status === 'suspended') return null
   const [salt, expected] = row.password_hash.split(':')
   const actual = hash(password, salt)
   if (actual !== expected) return null
