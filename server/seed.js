@@ -60,5 +60,8 @@ if (catCount === 0) {
 }
 
 
-const s1 = db.prepare("SELECT value FROM settings WHERE key = 'commission_percent'").get()
-if (!s1) db.prepare("INSERT INTO settings (key, value) VALUES ('commission_percent', '10')").run()
+const defaults = [['commission_customer', '7.5'], ['commission_expert', '7.5']]
+for (const [k, v] of defaults) {
+  const row = db.prepare('SELECT value FROM settings WHERE key = ?').get(k)
+  if (!row) db.prepare('INSERT INTO settings (key, value) VALUES (?, ?)').run(k, v)
+}

@@ -537,28 +537,42 @@ function Payments() {
 }
 
 function CommissionBox() {
-  const [pct, setPct] = useState('')
+  const [c, setC] = useState('')
+  const [e, setE] = useState('')
   const [saved, setSaved] = useState(false)
   useEffect(() => {
-    api('/api/admin/settings').then((d) => setPct(String(d.commission_percent))).catch(() => {})
+    api('/api/admin/settings').then((d) => {
+      setC(String(d.commission_customer))
+      setE(String(d.commission_expert))
+    }).catch(() => {})
   }, [])
   const save = async () => {
-    await api('/api/admin/settings', { method: 'PATCH', body: { commission_percent: Number(pct) } })
+    await api('/api/admin/settings', {
+      method: 'PATCH',
+      body: { commission_customer: Number(c), commission_expert: Number(e) },
+    })
     setSaved(true)
     setTimeout(() => setSaved(false), 2000)
   }
   return (
     <div className="card-lux p-4 space-y-2">
-      <p className="font-extrabold text-sm text-[#11221A]">💰 عمولة المنصة</p>
-      <div className="flex items-center gap-2">
-        <input
-          type="number" min="0" max="50" value={pct} onChange={(e) => setPct(e.target.value)}
-          className="w-24 px-3 py-2 border border-[#E3D9BF] rounded-lg text-sm"
-        />
-        <span className="text-sm text-gray-500">%</span>
-        <button onClick={save} className="ms-auto bg-[#006C35] text-white text-xs font-bold px-3 py-2 rounded-lg">حفظ</button>
+      <p className="font-extrabold text-sm text-[#11221A]">💰 العمولة (تُقسّم على الطرفين)</p>
+      <div className="grid grid-cols-2 gap-2">
+        <div>
+          <label className="text-[11px] text-gray-500">على العميل %</label>
+          <input type="number" step="0.5" min="0" max="30" value={c} onChange={(ev) => setC(ev.target.value)}
+            className="w-full px-3 py-2 border border-[#E3D9BF] rounded-lg text-sm" />
+        </div>
+        <div>
+          <label className="text-[11px] text-gray-500">على الفني %</label>
+          <input type="number" step="0.5" min="0" max="30" value={e} onChange={(ev) => setE(ev.target.value)}
+            className="w-full px-3 py-2 border border-[#E3D9BF] rounded-lg text-sm" />
+        </div>
       </div>
-      <p className="text-[11px] text-gray-500">تُخصم من مبلغ الفني عند إكمال الطلب وتظهر في الفاتورة.</p>
+      <div className="flex items-center justify-between">
+        <p className="text-[11px] text-gray-500">الإجمالي: {Number(c || 0) + Number(e || 0)}%</p>
+        <button onClick={save} className="bg-[#006C35] text-white text-xs font-bold px-3 py-2 rounded-lg">حفظ</button>
+      </div>
       {saved && <p className="text-[11px] text-[#006C35] font-bold">تم الحفظ ✅</p>}
     </div>
   )
@@ -578,7 +592,9 @@ function Invoices() {
           <div className="text-end">
             <span className="chip-gold">{i.amount} ر.س</span>
             {i.commission ? (
-              <p className="text-[10px] text-gray-500 mt-1">عمولة {i.commission} · صافي {i.net}</p>
+              <p className="text-[10px] text-gray-500 mt-1">
+                عمولة {i.commission} · صافي {i.net}{i.total_paid ? ` · مدفوع ${i.total_paid}` : ''}
+              </p>
             ) : null}
           </div>
         </div>

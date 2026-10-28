@@ -171,7 +171,10 @@ app.get('/api/experts/:id', (req, res) => {
 /* ---------- requests + live bidding ---------- */
 
 const getSetting = (k, d) => db.prepare('SELECT value FROM settings WHERE key = ?').get(k)?.value ?? d
-const commissionPct = () => Number(getSetting('commission_percent', 10))
+const commissionCustomer = () => Number(getSetting('commission_customer', 7.5))
+const commissionExpert = () => Number(getSetting('commission_expert', 7.5))
+const round2 = (n) => Math.round(n * 100) / 100
+const customerTotal = (amount) => round2(amount * (1 + commissionCustomer() / 100))
 
 const R_EARTH_KM = 6371
 function haversineKm(aLat, aLng, bLat, bLng) {
@@ -317,11 +320,17 @@ function issueInvoice(requestId) {
   const year = new Date().getFullYear()
   const count = db.prepare("SELECT COUNT(*) c FROM invoices WHERE number LIKE ?").get(`MIH-${year}-%`).c
   const number = `MIH-${year}-${String(count + 1).padStart(4, '0')}`
-  const pct = commissionPct()
-  const commission = Math.round(bid.amount * pct) / 100
-  const net = Math.round((bid.amount - commission) * 100) / 100
-  db.prepare('INSERT INTO invoices (number, request_id, amount, commission, net) VALUES (?, ?, ?, ?, ?)')
-    .run(number, requestId, bid.amount, commission, net)
+  const custPct = commissionCustomer()
+  const expPct = commissionExpert()
+  const customerFee = round2(bid.amount * custPct / 100)
+  const expertFee = round2(bid.amount * expPct / 100)
+  const totalPaid = round2(bid.amount + customerFee)
+  const net = round2(bid.amount - expertFee)
+  const commission = round2(customerFee + expertFee)
+  db.prepare(
+    `INSERT INTO invoices (number, request_id, amount, commission, net, customer_fee, expert_fee, total_paid)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+  ).run(number, requestId, bid.amount, commission, net, customerFee, expertFee, totalPaid)
   return db.prepare('SELECT * FROM invoices WHERE number = ?').get(number)
 }
 
@@ -604,18 +613,29 @@ app.patch('/api/admin/city-requests/:id', adminRequired, (req, res) => {
 /* ---------- الإعدادات ---------- */
 
 app.get('/api/settings', (_req, res) => {
-  res.json({ commission_percent: commissionPct() })
+  res.json({
+    commission_customer: commissionCustomer(),
+    commission_expert: commissionExpert(),
+    commission_total: round2(commissionCustomer() + commissionExpert()),
+  })
 })
 
 app.get('/api/admin/settings', adminRequired, (_req, res) => {
-  res.json({ commission_percent: commissionPct() })
+  res.json({
+    commission_customer: commissionCustomer(),
+    commission_expert: commissionExpert(),
+    commission_total: round2(commissionCustomer() + commissionExpert()),
+  })
 })
 
 app.patch('/api/admin/settings', adminRequired, (req, res) => {
-  const pct = Number(req.body?.commission_percent)
-  if (!(pct >= 0 && pct <= 50)) return res.status(400).json({ error: 'invalid_percent' })
-  db.prepare("INSERT INTO settings (key, value) VALUES ('commission_percent', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value").run(String(pct))
-  res.json({ commission_percent: pct })
+  const c = Number(req.body?.commission_customer)
+  const e = Number(req.body?.commission_expert)
+  if (!(c >= 0 && c <= 30) || !(e >= 0 && e <= 30)) return res.status(400).json({ error: 'invalid_percent' })
+  const up = db.prepare("INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value")
+  up.run('commission_customer', String(c))
+  up.run('commission_expert', String(e))
+  res.json({ commission_customer: c, commission_expert: e, commission_total: round2(c + e) })
 })
 
 /* ---------- التصنيفات ---------- */
@@ -673,7 +693,7 @@ app.post('/api/requests/:id/pay', authRequired, (req, res) => {
   if (needsPhone && phone.replace(/\D/g, '').length < 9) return res.status(400).json({ error: 'phone_required' })
 
   const bid = db.prepare('SELECT * FROM bids WHERE id = ?').get(request.accepted_bid_id)
-  const amount = bid?.amount || 0
+  const amount = customerTotal(bid?.amount || 0)
   const status = method === 'cash' ? 'pending_cash' : 'paid'
 
   const info = db

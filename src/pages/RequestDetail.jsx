@@ -19,10 +19,13 @@ export default function RequestDetail() {
   const [bid, setBid] = useState({ expertId: '', amount: '', note: '' })
   const [now, setNow] = useState(Date.now())
   const [pay, setPay] = useState({ method: 'cash', phone: '', busy: false, done: false })
-  const [commission, setCommission] = useState(10)
+  const [fees, setFees] = useState({ customer: 7.5, expert: 7.5 })
 
   useEffect(() => {
-    fetch('/api/settings').then((r) => r.json()).then((d) => setCommission(Number(d.commission_percent) || 0)).catch(() => {})
+    fetch('/api/settings')
+      .then((r) => r.json())
+      .then((d) => setFees({ customer: Number(d.commission_customer) || 0, expert: Number(d.commission_expert) || 0 }))
+      .catch(() => {})
   }, [])
 
   useEffect(() => {
@@ -134,6 +137,10 @@ export default function RequestDetail() {
   }
 
   const lowest = data.bids[0]?.amount
+  const base = lowest ?? 0
+  const customerFee = Math.round(base * fees.customer) / 100
+  const total = Math.round((base + customerFee) * 100) / 100
+  const expertFee = Math.round(base * fees.expert) / 100
   const endMs = data.ends_at ? new Date(data.ends_at.replace(' ', 'T') + 'Z').getTime() : null
   const remaining = endMs ? endMs - now : null
   const ended = remaining !== null && remaining <= 0
@@ -253,9 +260,13 @@ export default function RequestDetail() {
           <div className="card-lux p-4 mt-4 space-y-3">
             <div className="gold-bar absolute inset-x-0 top-0" />
             <p className="font-extrabold text-[#11221A] pt-1">💳 إتمام الدفع</p>
-            <p className="text-xs text-gray-500">
-              المبلغ المستحق: <span className="font-bold text-[#006C35]">{lowest ?? 0} ريال</span>
-            </p>
+            <div className="rounded-lg bg-white border border-[#EADFC8] p-3 text-xs space-y-1 text-gray-600">
+              <div className="flex justify-between"><span>قيمة السومة</span><span>{base} ر.س</span></div>
+              <div className="flex justify-between"><span>رسوم خدمة ({fees.customer}%)</span><span>{customerFee} ر.س</span></div>
+              <div className="flex justify-between font-extrabold text-[#006C35] pt-1 border-t border-dashed">
+                <span>الإجمالي المطلوب</span><span>{total} ر.س</span>
+              </div>
+            </div>
             <div className="space-y-2">
               {[
                 { k: 'cash', label: '💵 كاش عند الاستلام', desc: 'تدفع للمعلم بعد تنفيذ العمل' },
@@ -287,8 +298,8 @@ export default function RequestDetail() {
               {pay.busy ? 'جارٍ التنفيذ…' : pay.method === 'cash' ? 'تأكيد الطلب (كاش)' : `ادفع ${lowest ?? 0} ريال`}
             </button>
             <div className="rounded-lg bg-[#FBF9F2] border border-[#EADFC8] p-2 text-[11px] text-[#8a6d13] leading-relaxed">
-              عمولة المنصة: <b>{commission}%</b> ({Math.round(((lowest ?? 0) * commission)) / 100} ريال) — تُخصم من مبلغ الفني.
-              {pay.method === 'cash' && <><br />الفني يحوّل العمولة للمنصة بعد استلام الكاش.</>}
+              للفني: {base} − عمولة {fees.expert}% ({expertFee}) = <b>{Math.round((base - expertFee) * 100) / 100} ر.س</b>
+              {pay.method === 'cash' && <><br />الفني يستلم {total} كاش ويحوّل للمنصة {Math.round((customerFee + expertFee) * 100) / 100} ر.س.</>}
             </div>
             <p className="text-[10px] text-gray-400 text-center">
               الدفع الإلكتروني تجريبي — نربط بوابة (Moyasar) عند الحاجة.
