@@ -20,6 +20,7 @@ export default function RequestDetail() {
   const [now, setNow] = useState(Date.now())
   const [pay, setPay] = useState({ method: 'cash', phone: '', busy: false, done: false })
   const [fees, setFees] = useState({ customer: 7.5, expert: 7.5 })
+  const [invoices, setInvoices] = useState(null)
 
   useEffect(() => {
     fetch('/api/settings')
@@ -119,6 +120,12 @@ export default function RequestDetail() {
       setPay((p) => ({ ...p, busy: false }))
     }
   }
+
+  useEffect(() => {
+    if (data?.status === 'done' && !invoices) {
+      api.get(`/api/requests/${id}/invoices`).then(setInvoices).catch(() => {})
+    }
+  }, [data?.status])
 
   const review = async (rating) => {
     try {
@@ -317,6 +324,34 @@ export default function RequestDetail() {
           <button onClick={complete} className="w-full mt-4 bg-green-500 text-white py-2.5 rounded-xl font-medium">
             {t('rd.complete')}
           </button>
+        )}
+
+        {isOwner && invoices && (
+          <div className="mt-4 space-y-3">
+            {['customer', 'expert'].map((k) => {
+              const inv = invoices[k]
+              return (
+                <div key={k} className="card-lux p-4">
+                  <div className="gold-bar absolute inset-x-0 top-0" />
+                  <div className="flex items-center justify-between pt-1">
+                    <p className="font-extrabold text-sm text-[#11221A]">{inv.title}</p>
+                    <span className="text-[10px] text-gray-400">{inv.number}</span>
+                  </div>
+                  <p className="text-[11px] text-gray-500 mb-2">{inv.to} · {invoices.issued_at?.slice(0, 10)}</p>
+                  {inv.items.map((it) => (
+                    <div key={it.label} className="flex justify-between text-xs py-0.5">
+                      <span className="text-gray-600">{it.label}</span>
+                      <span className={it.amount < 0 ? 'text-red-500' : 'text-gray-800'}>{it.amount} ر.س</span>
+                    </div>
+                  ))}
+                  <div className="flex justify-between mt-2 pt-2 border-t border-dashed border-[#EADFC8] font-extrabold text-[#006C35]">
+                    <span>{k === 'customer' ? 'الإجمالي المدفوع' : 'صافي المستحق'}</span>
+                    <span>{inv.total} ر.س</span>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
         )}
 
         {isOwner && data.status === 'done' && (

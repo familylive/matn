@@ -127,8 +127,8 @@ app.post('/api/auth/register', authRequired, (req, res) => {
         b.lat != null ? Number(b.lat) : existing.lat, b.lng != null ? Number(b.lng) : existing.lng, existing.id)
     } else {
       db.prepare(
-        `INSERT INTO experts (name, name_ar, job, city, rate, rating, reviews_count, image, phone, skills, experience, lat, lng, user_id)
-         VALUES (?, ?, ?, ?, '150 ريال/ساعة', 4.5, 0, '/experts/ac.jpg', ?, '[]', '1 سنة', ?, ?, ?)`,
+        `INSERT INTO experts (name, name_ar, job, city, rate, rating, reviews_count, image, phone, skills, experience, lat, lng, user_id, verify_status)
+         VALUES (?, ?, ?, ?, '150 ريال/ساعة', 4.5, 0, '/experts/ac.jpg', ?, '[]', '1 سنة', ?, ?, ?, 'pending')`,
       ).run(name, name, b.specialty || 'AC', b.city || 'الرياض', b.phone || null,
         b.lat != null ? Number(b.lat) : null, b.lng != null ? Number(b.lng) : null, req.userId)
     }
@@ -153,7 +153,7 @@ app.get('/api/online/count', (_req, res) => {
 
 app.get('/api/experts', (req, res) => {
   const { category, q } = req.query
-  let sql = 'SELECT * FROM experts WHERE 1=1'
+  let sql = "SELECT * FROM experts WHERE COALESCE(verify_status, 'approved') = 'approved'"
   const params = []
   if (category) { sql += ' AND job = ?'; params.push(category) }
   if (q) { sql += ' AND (name LIKE ? OR job LIKE ? OR city LIKE ?)'; params.push(`%${q}%`, `%${q}%`, `%${q}%`) }
@@ -163,7 +163,7 @@ app.get('/api/experts', (req, res) => {
 })
 
 app.get('/api/experts/:id', (req, res) => {
-  const row = db.prepare('SELECT * FROM experts WHERE id = ?').get(req.params.id)
+  const row = db.prepare("SELECT * FROM experts WHERE id = ? AND COALESCE(verify_status, 'approved') = 'approved'").get(req.params.id)
   if (!row) return res.status(404).json({ error: 'not_found' })
   res.json({ ...row, skills: row.skills ? JSON.parse(row.skills) : [] })
 })
@@ -610,6 +610,60 @@ app.patch('/api/admin/city-requests/:id', adminRequired, (req, res) => {
   res.json({ ok: true })
 })
 
+/* ---------- توثيق الإقامة (OCR) ---------- */
+
+app.post('/api/me/iqama', authRequired, upload.single('iqama'), async (req, res) => {
+  if (!req.file) return res.status(400).json({ error: 'no_file' })
+  const url = `/uploads/${req.file.filename}`
+  let parsed = {}
+  try {
+    const { createWorker } = await import('tesseract.js')
+    const worker = await createWorker('ara', 1, { logger: () => {} })
+    const { data } = await worker.recognize(req.file.path)
+    await worker.terminate()
+    const text = data.text || ''
+    const pick = (re) => (text.match(re) || [])[1]?.trim() || ''
+    parsed = {
+      raw: text,
+      name: pick(/الاسم\s*[:\-]?\s*([^\n]+)/),
+      iqama_number: (text.match(/\b\d{10}\b/) || [])[0] || '',
+      nationality: pick(/الجنسية\s*[:\-]?\s*([^\n]+)/),
+      profession: pick(/(?:المهنة|الوظيفة)\s*[:\-]?\s*([^\n]+)/),
+      issue: pick(/(?:تاريخ\s*الإصدار|الإصدار)\s*[:\-]?\s*([^\n]+)/),
+      expiry: pick(/(?:تاريخ\s*الانتهاء|الانتهاء)\s*[:\-]?\s*([^\n]+)/),
+    }
+  } catch {
+    parsed = { error: 'ocr_failed' }
+  }
+  res.status(201).json({ url, parsed })
+})
+
+app.post('/api/me/verify', authRequired, (req, res) => {
+  const b = req.body || {}
+  const expert = db.prepare('SELECT * FROM experts WHERE user_id = ?').get(req.userId)
+  if (!expert) return res.status(404).json({ error: 'expert_profile_missing' })
+  const iqama = String(b.iqama_number || '').replace(/\D/g, '')
+  if (iqama.length !== 10) return res.status(400).json({ error: 'invalid_iqama' })
+  if (!b.iqama_name || !b.iqama_image) return res.status(400).json({ error: 'missing_fields' })
+
+  db.prepare(
+    `UPDATE experts SET iqama_number = ?, iqama_name = ?, iqama_issue = ?, iqama_expiry = ?,
+      nationality = ?, profession = ?, iqama_image = ?, verify_status = 'pending', verify_note = NULL
+     WHERE id = ?`,
+  ).run(iqama, b.iqama_name, b.iqama_issue || null, b.iqama_expiry || null,
+    b.nationality || null, b.profession || null, b.iqama_image, expert.id)
+
+  io.emit('notify', { type: 'verify', title: 'طلب توثيق جديد', body: b.iqama_name })
+  res.json({ ok: true, status: 'pending' })
+})
+
+app.get('/api/me/verify', authRequired, (req, res) => {
+  const e = db.prepare('SELECT * FROM experts WHERE user_id = ?').get(req.userId)
+  if (!e) return res.status(404).json({ error: 'expert_profile_missing' })
+  res.json({ status: e.verify_status || 'approved', note: e.verify_note, iqama_number: e.iqama_number,
+    iqama_name: e.iqama_name, iqama_image: e.iqama_image })
+})
+
 /* ---------- الإعدادات ---------- */
 
 app.get('/api/settings', (_req, res) => {
@@ -722,6 +776,33 @@ app.get('/api/admin/payments', adminRequired, (_req, res) => {
   )
 })
 
+/* ---------- توثيق الفنيين (إدارة) ---------- */
+
+app.get('/api/admin/verifications', adminRequired, (req, res) => {
+  const status = req.query.status
+  const rows = status
+    ? db.prepare('SELECT * FROM experts WHERE verify_status = ? ORDER BY id DESC').all(status)
+    : db.prepare('SELECT * FROM experts ORDER BY id DESC').all()
+  res.json(rows)
+})
+
+app.patch('/api/admin/verifications/:id', adminRequired, (req, res) => {
+  const e = db.prepare('SELECT * FROM experts WHERE id = ?').get(req.params.id)
+  if (!e) return res.status(404).json({ error: 'not_found' })
+  const status = req.body?.status
+  if (!['approved', 'rejected', 'pending'].includes(status)) return res.status(400).json({ error: 'invalid_status' })
+  db.prepare('UPDATE experts SET verify_status = ?, verify_note = ? WHERE id = ?')
+    .run(status, req.body?.note || null, e.id)
+  if (e.user_id) {
+    io.to(`user:${e.user_id}`).emit('notify', {
+      type: 'verify',
+      title: status === 'approved' ? 'تم توثيق حسابك ✅' : status === 'rejected' ? 'تم رفض التوثيق' : 'التوثيق قيد المراجعة',
+      body: req.body?.note || '',
+    })
+  }
+  res.json({ ok: true })
+})
+
 /* ---------- تقرير العمولات ---------- */
 
 app.get('/api/admin/commissions', adminRequired, (_req, res) => {
@@ -751,6 +832,45 @@ app.get('/api/admin/commissions', adminRequired, (_req, res) => {
     )
     .all()
   res.json({ totals, rows, byMonth })
+})
+
+/* ---------- فاتورتان: عميل + فني ---------- */
+
+app.get('/api/requests/:id/invoices', authRequired, (req, res) => {
+  const request = db.prepare('SELECT * FROM requests WHERE id = ?').get(req.params.id)
+  if (!request) return res.status(404).json({ error: 'not_found' })
+  if (request.user_id !== req.userId) return res.status(403).json({ error: 'forbidden' })
+  const inv = db.prepare('SELECT * FROM invoices WHERE request_id = ?').get(request.id)
+  if (!inv) return res.status(404).json({ error: 'no_invoice' })
+  const bid = db.prepare('SELECT b.*, e.name_ar AS expert_name FROM bids b JOIN experts e ON e.id = b.expert_id WHERE b.id = ?').get(request.accepted_bid_id)
+  const user = db.prepare('SELECT name, phone FROM users WHERE id = ?').get(request.user_id)
+  const pctC = commissionCustomer()
+  const pctE = commissionExpert()
+
+  res.json({
+    customer: {
+      number: inv.number + '-C',
+      title: 'فاتورة العميل',
+      to: user?.name || 'العميل',
+      items: [
+        { label: 'قيمة الخدمة', amount: inv.amount },
+        { label: `رسوم خدمة الموقع (${pctC}%)`, amount: inv.customer_fee },
+      ],
+      total: inv.total_paid,
+    },
+    expert: {
+      number: inv.number + '-E',
+      title: 'فاتورة الفني (مستخلص)',
+      to: bid?.expert_name || 'الفني',
+      items: [
+        { label: 'قيمة الخدمة', amount: inv.amount },
+        { label: `عمولة الموقع (${pctE}%)`, amount: -inv.expert_fee },
+      ],
+      total: inv.net,
+    },
+    issued_at: inv.issued_at,
+    request: { id: request.id, title: request.title, city: request.city },
+  })
 })
 
 /* ---------- نسخ احتياطي ---------- */

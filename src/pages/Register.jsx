@@ -60,7 +60,7 @@ export default function Register() {
     try {
       const updated = await api.register(form)
       login({ ...user, ...updated, userName: updated.name || user.userName, userLocation: updated.city })
-      navigate('/profile')
+      navigate(form.role === 'expert' ? '/verify' : '/profile')
     } catch (err) {
       setError(err.message)
     } finally {

@@ -72,6 +72,7 @@ const NAV = [
     { key: 'requests:active', label: 'النشطة', icon: '🟢' },
     { key: 'requests:closed', label: 'المغلقة', icon: '⚪' },
   ]},
+  { key: 'verifications', label: 'طلبات التوثيق', icon: '🪪' },
   { key: 'reports', label: 'التقارير', icon: '📈' },
   { key: 'commissions', label: 'تقرير العمولات', icon: '💰' },
   { key: 'categories', label: 'التصنيفات', icon: '🗂️' },
@@ -84,7 +85,7 @@ const NAV = [
 
 const TITLES = {
   overview: 'نظرة عامة', reports: 'التقارير', ads: 'الإعلانات', invoices: 'الفواتير',
-  categories: 'التصنيفات', payments: 'المدفوعات', commissions: 'تقرير العمولات',
+  categories: 'التصنيفات', payments: 'المدفوعات', commissions: 'تقرير العمولات', verifications: 'طلبات التوثيق',
   cities: 'طلبات المدن', backup: 'النسخ الاحتياطي',
   'users:admins': 'المستخدمون — الإدارة', 'users:experts': 'المستخدمون — الفنيون',
   'users:customers': 'المستخدمون — العملاء', 'users:support': 'المستخدمون — الدعم الفني',
@@ -537,6 +538,62 @@ function Payments() {
   )
 }
 
+function Verifications() {
+  const [rows, setRows] = useState([])
+  const [tab, setTab] = useState('pending')
+  const load = (st) => api(`/api/admin/verifications?status=${st}`).then(setRows).catch(() => {})
+  useEffect(() => { load(tab) }, [tab])
+
+  const act = async (id, status) => {
+    const note = status === 'rejected' ? prompt('سبب الرفض (اختياري)') || null : null
+    await api(`/api/admin/verifications/${id}`, { method: 'PATCH', body: { status, note } })
+    load(tab)
+  }
+
+  return (
+    <div className="space-y-3">
+      <div className="flex gap-2">
+        {[['pending', 'قيد المراجعة'], ['approved', 'موثّقون'], ['rejected', 'مرفوضون']].map(([k, l]) => (
+          <button key={k} onClick={() => setTab(k)}
+            className={`px-3 py-1.5 rounded-full text-xs font-bold ${tab === k ? 'bg-[#006C35] text-white' : 'bg-white border border-[#E3D9BF] text-gray-600'}`}>
+            {l}
+          </button>
+        ))}
+      </div>
+
+      {rows.filter((r) => (r.verify_status || 'approved') === tab).map((e) => (
+        <div key={e.id} className="card-lux p-3 space-y-2">
+          <div className="flex items-start gap-3">
+            {e.iqama_image && (
+              <a href={e.iqama_image} target="_blank" rel="noreferrer">
+                <img src={e.iqama_image} alt="iqama" className="w-24 h-16 object-cover rounded-lg border border-[#EADFC8]" />
+              </a>
+            )}
+            <div className="flex-1 min-w-0">
+              <p className="font-bold text-sm text-[#11221A]">{e.name_ar || e.name}</p>
+              <p className="text-[11px] text-gray-500">{e.job} · {e.city || '—'}</p>
+              {e.iqama_number && (
+                <p className="text-[11px] text-gray-500 mt-1">
+                  إقامة: {e.iqama_number} · {e.nationality || '—'} · {e.profession || '—'}
+                </p>
+              )}
+            </div>
+          </div>
+          {tab === 'pending' && (
+            <div className="flex gap-2">
+              <button onClick={() => act(e.id, 'approved')} className="flex-1 bg-[#006C35] text-white py-2 rounded-lg text-xs font-bold">موافقة وتفعيل</button>
+              <button onClick={() => act(e.id, 'rejected')} className="flex-1 bg-red-50 text-red-500 py-2 rounded-lg text-xs font-bold">رفض</button>
+            </div>
+          )}
+        </div>
+      ))}
+      {rows.filter((r) => (r.verify_status || 'approved') === tab).length === 0 && (
+        <p className="text-sm text-gray-500">لا يوجد طلبات في هذا القسم.</p>
+      )}
+    </div>
+  )
+}
+
 function Commissions() {
   const [d, setD] = useState(null)
   useEffect(() => { api('/api/admin/commissions').then(setD).catch(() => {}) }, [])
@@ -744,6 +801,7 @@ function Shell({ onLogout }) {
       case 'invoices': return <Invoices />
       case 'categories': return <Categories />
       case 'commissions': return <Commissions />
+      case 'verifications': return <Verifications />
       case 'payments': return <Payments />
       case 'cities': return <CityRequests />
       case 'backup': return <Backup />

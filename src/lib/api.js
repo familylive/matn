@@ -33,6 +33,8 @@ async function request(path, { method = 'GET', body, auth = false } = {}) {
 }
 
 export const api = {
+  get: (path) => request(path, { auth: true }),
+  post: (path, body) => request(path, { method: 'POST', body, auth: true }),
   requestOtp: (phone) => request('/api/auth/request-otp', { method: 'POST', body: { phone } }),
   verifyOtp: (phone, code, name) =>
     request('/api/auth/verify', { method: 'POST', body: { phone, code, name } }),
