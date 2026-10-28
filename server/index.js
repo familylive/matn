@@ -826,6 +826,34 @@ app.get('/api/admin/users', adminRequired, (req, res) => {
   res.json(rows.map(publicUser))
 })
 
+app.post('/api/admin/users', adminRequired, (req, res) => {
+  const b = req.body || {}
+  const name = String(b.name || '').trim()
+  const phone = normalizePhone(b.phone)
+  const role = ['customer', 'expert', 'support'].includes(b.role) ? b.role : 'customer'
+  const password = String(b.password || '')
+  if (!name) return res.status(400).json({ error: 'name_required' })
+  if (!phone) return res.status(400).json({ error: 'phone_invalid' })
+  if (db.prepare('SELECT id FROM users WHERE phone = ?').get(phone)) return res.status(409).json({ error: 'phone_taken' })
+
+  const info = db.prepare(
+    `INSERT INTO users (phone, name, city, role, email, specialty, password_hash, status, last_seen)
+     VALUES (?, ?, ?, ?, ?, ?, ?, 'active', datetime('now'))`,
+  ).run(
+    phone, name, b.city || null, role, b.email || null, b.specialty || null,
+    password ? hashUserPassword(password) : null,
+  )
+  const userId = info.lastInsertRowid
+
+  if (role === 'expert') {
+    db.prepare(
+      `INSERT INTO experts (name, name_ar, job, city, rate, rating, reviews_count, image, phone, skills, experience, user_id, verify_status, has_car)
+       VALUES (?, ?, ?, ?, '150 ريال/ساعة', 4.5, 0, '/experts/ac.jpg', ?, '[]', '1 سنة', ?, 'approved', ?)`,
+    ).run(name, name, b.specialty || 'AC', b.city || 'الرياض', phone, userId, b.has_car ? 1 : 0)
+  }
+  res.status(201).json(publicUser(db.prepare('SELECT * FROM users WHERE id = ?').get(userId)))
+})
+
 app.patch('/api/admin/users/:id', adminRequired, (req, res) => {
   const u = db.prepare('SELECT * FROM users WHERE id = ?').get(req.params.id)
   if (!u) return res.status(404).json({ error: 'not_found' })
@@ -834,6 +862,7 @@ app.patch('/api/admin/users/:id', adminRequired, (req, res) => {
   const sets = []
   const params = []
   for (const f of fields) if (b[f] !== undefined) { sets.push(`${f} = ?`); params.push(b[f]) }
+  if (b.password) { sets.push('password_hash = ?'); params.push(hashUserPassword(String(b.password))) }
   if (sets.length) db.prepare(`UPDATE users SET ${sets.join(', ')} WHERE id = ?`).run(...params, u.id)
   res.json(publicUser(db.prepare('SELECT * FROM users WHERE id = ?').get(u.id)))
 })
@@ -866,9 +895,10 @@ app.post('/api/admin/admins', adminRequired, (req, res) => {
 app.patch('/api/admin/admins/:id', adminRequired, (req, res) => {
   const a = db.prepare('SELECT * FROM admins WHERE id = ?').get(req.params.id)
   if (!a) return res.status(404).json({ error: 'not_found' })
-  const { status, name } = req.body || {}
+  const { status, name, password } = req.body || {}
   if (status) db.prepare('UPDATE admins SET status = ? WHERE id = ?').run(status, a.id)
   if (name !== undefined) db.prepare('UPDATE admins SET name = ? WHERE id = ?').run(name, a.id)
+  if (password) db.prepare('UPDATE admins SET password_hash = ? WHERE id = ?').run(hashPassword(String(password)), a.id)
   res.json(db.prepare('SELECT id, email, name, status FROM admins WHERE id = ?').get(a.id))
 })
 

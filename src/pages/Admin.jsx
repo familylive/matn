@@ -125,12 +125,6 @@ function UserRow({ u, type, onChanged }) {
   const [form, setForm] = useState(u)
   const active = u.status !== 'suspended'
 
-  const toggleDemo = async () => {
-    const next = !demo
-    setDemo(next)
-    await api('/api/admin/settings', { method: 'PATCH', body: { demo_auto_accept: next } })
-  }
-
   const save = async () => {
     if (type === 'admins') await api(`/api/admin/admins/${u.id}`, { method: 'PATCH', body: { name: form.name } })
     else await api(`/api/admin/users/${u.id}`, {
@@ -182,6 +176,21 @@ function UserRow({ u, type, onChanged }) {
             <button onClick={toggle} className="text-[11px] bg-[#E9F5EE] text-[#006C35] px-2.5 py-1 rounded-lg font-bold">
               {active ? 'إيقاف' : 'تفعيل'}
             </button>
+            <button
+              onClick={async () => {
+                const pw = prompt('كلمة المرور الجديدة (٦ أحرف على الأقل):')
+                if (!pw) return
+                if (pw.length < 6) return alert('قصيرة جداً')
+                try {
+                  if (type === 'admins') await api(`/api/admin/admins/${u.id}`, { method: 'PATCH', body: { password: pw } })
+                  else await api(`/api/admin/users/${u.id}`, { method: 'PATCH', body: { password: pw } })
+                  alert('تم تغيير كلمة المرور ✅')
+                } catch { alert('تعذّر التغيير') }
+              }}
+              className="text-[11px] bg-[#FBF5E3] text-[#8a6d13] px-2.5 py-1 rounded-lg font-bold"
+            >
+              كلمة المرور
+            </button>
             <button onClick={remove} className="text-[11px] bg-red-50 text-red-500 px-2.5 py-1 rounded-lg font-bold">حذف</button>
           </div>
         </>
@@ -218,7 +227,7 @@ function UserRow({ u, type, onChanged }) {
 function Users({ type }) {
   const [rows, setRows] = useState([])
   const [addOpen, setAddOpen] = useState(false)
-  const [nf, setNf] = useState({ email: '', password: '', name: '' })
+  const [nf, setNf] = useState({ email: '', password: '', name: '', phone: '', city: '' })
   const [err, setErr] = useState('')
 
   const load = () => {
@@ -226,6 +235,23 @@ function Users({ type }) {
     api(path).then(setRows).catch(() => {})
   }
   useEffect(load, [type])
+
+  const addUser = async (e) => {
+    e.preventDefault()
+    setErr('')
+    try {
+      await api('/api/admin/users', { method: 'POST', body: { ...nf, role: type } })
+      setAddOpen(false)
+      setNf({ email: '', password: '', name: '', phone: '', city: '' })
+      load()
+    } catch (e2) {
+      setErr(
+        e2.message === 'phone_taken' ? 'الجوال مسجّل مسبقاً'
+        : e2.message === 'phone_invalid' ? 'رقم جوال غير صحيح'
+        : 'تعذّرت الإضافة',
+      )
+    }
+  }
 
   const addAdmin = async (e) => {
     e.preventDefault()
@@ -242,6 +268,32 @@ function Users({ type }) {
 
   return (
     <div className="space-y-2">
+      {type !== 'admins' && (
+        <div className="mb-2">
+          {!addOpen ? (
+            <button onClick={() => setAddOpen(true)} className="btn-primary">
+              + إضافة {type === 'customer' ? 'عميل' : type === 'expert' ? 'فني' : 'مستخدم'}
+            </button>
+          ) : (
+            <form onSubmit={addUser} className="card-lux p-3 space-y-2">
+              <input placeholder="الاسم" required value={nf.name} onChange={(e) => setNf({ ...nf, name: e.target.value })}
+                className="w-full px-2 py-1.5 border border-[#E3D9BF] rounded-lg text-sm" />
+              <input placeholder="الجوال 05XXXXXXXX" required value={nf.phone} onChange={(e) => setNf({ ...nf, phone: e.target.value })}
+                className="w-full px-2 py-1.5 border border-[#E3D9BF] rounded-lg text-sm" />
+              <input placeholder="المدينة" value={nf.city} onChange={(e) => setNf({ ...nf, city: e.target.value })}
+                className="w-full px-2 py-1.5 border border-[#E3D9BF] rounded-lg text-sm" />
+              <input placeholder="كلمة المرور (اختياري)" value={nf.password} onChange={(e) => setNf({ ...nf, password: e.target.value })}
+                className="w-full px-2 py-1.5 border border-[#E3D9BF] rounded-lg text-sm" />
+              {err && <p className="text-xs text-red-500">{err}</p>}
+              <div className="flex gap-2">
+                <button className="flex-1 bg-[#006C35] text-white py-1.5 rounded-lg text-sm font-bold">حفظ</button>
+                <button type="button" onClick={() => setAddOpen(false)} className="px-3 py-1.5 rounded-lg text-sm border border-gray-200">إلغاء</button>
+              </div>
+            </form>
+          )}
+        </div>
+      )}
+
       {type === 'admins' && (
         <div className="mb-2">
           {!addOpen ? (
@@ -789,12 +841,6 @@ function CommissionBox() {
       setDemo(!!d.demo_auto_accept)
     }).catch(() => {})
   }, [])
-  const toggleDemo = async () => {
-    const next = !demo
-    setDemo(next)
-    await api('/api/admin/settings', { method: 'PATCH', body: { demo_auto_accept: next } })
-  }
-
   const save = async () => {
     await api('/api/admin/settings', {
       method: 'PATCH',
