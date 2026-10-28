@@ -20,9 +20,10 @@ const BOTS = [
 ]
 
 export function seedBots() {
+  try { markBotCars() } catch {}
   const insert = db.prepare(
-    `INSERT INTO experts (name, name_ar, job, city, rate, rating, reviews_count, image, phone, skills, experience, lat, lng, is_bot)
-     VALUES (?, ?, ?, 'الرياض', ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)`,
+    `INSERT INTO experts (name, name_ar, job, city, rate, rating, reviews_count, image, phone, skills, experience, lat, lng, is_bot, has_car)
+     VALUES (?, ?, ?, 'الرياض', ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)`,
   )
   // بوتات التكييف الأساسية (بإحداثيات محددة)
   for (const b of BOTS) {
@@ -31,7 +32,9 @@ export function seedBots() {
     insert.run(b.name, b.name_ar, 'AC', '170 ريال/ساعة', 4.6 + Math.random() * 0.3,
       40 + Math.floor(Math.random() * 90), '/experts/ac.jpg',
       '+966 55 000 0' + Math.floor(100 + Math.random() * 899),
-      JSON.stringify(['تركيب', 'صيانة', 'إصلاح']), '6 سنوات', b.lat, b.lng)
+      JSON.stringify(['تركيب', 'صيانة', 'إصلاح']), '6 سنوات', b.lat, b.lng,
+      // أول بوتين يملكان سيارة (وصول أسرع)
+      BOTS.indexOf(b) < 2 ? 1 : 0)
   }
   // بوتات بقية الأقسام
   for (const [job, names] of Object.entries(BOT_TEMPLATES)) {
@@ -46,13 +49,22 @@ export function seedBots() {
         '/experts/ac.jpg', '+966 55 000 1' + Math.floor(100 + Math.random() * 899),
         JSON.stringify(['خدمة سريعة', 'ضمان']), '5 سنوات',
         24.7136 + (Math.random() - 0.5) * 0.12, 46.6753 + (Math.random() - 0.5) * 0.12,
+        i === 0 ? 1 : 0,
       )
     }
   }
 }
 
+// تأكيد ملكية السيارة لبوت داخل* (لبوتات موجودة مسبقاً)
+export function markBotCars() {
+  const names = [BOTS[0].name, BOTS[1].name, ...Object.entries(BOT_TEMPLATES).filter(([j]) => j !== 'AC').map(([, n]) => n[0])]
+  const st = db.prepare(`UPDATE experts SET has_car = 1 WHERE is_bot = 1 AND name = ?`)
+  for (const n of names) st.run(n)
+}
+
+// أصحاب السيارات يُرشّحون أولاً (وصول أسرع للعميل)
 const botsForRequest = (category) =>
-  db.prepare('SELECT * FROM experts WHERE job = ? AND is_bot = 1').all(category)
+  db.prepare('SELECT * FROM experts WHERE job = ? AND is_bot = 1 ORDER BY has_car DESC, rating DESC').all(category)
 
 function floorPrice(request) {
   if (request.budget && request.budget > 0) return Math.max(60, Math.round(request.budget * 0.55))

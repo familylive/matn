@@ -75,6 +75,11 @@ export default function ExpertDetail() {
           <p>📍 {expert.address}</p>
           <p>💼 {expert.experience} {t('expert.experience')}</p>
           <p>💰 {expert.hourlyRate}</p>
+          {!!(expert.has_car ?? expert.hasCar) && (
+            <p className="inline-flex items-center gap-1 text-[11px] font-bold text-[#006C35] bg-[#EAF4EE] border border-[#CFE6D8] px-2 py-0.5 rounded-full">
+              🚗 يملك سيارة — يوصلك أسرع
+            </p>
+          )}
           <p>🏢 {expert.company}</p>
           <p>🕒 {expert.availability}</p>
         </div>

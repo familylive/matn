@@ -121,10 +121,10 @@ app.post('/api/auth/signup', (req, res) => {
   const userId = info.lastInsertRowid
   if (role === 'expert') {
     db.prepare(
-      `INSERT INTO experts (name, name_ar, job, city, rate, rating, reviews_count, image, phone, skills, experience, lat, lng, user_id, verify_status)
-       VALUES (?, ?, ?, ?, '150 ريال/ساعة', 4.5, 0, '/experts/ac.jpg', ?, '[]', '1 سنة', ?, ?, ?, 'pending')`,
+      `INSERT INTO experts (name, name_ar, job, city, rate, rating, reviews_count, image, phone, skills, experience, lat, lng, user_id, verify_status, has_car)
+       VALUES (?, ?, ?, ?, '150 ريال/ساعة', 4.5, 0, '/experts/ac.jpg', ?, '[]', '1 سنة', ?, ?, ?, 'pending', ?)`,
     ).run(name, name, b.specialty || 'AC', b.city || 'الرياض', phone,
-      b.lat != null ? Number(b.lat) : null, b.lng != null ? Number(b.lng) : null, userId)
+      b.lat != null ? Number(b.lat) : null, b.lng != null ? Number(b.lng) : null, userId, b.has_car ? 1 : 0)
   }
 
   res.status(201).json({ token: signToken(userId), user: fullUser(userId) })
@@ -204,15 +204,16 @@ app.post('/api/auth/register', authRequired, (req, res) => {
     const existing = db.prepare('SELECT * FROM experts WHERE user_id = ?').get(req.userId)
     if (existing) {
       db.prepare(
-        `UPDATE experts SET name = ?, name_ar = ?, job = ?, city = ?, phone = ?, lat = ?, lng = ? WHERE id = ?`,
+        `UPDATE experts SET name = ?, name_ar = ?, job = ?, city = ?, phone = ?, lat = ?, lng = ?, has_car = ? WHERE id = ?`,
       ).run(name, name, b.specialty || existing.job, b.city || existing.city, b.phone || existing.phone,
-        b.lat != null ? Number(b.lat) : existing.lat, b.lng != null ? Number(b.lng) : existing.lng, existing.id)
+        b.lat != null ? Number(b.lat) : existing.lat, b.lng != null ? Number(b.lng) : existing.lng,
+        b.has_car !== undefined ? (b.has_car ? 1 : 0) : existing.has_car, existing.id)
     } else {
       db.prepare(
-        `INSERT INTO experts (name, name_ar, job, city, rate, rating, reviews_count, image, phone, skills, experience, lat, lng, user_id, verify_status)
-         VALUES (?, ?, ?, ?, '150 ريال/ساعة', 4.5, 0, '/experts/ac.jpg', ?, '[]', '1 سنة', ?, ?, ?, 'pending')`,
+        `INSERT INTO experts (name, name_ar, job, city, rate, rating, reviews_count, image, phone, skills, experience, lat, lng, user_id, verify_status, has_car)
+         VALUES (?, ?, ?, ?, '150 ريال/ساعة', 4.5, 0, '/experts/ac.jpg', ?, '[]', '1 سنة', ?, ?, ?, 'pending', ?)`,
       ).run(name, name, b.specialty || 'AC', b.city || 'الرياض', b.phone || null,
-        b.lat != null ? Number(b.lat) : null, b.lng != null ? Number(b.lng) : null, req.userId)
+        b.lat != null ? Number(b.lat) : null, b.lng != null ? Number(b.lng) : null, req.userId, b.has_car ? 1 : 0)
     }
   }
 
@@ -252,9 +253,19 @@ app.get('/api/experts', (req, res) => {
   const params = []
   if (category) { sql += ' AND job = ?'; params.push(category) }
   if (q) { sql += ' AND (name LIKE ? OR job LIKE ? OR city LIKE ?)'; params.push(`%${q}%`, `%${q}%`, `%${q}%`) }
-  sql += ' ORDER BY rating DESC'
+  sql += ' ORDER BY has_car DESC, rating DESC'
   const rows = db.prepare(sql).all(...params)
   res.json(rows.map((r) => ({ ...r, skills: r.skills ? JSON.parse(r.skills) : [] })))
+})
+
+app.patch('/api/me/expert', authRequired, (req, res) => {
+  const e = db.prepare('SELECT * FROM experts WHERE user_id = ?').get(req.userId)
+  if (!e) return res.status(404).json({ error: 'not_expert' })
+  if (req.body?.has_car !== undefined) {
+    db.prepare('UPDATE experts SET has_car = ? WHERE id = ?').run(req.body.has_car ? 1 : 0, e.id)
+  }
+  const updated = db.prepare('SELECT * FROM experts WHERE id = ?').get(e.id)
+  res.json({ ...updated, skills: updated.skills ? JSON.parse(updated.skills) : [] })
 })
 
 app.get('/api/me/expert', authRequired, (req, res) => {

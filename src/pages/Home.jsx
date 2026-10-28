@@ -13,6 +13,31 @@ export default function Home() {
   const { t, lang } = useLang()
   const categories = useCategories()
   const [counts, setCounts] = useState({ byCategory: {} })
+  const [list, setList] = useState(experts)
+
+  useEffect(() => {
+    let alive = true
+    fetch('/api/experts')
+      .then((r) => r.json())
+      .then((rows) => {
+        if (!alive || !Array.isArray(rows) || !rows.length) return
+        setList(
+          rows.map((r) => ({
+            id: r.id,
+            personName: r.name_ar || r.name,
+            jobName: r.job,
+            location: r.city,
+            hourlyRate: r.rate,
+            rating: r.rating,
+            reviews: r.reviews_count,
+            image: r.image,
+            hasCar: !!r.has_car,
+          })),
+        )
+      })
+      .catch(() => {})
+    return () => { alive = false }
+  }, [])
 
   useEffect(() => {
     let alive = true
@@ -28,8 +53,8 @@ export default function Home() {
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase()
-    if (!q) return experts
-    return experts.filter(
+    if (!q) return list
+    return list.filter(
       (e) =>
         e.personName.toLowerCase().includes(q) ||
         e.jobName.toLowerCase().includes(q) ||
@@ -37,7 +62,7 @@ export default function Home() {
         t(`cat.${e.jobName}`, e.jobName).includes(q) ||
         t(`city.${e.location}`, e.location).includes(q),
     )
-  }, [query, t])
+  }, [query, t, list])
 
   return (
     <div className="pb-8">

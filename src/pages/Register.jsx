@@ -27,6 +27,7 @@ export default function Register() {
     specialty: 'AC',
     lat: null,
     lng: null,
+    has_car: false,
   })
 
   useEffect(() => {
@@ -160,6 +161,19 @@ export default function Register() {
                 </select>
               </div>
             </div>
+
+            {form.role === 'expert' && (
+              <label className="flex items-center gap-2 rounded-xl border border-[#E3D9BF] bg-[#FBF9F2] px-3 py-2.5 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={!!form.has_car}
+                  onChange={(e) => setForm({ ...form, has_car: e.target.checked })}
+                  className="w-4 h-4 accent-[#006C35]"
+                />
+                <span className="text-sm font-bold text-[#11221A]">🚗 أملك سيارة</span>
+                <span className="text-[10px] text-gray-500">— يرشّحك النظام أولاً للمزايدة</span>
+              </label>
+            )}
 
             {form.role === 'expert' && (
               <div>

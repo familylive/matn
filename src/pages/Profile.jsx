@@ -39,6 +39,22 @@ export default function Profile() {
   }
 
   const isExpert = profile.role === 'expert'
+  const [myExpert, setMyExpert] = useState(null)
+
+  useEffect(() => {
+    if (!isExpert) return
+    api.get('/api/me/expert').then(setMyExpert).catch(() => {})
+  }, [isExpert])
+
+  const toggleCar = async () => {
+    const next = !myExpert?.has_car
+    setMyExpert((e) => ({ ...e, has_car: next ? 1 : 0 }))
+    try {
+      await api.patch('/api/me/expert', { has_car: next })
+    } catch {
+      setMyExpert((e) => ({ ...e, has_car: next ? 0 : 1 }))
+    }
+  }
 
   return (
     <div className="px-4 py-5 mx-auto w-full max-w-2xl">
@@ -93,6 +109,29 @@ export default function Profile() {
         )}
         {profile.email && <p className="text-gray-500 text-xs mt-0.5">{profile.email}</p>}
       </div>
+
+      {isExpert && myExpert && (
+        <button
+          onClick={toggleCar}
+          className="card-lux w-full mt-4 p-4 flex items-center justify-between text-start"
+        >
+          <div>
+            <p className="font-extrabold text-sm text-[#11221A]">🚗 أملك سيارة</p>
+            <p className="text-[11px] text-gray-500 mt-0.5">
+              {myExpert.has_car
+                ? 'مفعّل — يرشّحك النظام أولاً للمزايدة'
+                : 'غير مفعّل — فعّله لتكون أول المرشحين'}
+            </p>
+          </div>
+          <span
+            className={`w-12 h-6 rounded-full flex items-center px-0.5 transition shrink-0 ${
+              myExpert.has_car ? 'bg-[#006C35] justify-end' : 'bg-gray-300 justify-start'
+            }`}
+          >
+            <span className="block w-5 h-5 rounded-full bg-white shadow" />
+          </span>
+        </button>
+      )}
 
       <div className="grid grid-cols-2 gap-3 mt-4">
         <div className="card-lux p-4 text-center">

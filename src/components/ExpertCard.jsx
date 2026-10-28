@@ -29,6 +29,11 @@ export default function ExpertCard({ expert }) {
               <span className="text-gray-300">•</span>
               <span className="text-xs text-gray-500">{expert.reviews} {t('expert.reviews')}</span>
             </div>
+            {expert.hasCar && (
+              <span className="inline-flex items-center gap-1 mt-1 text-[10px] font-bold text-[#006C35] bg-[#EAF4EE] border border-[#CFE6D8] px-2 py-0.5 rounded-full">
+                🚗 يملك سيارة
+              </span>
+            )}
             <div className="flex items-center justify-between mt-2">
               <span className="text-xs text-gray-500">📍 {t(`city.${expert.location}`, expert.location)}</span>
               <span className="chip-gold">{expert.hourlyRate}</span>
