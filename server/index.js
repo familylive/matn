@@ -1418,6 +1418,62 @@ io.on('connection', (socket) => {
   socket.on('leave', (requestId) => socket.leave(`request:${requestId}`))
 })
 
+
+/* ---------- استعادة تلقائية عند الإقلاع ----------
+   Render المجاني يمسح القرص عند كل إعادة تشغيل/نوم →
+   إذا القاعدة فاضية، نسحب آخر نسخة من Cloudflare KV ونرجعها. */
+async function autoRestoreOnBoot() {
+  const tok = process.env.CF_BACKUP_TOKEN
+  const acc = process.env.CF_ACCOUNT_ID
+  const ns = process.env.CF_KV_NS
+  if (!tok || !acc || !ns) return
+
+  const isEmpty =
+    db.prepare('SELECT COUNT(*) c FROM requests').get().c === 0 &&
+    db.prepare('SELECT COUNT(*) c FROM users').get().c <= 1
+  if (!isEmpty) return
+
+  try {
+    const r = await fetch(
+      `https://api.cloudflare.com/client/v4/accounts/${acc}/storage/kv/namespaces/${ns}/values/bk:latest`,
+      { headers: { authorization: `Bearer ${tok}` } },
+    )
+    if (!r.ok) return console.log('AUTORESTORE: no snapshot', r.status)
+    const snap = await r.json()
+    const tables = snap?.tables
+    if (!tables || typeof tables !== 'object') return console.log('AUTORESTORE: bad snapshot')
+
+    const order = ['users', 'experts', 'categories', 'requests', 'bids', 'payments', 'invoices', 'reviews', 'ads', 'city_requests']
+    db.pragma('foreign_keys = OFF')
+    let restored = 0
+    for (const t of order) {
+      const rows = tables[t]
+      if (!Array.isArray(rows) || !rows.length) continue
+      for (const row of rows) {
+        const cols = Object.keys(row)
+        if (!cols.length) continue
+        try {
+          db.prepare(
+            `INSERT OR REPLACE INTO ${t} (${cols.join(',')}) VALUES (${cols.map(() => '?').join(',')})`,
+          ).run(...cols.map((c) => row[c]))
+          restored++
+        } catch (e) {
+          console.error('AUTORESTORE_ROW_FAIL', t, e.message)
+        }
+      }
+    }
+    db.pragma('foreign_keys = ON')
+    backfillNumbers()
+    normalizePhones()
+    seedBots()
+    console.log(`AUTORESTORE_OK rows=${restored} snapshot=${snap.taken_at || ''}`)
+  } catch (e) {
+    console.error('AUTORESTORE_FAIL', e.message)
+  }
+}
+
+try { await autoRestoreOnBoot() } catch (e) { console.error('AUTORESTORE_BOOT_FAIL', e.message) }
+
 resumeBots(io)
 
 const PORT = process.env.PORT || 3001
