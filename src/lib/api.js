@@ -17,7 +17,18 @@ async function request(path, { method = 'GET', body, auth = false } = {}) {
     body: body ? JSON.stringify(body) : undefined,
   })
   const data = await res.json().catch(() => ({}))
-  if (!res.ok) throw new Error(data.error || `http_${res.status}`)
+  if (res.status === 401) {
+    localStorage.removeItem('authToken')
+    localStorage.removeItem('currentUser')
+    const err = new Error(data.error || 'unauthorized')
+    err.code = 'unauthorized'
+    throw err
+  }
+  if (!res.ok) {
+    const err = new Error(data.error || `http_${res.status}`)
+    err.code = data.error
+    throw err
+  }
   return data
 }
 

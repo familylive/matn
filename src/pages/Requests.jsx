@@ -2,6 +2,13 @@ import { useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { api } from '../lib/api.js'
 import { useAuth } from '../context/AuthContext.jsx'
+
+const ERROR_AR = {
+  unauthorized: 'انتهت جلستك — سجّل دخولك من جديد',
+  session_expired: 'انتهت جلستك — سجّل دخولك من جديد',
+  city_required: 'اختر مدينتك أولاً',
+  title_and_category_required: 'اكتب وصف الطلب واختر التصنيف',
+}
 import { useLang } from '../i18n/LanguageContext.jsx'
 import { categories } from '../data/categories.js'
 import CityGate from '../components/CityGate.jsx'
@@ -19,13 +26,14 @@ export default function Requests() {
   const [error, setError] = useState('')
   const [form, setForm] = useState({ title: '', category: 'Plumber', city: '', budget: '', description: '' })
   const [loc, setLoc] = useState({ lat: null, lng: null, status: 'idle', accuracy: null })
-  const { isAuthenticated } = useAuth()
+  const { isAuthenticated, user } = useAuth()
   const { t } = useLang()
   const navigate = useNavigate()
 
   const load = async () => {
     try {
-      setItems(await api.requests())
+      const data = await api.requests()
+      setItems(data)
     } catch (e) {
       setError(e.message)
     } finally {
@@ -37,10 +45,15 @@ export default function Requests() {
     load()
   }, [])
 
+  useEffect(() => {
+    const saved = user?.city || user?.userLocation
+    if (saved) setForm((f) => (f.city ? f : { ...f, city: saved }))
+  }, [user])
+
   const submit = async (e) => {
     e.preventDefault()
     setError('')
-    if (!isAuthenticated) return navigate('/login')
+    if (!isAuthenticated || !localStorage.getItem('authToken')) return navigate('/login')
     if (!form.city) return setError('اختر مدينتك أولاً')
     try {
       const created = await api.createRequest({
@@ -53,7 +66,12 @@ export default function Requests() {
       setForm({ title: '', category: 'Plumber', city: '', budget: '', description: '' })
       navigate(`/requests/${created.id}`)
     } catch (err) {
-      setError(err.message)
+      if (err.code === 'unauthorized') {
+        setError(ERROR_AR.unauthorized)
+        setTimeout(() => navigate('/login'), 1200)
+        return
+      }
+      setError(ERROR_AR[err.message] || err.message)
     }
   }
 
