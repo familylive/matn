@@ -173,6 +173,16 @@ app.get('/api/experts', (req, res) => {
   res.json(rows.map((r) => ({ ...r, skills: r.skills ? JSON.parse(r.skills) : [] })))
 })
 
+app.get('/api/experts/:id/reviews', (req, res) => {
+  res.json(
+    db.prepare(
+      `SELECT r.*, u.name AS customer_name FROM reviews r
+       LEFT JOIN requests q ON q.id = r.request_id LEFT JOIN users u ON u.id = q.user_id
+       WHERE r.expert_id = ? ORDER BY r.id DESC LIMIT 30`,
+    ).all(req.params.id),
+  )
+})
+
 app.get('/api/experts/:id', (req, res) => {
   const row = db.prepare("SELECT * FROM experts WHERE id = ? AND COALESCE(verify_status, 'approved') = 'approved'").get(req.params.id)
   if (!row) return res.status(404).json({ error: 'not_found' })
@@ -334,20 +344,50 @@ app.post('/api/requests/:id/extras', authRequired, (req, res) => {
 
   const info = db.prepare('INSERT INTO request_extras (request_id, title, amount) VALUES (?, ?, ?)').run(request.id, title, amount)
 
-  // عمولة مؤجلة تُخصم من الطلب القادم
-  const custPct = commissionCustomer()
-  const expPct = commissionExpert()
-  const bid = request.accepted_bid_id ? db.prepare('SELECT * FROM bids WHERE id = ?').get(request.accepted_bid_id) : null
-  const ins = db.prepare(
-    'INSERT INTO commission_ledger (user_id, expert_id, source_request_id, side, amount) VALUES (?, ?, ?, ?, ?)',
-  )
-  ins.run(request.user_id, null, request.id, 'customer', round2(amount * custPct / 100))
-  if (bid) ins.run(null, bid.expert_id, request.id, 'expert', round2(amount * expPct / 100))
-
   res.status(201).json({
     extra: db.prepare('SELECT * FROM request_extras WHERE id = ?').get(info.lastInsertRowid),
     request: requestWithBids(request.id),
   })
+})
+
+app.post('/api/requests/:id/extras/:extraId/pay', authRequired, (req, res) => {
+  const request = db.prepare('SELECT * FROM requests WHERE id = ?').get(req.params.id)
+  if (!request) return res.status(404).json({ error: 'not_found' })
+  if (request.user_id !== req.userId) return res.status(403).json({ error: 'forbidden' })
+
+  const extra = db.prepare('SELECT * FROM request_extras WHERE id = ? AND request_id = ?').get(req.params.extraId, request.id)
+  if (!extra) return res.status(404).json({ error: 'extra_not_found' })
+  if (extra.status === 'paid') return res.status(409).json({ error: 'already_paid' })
+
+  const method = String(req.body?.method || '')
+  if (!['cash', 'card', 'urpay', 'stcpay'].includes(method)) return res.status(400).json({ error: 'invalid_method' })
+  const needsPhone = ['urpay', 'stcpay'].includes(method)
+  const phone = needsPhone ? String(req.body?.phone || '').replace(/[^\d+]/g, '') : null
+  if (needsPhone && phone.replace(/\D/g, '').length < 9) return res.status(400).json({ error: 'phone_required' })
+
+  const custPct = commissionCustomer()
+  const expPct = commissionExpert()
+  const total = round2(extra.amount * (1 + custPct / 100))
+
+  db.prepare('INSERT INTO payments (request_id, method, amount, phone, status, kind) VALUES (?, ?, ?, ?, ?, ?)')
+    .run(request.id, method, total, phone, method === 'cash' ? 'pending_cash' : 'paid', 'extra')
+
+  db.prepare("UPDATE request_extras SET status = 'paid', method = ?, paid_at = datetime('now') WHERE id = ?").run(method, extra.id)
+
+  // عمولة الفني على العمل الإضافي: تُخصم من مستحقاته في أول طلب تالٍ
+  const bid = request.accepted_bid_id ? db.prepare('SELECT * FROM bids WHERE id = ?').get(request.accepted_bid_id) : null
+  if (bid) {
+    db.prepare('INSERT INTO commission_ledger (expert_id, source_request_id, side, amount) VALUES (?, ?, ?, ?)')
+      .run(bid.expert_id, request.id, 'expert', round2(extra.amount * expPct / 100))
+  }
+
+  // تمديد الضمان من وقت سداد العمل الإضافي
+  if (request.status === 'done') {
+    db.prepare("UPDATE requests SET warranty_until = datetime('now', '+' || COALESCE(warranty_days, 3) || ' days') WHERE id = ?")
+      .run(request.id)
+  }
+
+  res.status(201).json({ ok: true, total, request: requestWithBids(request.id) })
 })
 
 app.post('/api/requests/:id/accept', authRequired, (req, res) => {
@@ -394,7 +434,7 @@ app.post('/api/requests/:id/close', authRequired, (req, res) => {
 app.post('/api/requests/:id/review', authRequired, (req, res) => {
   const request = db.prepare('SELECT * FROM requests WHERE id = ?').get(req.params.id)
   if (!request) return res.status(404).json({ error: 'not_found' })
-  if (request.status !== 'done') return res.status(409).json({ error: 'not_done' })
+  if (!['done', 'closed'].includes(request.status)) return res.status(409).json({ error: 'not_done' })
   const rating = Number(req.body?.rating)
   if (!(rating >= 1 && rating <= 5)) return res.status(400).json({ error: 'invalid_rating' })
 

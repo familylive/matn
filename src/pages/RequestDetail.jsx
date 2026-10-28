@@ -7,6 +7,55 @@ import { useLang } from '../i18n/LanguageContext.jsx'
 
 const socket = io({ autoConnect: false })
 
+function ExtraPay({ requestId, extra, onPaid }) {
+  const [open, setOpen] = useState(false)
+  const [method, setMethod] = useState('cash')
+  const [phone, setPhone] = useState('')
+  const [busy, setBusy] = useState(false)
+  const total = Math.round(extra.amount * 1.075 * 100) / 100
+
+  const pay = async () => {
+    setBusy(true)
+    try {
+      const r = await api.payExtra(requestId, extra.id, { method, phone })
+      onPaid(r.request)
+      setOpen(false)
+    } catch {
+      alert('تعذّر السداد')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  if (!open) {
+    return (
+      <button onClick={() => setOpen(true)} className="text-[11px] bg-[#006C35] text-white px-2.5 py-1 rounded-lg font-bold">
+        سدّد {total} ر.س
+      </button>
+    )
+  }
+
+  return (
+    <div className="fixed inset-0 z-40 bg-black/40 grid place-items-center p-4" onClick={() => setOpen(false)}>
+      <div className="bg-white rounded-2xl p-4 w-full max-w-sm space-y-2" onClick={(e) => e.stopPropagation()}>
+        <p className="font-extrabold text-sm text-[#11221A]">سداد العمل الإضافي</p>
+        <p className="text-xs text-gray-500">{extra.title} — {extra.amount} + رسوم 7.5% = <b>{total} ر.س</b></p>
+        <select value={method} onChange={(e) => setMethod(e.target.value)} className="w-full px-3 py-2 border border-[#E3D9BF] rounded-lg text-sm bg-white">
+          <option value="cash">كاش</option>
+          <option value="card">بطاقة</option>
+          <option value="urpay">urpay</option>
+          <option value="stcpay">STC Pay</option>
+        </select>
+        {['urpay', 'stcpay'].includes(method) && (
+          <input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="رقم الجوال"
+            className="w-full px-3 py-2 border border-[#E3D9BF] rounded-lg text-sm" />
+        )}
+        <button onClick={pay} disabled={busy} className="btn-primary">{busy ? 'جارٍ…' : 'تأكيد السداد'}</button>
+      </div>
+    </div>
+  )
+}
+
 function ExtraForm({ requestId, onAdded }) {
   const [open, setOpen] = useState(false)
   const [form, setForm] = useState({ title: '', amount: '' })
@@ -324,9 +373,19 @@ export default function RequestDetail() {
           <div className="card-lux p-4 mt-4">
             <p className="font-extrabold text-sm text-[#11221A]">➕ أعمال إضافية</p>
             {data.extras.map((e) => (
-              <div key={e.id} className="flex justify-between text-xs py-1 text-gray-600">
-                <span>{e.title}</span>
-                <span className="font-bold">{e.amount} ر.س</span>
+              <div key={e.id} className="py-1">
+                <div className="flex justify-between text-xs text-gray-600">
+                  <span>{e.title}</span>
+                  <span className="font-bold">{e.amount} ر.س</span>
+                </div>
+                <div className="flex items-center justify-between mt-1">
+                  <span className={`text-[10px] px-2 py-0.5 rounded-full ${e.status === 'paid' ? 'bg-[#E9F5EE] text-[#006C35]' : 'bg-orange-50 text-orange-600'}`}>
+                    {e.status === 'paid' ? 'مدفوع' : 'بانتظار السداد'}
+                  </span>
+                  {isOwner && e.status !== 'paid' && (
+                    <ExtraPay requestId={id} extra={e} onPaid={setData} />
+                  )}
+                </div>
               </div>
             ))}
             <div className="flex justify-between text-sm font-bold text-[#006C35] border-t border-dashed border-[#EADFC8] mt-2 pt-2">
@@ -464,7 +523,7 @@ export default function RequestDetail() {
           </div>
         )}
 
-        {isOwner && data.status === 'done' && (
+        {isOwner && ['done', 'closed'].includes(data.status) && (
           <div className="bg-white rounded-xl p-4 border border-gray-100 mt-4">
             <p className="text-sm text-gray-700 mb-2">{t('rd.rate')}</p>
             <div className="flex gap-2">

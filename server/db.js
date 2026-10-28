@@ -134,6 +134,9 @@ CREATE TABLE IF NOT EXISTS request_extras (
   request_id INTEGER NOT NULL REFERENCES requests(id) ON DELETE CASCADE,
   title TEXT NOT NULL,
   amount REAL NOT NULL,
+  status TEXT NOT NULL DEFAULT 'pending',
+  method TEXT,
+  paid_at TEXT,
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
@@ -212,6 +215,10 @@ addColumn('requests', 'number', 'INTEGER')
 addColumn('invoices', 'extras_total', 'REAL DEFAULT 0')
 addColumn('invoices', 'deferred_customer', 'REAL DEFAULT 0')
 addColumn('invoices', 'deferred_expert', 'REAL DEFAULT 0')
+addColumn('request_extras', 'status', "TEXT DEFAULT 'pending'")
+addColumn('request_extras', 'method', 'TEXT')
+addColumn('request_extras', 'paid_at', 'TEXT')
+addColumn('payments', 'kind', "TEXT DEFAULT 'service'")
 addColumn('users', 'status', "TEXT DEFAULT 'active'")
 addColumn('invoices', 'commission', 'REAL DEFAULT 0')
 addColumn('invoices', 'net', 'REAL DEFAULT 0')

@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react'
 import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import experts from '../data/experts.json'
 import FavoriteButton from '../components/FavoriteButton.jsx'
@@ -9,6 +10,11 @@ export default function ExpertDetail() {
   const { state } = useLocation()
   const navigate = useNavigate()
   const { t, lang } = useLang()
+  const [reviews, setReviews] = useState([])
+
+  useEffect(() => {
+    fetch(`/api/experts/${id}/reviews`).then((r) => r.json()).then(setReviews).catch(() => {})
+  }, [id])
   const expert = state?.expert || experts.find((e) => String(e.id) === String(id))
 
   if (!expert) {
@@ -74,6 +80,24 @@ export default function ExpertDetail() {
                 {s}
               </span>
             ))}
+          </div>
+        )}
+
+        {reviews.length > 0 && (
+          <div className="mt-6">
+            <h3 className="font-extrabold text-sm text-[#11221A] mb-2">تقييمات العملاء ({reviews.length})</h3>
+            <div className="space-y-2">
+              {reviews.map((r) => (
+                <div key={r.id} className="bg-white rounded-xl p-3 border border-[#F0E9D8]">
+                  <div className="flex items-center justify-between">
+                    <p className="text-xs font-bold text-[#11221A]">{r.customer_name || 'عميل'}</p>
+                    <p className="text-[#C9A227] text-xs">{'★'.repeat(r.rating)}{'☆'.repeat(5 - r.rating)}</p>
+                  </div>
+                  {r.comment && <p className="text-[11px] text-gray-600 mt-1">{r.comment}</p>}
+                  <p className="text-[10px] text-gray-400 mt-1">{r.created_at?.slice(0, 10)}</p>
+                </div>
+              ))}
+            </div>
           </div>
         )}
 
