@@ -696,7 +696,10 @@ app.post('/api/admin/restore', adminRequired, (req, res) => {
   db.pragma('foreign_keys = OFF')
   try {
     const tx = db.transaction(() => {
-      for (const t of order) db.prepare(`DELETE FROM ${t}`).run()
+      for (const t of order) {
+        if (!Array.isArray(tables[t])) continue
+        db.prepare(`DELETE FROM ${t}`).run()
+      }
       for (const t of [...order].reverse()) {
         const rows = tables[t]
         if (!Array.isArray(rows)) continue
@@ -709,6 +712,18 @@ app.post('/api/admin/restore', adminRequired, (req, res) => {
       }
     })
     tx()
+    if (db.prepare('SELECT COUNT(*) c FROM categories').get().c === 0) {
+      const seedCats = [
+        ['AC', 'فني تكييف', 'AC Technician', '❄️'],
+        ['Plumber', 'سباك', 'Plumber', '🔧'],
+        ['Carpenter', 'نجار', 'Carpenter', '🔨'],
+        ['Electrician', 'كهربائي', 'Electrician', '⚡'],
+        ['Painter', 'دهّان', 'Painter', '🎨'],
+        ['Mechanic', 'ميكانيكي', 'Mechanic', '🛠️'],
+      ]
+      const ins = db.prepare('INSERT INTO categories (key, ar, en, icon, sort) VALUES (?, ?, ?, ?, ?)')
+      seedCats.forEach((c, i) => ins.run(c[0], c[1], c[2], c[3], i))
+    }
     res.json({ ok: true, restored_at: new Date().toISOString() })
   } catch (e) {
     res.status(500).json({ error: 'restore_failed', detail: String(e.message) })
