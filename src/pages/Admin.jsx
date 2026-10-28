@@ -433,6 +433,23 @@ function Reports() {
   )
 }
 
+
+// ضغط الصورة قبل الرفع (صور الجوال كبيرة وتفشل الرفع)
+async function compressImage(file, maxW = 1600, quality = 0.85) {
+  try {
+    const bitmap = await createImageBitmap(file)
+    const scale = Math.min(1, maxW / bitmap.width)
+    const canvas = document.createElement('canvas')
+    canvas.width = Math.round(bitmap.width * scale)
+    canvas.height = Math.round(bitmap.height * scale)
+    canvas.getContext('2d').drawImage(bitmap, 0, 0, canvas.width, canvas.height)
+    const blob = await new Promise((res) => canvas.toBlob(res, 'image/jpeg', quality))
+    return blob ? new File([blob], 'img.jpg', { type: 'image/jpeg' }) : file
+  } catch {
+    return file
+  }
+}
+
 function Ads() {
   const [ads, setAds] = useState([])
   const [form, setForm] = useState({ title: '', link: '', price: '', duration_days: 30, featured: true, starts_at: '', ends_at: '' })
@@ -444,12 +461,16 @@ function Ads() {
   useEffect(() => { load() }, [])
 
   const upload = async (file) => {
-    const fd = new FormData()
-    fd.append('image', file)
+    setErr('')
     try {
+      const small = await compressImage(file)
+      const fd = new FormData()
+      fd.append('image', small)
       const r = await api('/api/admin/upload', { method: 'POST', form: fd })
       setImage(r.url)
-    } catch { setErr('تعذّر رفع الصورة') }
+    } catch (e) {
+      setErr('تعذّر رفع الصورة — جرّب صورة أصغر')
+    }
   }
 
   const create = async (e) => {
@@ -542,6 +563,22 @@ function Ads() {
                 return <span className={`inline-block mt-1 text-[10px] font-bold px-1.5 py-0.5 rounded ${cls}`}>{txt}</span>
               })()}
             </div>
+            <label className="text-[11px] text-[#8a6d13] bg-[#FBF5E3] px-2 py-1 rounded-lg font-bold cursor-pointer whitespace-nowrap">
+              صورة
+              <input type="file" accept="image/*" className="hidden"
+                onChange={async (e) => {
+                  const f = e.target.files?.[0]
+                  if (!f) return
+                  try {
+                    const small = await compressImage(f)
+                    const fd = new FormData()
+                    fd.append('image', small)
+                    const up = await api('/api/admin/upload', { method: 'POST', form: fd })
+                    await api(`/api/admin/ads/${ad.id}`, { method: 'PATCH', body: { image: up.url } })
+                    load()
+                  } catch { alert('تعذّر رفع الصورة') }
+                }} />
+            </label>
             <button onClick={() => toggle(ad, 'active')} className={`text-[11px] px-2 py-1 rounded-lg ${ad.active ? 'bg-[#E9F5EE] text-[#006C35]' : 'bg-gray-100 text-gray-500'}`}>
               {ad.active ? 'مفعّل' : 'موقوف'}
             </button>
@@ -563,8 +600,9 @@ function Categories() {
   useEffect(() => { load() }, [])
 
   const uploadImage = async (file) => {
+    const small = await compressImage(file)
     const fd = new FormData()
-    fd.append('image', file)
+    fd.append('image', small)
     const r = await api('/api/admin/upload', { method: 'POST', form: fd })
     return r.url
   }

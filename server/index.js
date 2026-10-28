@@ -35,7 +35,7 @@ const upload = multer({
       cb(null, `ad-${Date.now()}-${Math.random().toString(36).slice(2, 8)}${ext}`)
     },
   }),
-  limits: { fileSize: 6 * 1024 * 1024 },
+  limits: { fileSize: 20 * 1024 * 1024 },
   fileFilter: (_req, file, cb) => cb(null, /image\//.test(file.mimetype)),
 })
 
