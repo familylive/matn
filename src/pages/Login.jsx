@@ -28,6 +28,24 @@ export default function Login() {
     e.preventDefault()
     setBusy(true)
     setError('')
+
+    // لو الإدخال إيميل: جرّب دخول لوحة التحكم أولاً
+    if (form.userName.includes('@')) {
+      try {
+        const res = await fetch('/api/admin/login', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ email: form.userName.trim(), password: form.password }),
+        })
+        if (res.ok) {
+          const data = await res.json()
+          localStorage.setItem('adminToken', data.token)
+          navigate('/admin')
+          return
+        }
+      } catch {}
+    }
+
     await new Promise((r) => setTimeout(r, 400))
     const ok = loginWithCredentials(form.userName, form.password)
     if (ok) navigate('/')
@@ -155,6 +173,13 @@ export default function Login() {
             {phoneErr && <p className="text-xs text-red-500">{phoneErr}</p>}
           </div>
         </div>
+
+        <button
+          onClick={() => navigate('/admin')}
+          className="w-full mt-5 text-center text-sm font-bold text-[#8a6d13] bg-[#FBF5E3] border border-[#EADFC8] py-2.5 rounded-xl"
+        >
+          🛡️ دخول لوحة التحكم (للإدارة)
+        </button>
 
         <div className="mt-8">
           <p className="text-center text-sm text-gray-500 mb-4">{t('login.quick')}</p>
