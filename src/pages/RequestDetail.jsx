@@ -375,7 +375,7 @@ export default function RequestDetail() {
             }}
             className="w-full mb-3 border border-red-200 text-red-500 py-2 rounded-xl text-xs font-bold"
           >
-            إلغاء الطلب — متبقي {Math.floor(cancelLeft / 60000)}:{String(Math.floor((cancelLeft % 60000) / 1000)).padStart(2, '0')}
+            إلغاء الطلب
           </button>
         )}
 
