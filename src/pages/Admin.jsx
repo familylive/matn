@@ -556,7 +556,7 @@ function Ads() {
 
 function Categories() {
   const [rows, setRows] = useState([])
-  const [form, setForm] = useState({ key: '', ar: '', en: '', icon: '🛠️', image: '', parent_id: '' })
+  const [form, setForm] = useState({ key: '', ar: '', en: '', icon: '🛠️', image: '', parent_id: '', min_price: '' })
   const [editId, setEditId] = useState(null)
   const [err, setErr] = useState('')
   const load = () => api('/api/admin/categories').then(setRows).catch(() => {})
@@ -574,7 +574,7 @@ function Categories() {
     setErr('')
     try {
       await api('/api/admin/categories', { method: 'POST', body: form })
-      setForm({ key: '', ar: '', en: '', icon: '🛠️', image: '', parent_id: '' })
+      setForm({ key: '', ar: '', en: '', icon: '🛠️', image: '', parent_id: '', min_price: '' })
       load()
     } catch (e2) { setErr(e2.message === 'key_exists' ? 'المفتاح مستخدم' : 'تعذّر الإضافة') }
   }
@@ -582,7 +582,7 @@ function Categories() {
   const saveEdit = async (c) => {
     await api(`/api/admin/categories/${c.id}`, {
       method: 'PATCH',
-      body: { ar: c.ar, en: c.en, icon: c.icon, image: c.image },
+      body: { ar: c.ar, en: c.en, icon: c.icon, image: c.image, min_price: c.min_price === '' ? null : Number(c.min_price) },
     })
     setEditId(null)
     load()
@@ -633,6 +633,13 @@ function Categories() {
               }} />
           </label>
         </div>
+        <div>
+          <label className="text-[11px] text-gray-500">أقل مبلغ يقدر يدفعه العميل (ر.س)</label>
+          <input type="number" min="0" placeholder="مثال: 100" value={form.min_price}
+            onChange={(e) => setForm({ ...form, min_price: e.target.value })}
+            className="w-full mt-1 px-3 py-2 border border-[#E3D9BF] rounded-lg text-sm" />
+          <p className="text-[10px] text-gray-400 mt-1">إذا حطيت رقم، ما يقدر العميل ينشر طلب بأقل منه</p>
+        </div>
         {form.image && <img src={form.image} alt="preview" className="h-16 rounded-lg object-cover" />}
         {err && <p className="text-xs text-red-500">{err}</p>}
         <button className="btn-primary">إضافة القسم</button>
@@ -646,6 +653,12 @@ function Categories() {
                 className="w-full px-2 py-1.5 border border-[#E3D9BF] rounded-lg text-sm" />
               <input value={c.en || ''} onChange={(e) => setRows((r) => r.map((x) => x.id === c.id ? { ...x, en: e.target.value } : x))}
                 placeholder="English" className="w-full px-2 py-1.5 border border-[#E3D9BF] rounded-lg text-sm" />
+              <div>
+                <label className="text-[11px] text-gray-500">أقل مبلغ (ر.س)</label>
+                <input type="number" min="0" value={c.min_price ?? ''} placeholder="بدون حد"
+                  onChange={(e) => setRows((r) => r.map((x) => x.id === c.id ? { ...x, min_price: e.target.value } : x))}
+                  className="w-full mt-1 px-2 py-1.5 border border-[#E3D9BF] rounded-lg text-sm" />
+              </div>
               <div className="flex gap-2 items-center">
                 <input value={c.icon || ''} onChange={(e) => setRows((r) => r.map((x) => x.id === c.id ? { ...x, icon: e.target.value } : x))}
                   className="w-20 px-2 py-1.5 border border-[#E3D9BF] rounded-lg text-sm" />
@@ -677,6 +690,7 @@ function Categories() {
               <div className="flex-1">
                 <p className="font-bold text-sm text-[#11221A]">{c.ar}</p>
                 <p className="text-[11px] text-gray-500">
+                  {c.min_price ? `أقل مبلغ ${c.min_price} ر.س · ` : ''}
                   {c.key} · {c.en || '—'}
                   {c.parent_id ? ` · تابع لـ${rows.find((r) => r.id === c.parent_id)?.ar || ''}` : ''}
                 </p>

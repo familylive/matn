@@ -8,7 +8,7 @@ export function useCategories() {
       .then((r) => r.json())
       .then((d) => {
         if (Array.isArray(d) && d.length) {
-          setCats(d.map((c) => ({ id: c.id, name: c.key, icon: c.icon || '🛠️', ar: c.ar, en: c.en, image: c.image, parent_id: c.parent_id || null })))
+          setCats(d.map((c) => ({ id: c.id, name: c.key, icon: c.icon || '🛠️', ar: c.ar, en: c.en, image: c.image, parent_id: c.parent_id || null, min_price: Number(c.min_price) || 0 })))
         }
       })
       .catch(() => {})

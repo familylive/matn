@@ -431,6 +431,20 @@ app.get('/api/requests/:id', (req, res) => {
 app.post('/api/requests', authRequired, (req, res) => {
   const { title, category, description, city, budget, subcategory, warranty_days } = req.body || {}
   if (!title || !category) return res.status(400).json({ error: 'title_and_category_required' })
+
+  // أقل مبلغ مسموح للقسم (يُمنع العميل من البخس)
+  const cat = db.prepare('SELECT * FROM categories WHERE key = ?').get(category)
+  const parentMin = cat?.parent_id ? db.prepare('SELECT min_price FROM categories WHERE id = ?').get(cat.parent_id)?.min_price : null
+  const minPrice = Number(cat?.min_price || parentMin || 0)
+  const budgetNum = budget ? Number(budget) : 0
+  if (minPrice > 0 && (!budgetNum || budgetNum < minPrice)) {
+    return res.status(422).json({
+      error: 'below_min_price',
+      min_price: minPrice,
+      message: `أقل مبلغ مسموح لهذا القسم ${minPrice} ر.س`,
+    })
+  }
+
   const nextNumber = db.prepare('SELECT COALESCE(MAX(number), 1054) + 1 n FROM requests').get().n
   const info = db
     .prepare(
@@ -1156,11 +1170,11 @@ app.get('/api/admin/categories', adminRequired, (_req, res) => {
 })
 
 app.post('/api/admin/categories', adminRequired, (req, res) => {
-  const { key, ar, en, icon, sort, image, parent_id } = req.body || {}
+  const { key, ar, en, icon, sort, image, parent_id, min_price } = req.body || {}
   if (!key || !ar) return res.status(400).json({ error: 'key_and_ar_required' })
   try {
-    const info = db.prepare('INSERT INTO categories (key, ar, en, icon, sort, image, parent_id) VALUES (?, ?, ?, ?, ?, ?, ?)')
-      .run(key.trim(), ar.trim(), en || null, icon || '🛠️', Number(sort) || 99, image || null, parent_id || null)
+    const info = db.prepare('INSERT INTO categories (key, ar, en, icon, sort, image, parent_id, min_price) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
+      .run(key.trim(), ar.trim(), en || null, icon || '🛠️', Number(sort) || 99, image || null, parent_id || null, min_price ? Number(min_price) : null)
     res.status(201).json(db.prepare('SELECT * FROM categories WHERE id = ?').get(info.lastInsertRowid))
   } catch {
     res.status(409).json({ error: 'key_exists' })
@@ -1173,7 +1187,7 @@ app.patch('/api/admin/categories/:id', adminRequired, (req, res) => {
   const b = req.body || {}
   const sets = []
   const params = []
-  for (const f of ['ar', 'en', 'icon', 'active', 'sort', 'image', 'parent_id']) {
+  for (const f of ['ar', 'en', 'icon', 'active', 'sort', 'image', 'parent_id', 'min_price']) {
     if (b[f] !== undefined) { sets.push(`${f} = ?`); params.push(f === 'active' ? (b[f] ? 1 : 0) : b[f]) }
   }
   if (sets.length) db.prepare(`UPDATE categories SET ${sets.join(', ')} WHERE id = ?`).run(...params, c.id)
