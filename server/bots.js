@@ -3,6 +3,15 @@ import { autoSettle } from './flow.js'
 
 const timers = new Map()
 
+const BOT_TEMPLATES = {
+  AC: ['أبو خالد للتبريد', 'مؤسسة النسيم للتكييف', 'فني التكييف السريع', 'مركز البرودة'],
+  Plumber: ['مؤسسة المياه الذهبية', 'سباك الرياض السريع'],
+  Electrician: ['كهرباء النخبة', 'فني الكهرباء المحترف'],
+  Carpenter: ['نجارة الإتقان', 'ورشة الخشب الحديثة'],
+  Painter: ['دهانات الضياء', 'لمسات الألوان'],
+  Mechanic: ['ورشة الطريق السريع', 'ميكانيكي متنقل'],
+}
+
 const BOTS = [
   { name: 'أبو خالد للتبريد', name_ar: 'أبو خالد للتبريد', lat: 24.7460, lng: 46.6520, note: 'متوفر اليوم — فحص مجاني' },
   { name: 'مؤسسة النسيم للتكييف', name_ar: 'مؤسسة النسيم للتكييف', lat: 24.6900, lng: 46.7100, note: 'ضمان ٣ أشهر على الإصلاح' },
@@ -13,28 +22,37 @@ const BOTS = [
 export function seedBots() {
   const insert = db.prepare(
     `INSERT INTO experts (name, name_ar, job, city, rate, rating, reviews_count, image, phone, skills, experience, lat, lng, is_bot)
-     VALUES (?, ?, 'AC', 'الرياض', ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)`,
+     VALUES (?, ?, ?, 'الرياض', ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)`,
   )
+  // بوتات التكييف الأساسية (بإحداثيات محددة)
   for (const b of BOTS) {
     const exists = db.prepare("SELECT id FROM experts WHERE name = ? AND job = 'AC' AND is_bot = 1").get(b.name)
     if (exists) continue
-    insert.run(
-      b.name,
-      b.name_ar,
-      '170 ريال/ساعة',
-      4.6 + Math.random() * 0.3,
-      40 + Math.floor(Math.random() * 90),
-      '/experts/ac.jpg',
+    insert.run(b.name, b.name_ar, 'AC', '170 ريال/ساعة', 4.6 + Math.random() * 0.3,
+      40 + Math.floor(Math.random() * 90), '/experts/ac.jpg',
       '+966 55 000 0' + Math.floor(100 + Math.random() * 899),
-      JSON.stringify(['تركيب مكيف', 'صيانة', 'تعبئة غاز', 'تنظيف']),
-      '6 سنوات',
-      b.lat,
-      b.lng,
-    )
+      JSON.stringify(['تركيب', 'صيانة', 'إصلاح']), '6 سنوات', b.lat, b.lng)
+  }
+  // بوتات بقية الأقسام
+  for (const [job, names] of Object.entries(BOT_TEMPLATES)) {
+    if (job === 'AC') continue
+    for (let i = 0; i < names.length; i++) {
+      const name = names[i]
+      const exists = db.prepare('SELECT id FROM experts WHERE name = ? AND is_bot = 1').get(name)
+      if (exists) continue
+      insert.run(
+        name, name, job, '150 ريال/ساعة',
+        4.4 + Math.random() * 0.4, 20 + Math.floor(Math.random() * 80),
+        '/experts/ac.jpg', '+966 55 000 1' + Math.floor(100 + Math.random() * 899),
+        JSON.stringify(['خدمة سريعة', 'ضمان']), '5 سنوات',
+        24.7136 + (Math.random() - 0.5) * 0.12, 46.6753 + (Math.random() - 0.5) * 0.12,
+      )
+    }
   }
 }
 
-const botsForRequest = () => db.prepare("SELECT * FROM experts WHERE job = 'AC' AND is_bot = 1").all()
+const botsForRequest = (category) =>
+  db.prepare('SELECT * FROM experts WHERE job = ? AND is_bot = 1').all(category)
 
 function floorPrice(request) {
   if (request.budget && request.budget > 0) return Math.max(60, Math.round(request.budget * 0.55))
@@ -66,7 +84,8 @@ function tick(io, requestId) {
 
   const bids = db.prepare('SELECT * FROM bids WHERE request_id = ? ORDER BY amount ASC').all(requestId)
   const botIds = new Set(bids.map((b) => b.expert_id))
-  const bots = botsForRequest()
+  const bots = botsForRequest(request.category)
+  if (!bots.length) return stop(requestId)
   const floor = floorPrice(request)
   const lowest = bids[0]?.amount
 
@@ -94,7 +113,6 @@ function tick(io, requestId) {
 }
 
 export function onNewRequest(io, request) {
-  if (request.category !== 'AC') return
   if (timers.has(request.id)) return
   let n = 0
   const demoOn = () => db.prepare("SELECT value FROM settings WHERE key = 'demo_auto_accept'").get()?.value === '1'
@@ -118,9 +136,7 @@ function stop(requestId) {
 }
 
 export function resumeBots(io) {
-  const open = db
-    .prepare("SELECT * FROM requests WHERE status = 'open' AND category = 'AC'")
-    .all()
+  const open = db.prepare("SELECT * FROM requests WHERE status = 'open'").all()
   for (const r of open) onNewRequest(io, r)
   console.log(`bots resumed on ${open.length} open AC request(s)`)
 }

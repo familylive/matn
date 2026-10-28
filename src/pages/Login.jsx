@@ -8,6 +8,12 @@ export default function Login() {
   const [show, setShow] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
+  const [otpOpen, setOtpOpen] = useState(false)
+  const [phone, setPhone] = useState('')
+  const [code, setCode] = useState('')
+  const [devCode, setDevCode] = useState('')
+  const [sent, setSent] = useState(false)
+  const [otpErr, setOtpErr] = useState('')
   const navigate = useNavigate()
   const { login } = useAuth()
 
@@ -110,6 +116,62 @@ export default function Login() {
           </button>
         </div>
       </form>
+
+      <div className="text-center mt-4">
+        <button onClick={() => setOtpOpen((v) => !v)} className="text-xs font-bold text-[#8a6d13] underline">
+          دخول برمز الجوال (OTP)
+        </button>
+      </div>
+
+      {otpOpen && (
+        <div className="card-lux p-4 mt-3 space-y-2">
+          <p className="text-xs font-bold text-gray-700">دخول سريع برمز الجوال</p>
+          <input
+            type="tel" inputMode="tel" value={phone} onChange={(e) => setPhone(e.target.value)}
+            placeholder="+966 5X XXX XXXX"
+            className="w-full px-3 py-2 border border-[#E3D9BF] rounded-lg text-sm"
+          />
+          {!sent ? (
+            <button
+              onClick={async () => {
+                setOtpErr('')
+                try {
+                  const r = await api.requestOtp(phone)
+                  setSent(true)
+                  if (r.devCode) setDevCode(r.devCode)
+                } catch { setOtpErr('رقم غير صحيح') }
+              }}
+              className="w-full bg-[#11221A] text-white py-2 rounded-lg text-sm font-bold"
+            >
+              أرسل الرمز
+            </button>
+          ) : (
+            <>
+              <input
+                inputMode="numeric" value={code} onChange={(e) => setCode(e.target.value)}
+                placeholder="رمز من ٦ أرقام"
+                className="w-full px-3 py-2 border border-[#E3D9BF] rounded-lg text-sm"
+              />
+              {devCode && <p className="text-[11px] text-gray-500">رمز التجربة: <b>{devCode}</b></p>}
+              <button
+                onClick={async () => {
+                  setOtpErr('')
+                  try {
+                    const r = await api.verifyOtp(phone, code)
+                    setToken(r.token)
+                    login({ ...r.user, userName: r.user.name || r.user.phone })
+                    navigate(r.user?.name ? '/' : '/register')
+                  } catch { setOtpErr('الرمز غلط') }
+                }}
+                className="w-full bg-[#006C35] text-white py-2 rounded-lg text-sm font-bold"
+              >
+                تحقق ودخول
+              </button>
+            </>
+          )}
+          {otpErr && <p className="text-xs text-red-500">{otpErr}</p>}
+        </div>
+      )}
 
       <div className="text-center mt-5">
         <span className="text-sm text-gray-500">ما عندك حساب؟ </span>
