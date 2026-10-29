@@ -212,6 +212,11 @@ function UserRow({ u, type, onChanged }) {
               <p className="text-[11px] text-gray-500">
                 {u.email || u.phone} {u.city ? `· ${u.city}` : ''}
               </p>
+              {u.violations > 0 && (
+                <span className={`inline-block mt-1 text-[10px] font-bold px-1.5 py-0.5 rounded ${u.violations >= 5 ? 'bg-red-100 text-red-600' : 'bg-amber-50 text-amber-600'}`}>
+                  ⚠️ {u.violations} مخالفة
+                </span>
+              )}
             </div>
             <span className={`text-[10px] px-2 py-1 rounded-full font-bold whitespace-nowrap ${active ? 'bg-[#E9F5EE] text-[#006C35]' : 'bg-red-50 text-red-500'}`}>
               {active ? 'مفعّل' : 'موقوف'}

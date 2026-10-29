@@ -939,6 +939,7 @@ app.get('/api/admin/requests', adminRequired, (req, res) => {
 const publicUser = (u) => ({
   id: u.id, name: u.name, phone: u.phone, city: u.city, role: u.role,
   email: u.email, status: u.status, created_at: u.created_at, last_seen: u.last_seen,
+  violations: u.violations || 0,
   online: u.last_seen && new Date(u.last_seen.replace(' ', 'T') + 'Z').getTime() > Date.now() - 120000 ? 1 : 0,
 })
 
