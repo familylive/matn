@@ -1573,7 +1573,9 @@ app.post('/api/admin/snapshots/restore', adminRequired, async (req, res) => {
 app.get('/api/health', (_req, res) => res.json({ ok: true, at: new Date().toISOString() }))
 
 const clientDist = path.join(__dirname, '..', 'dist')
-app.use(express.static(clientDist))
+app.use(express.static(clientDist, { setHeaders: (res, filePath) => {
+  if (filePath.endsWith('index.html')) res.setHeader('Cache-Control', 'no-store, must-revalidate')
+} }))
 app.get('*', (req, res, next) => {
   if (req.path.startsWith('/api') || req.path.startsWith('/socket.io')) return next()
   res.sendFile(path.join(clientDist, 'index.html'))

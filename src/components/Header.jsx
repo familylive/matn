@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 import { useLang } from '../i18n/LanguageContext.jsx'
 import { useAuth } from '../context/AuthContext.jsx'
@@ -13,15 +14,38 @@ const titleKeys = {
 }
 
 export default function Header() {
+
   const { pathname } = useLocation()
   const { t, lang, toggleLang } = useLang()
   const { user, isAuthenticated } = useAuth()
+
+  const [reqCount, setReqCount] = useState(0)
+  useEffect(() => {
+    if (!user || user.role !== 'expert') return
+    let alive = true
+    const load = () =>
+      fetch('/api/requests/counts')
+        .then((r) => r.json())
+        .then((d) => { if (alive) setReqCount(d.total || 0) })
+        .catch(() => {})
+    load()
+    const id = setInterval(load, 20000)
+    return () => { alive = false; clearInterval(id) }
+  }, [user?.role])
 
   const name = user?.name || user?.userName || ''
   const initial = name.trim().charAt(0) || '؟'
 
   return (
     <header className="bg-white border-b border-[#ECE3CE]">
+      {isAuthenticated && user?.role === 'expert' && reqCount > 0 && (
+        <Link
+          to="/requests"
+          className="block bg-[#B3261E] text-white text-center text-[12px] font-extrabold py-2 animate-pulse"
+        >
+          🔔 {reqCount} طلب جديد في تخصصك — اضغط للسوم الآن
+        </Link>
+      )}
       <div className="px-3 py-2.5 flex items-center gap-2">
         <Link to="/" className="flex items-center gap-1.5 shrink-0">
           <span className="w-8 h-8 rounded-lg bg-[#006C35] text-white grid place-items-center font-extrabold">م</span>
