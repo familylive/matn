@@ -110,7 +110,8 @@ function Overview() {
     api('/api/admin/commission-sums').then(setSums).catch(() => {})
   }, [])
   if (!s) return <p className="text-gray-500">جارٍ التحميل…</p>
-  const money = (n) => `${Math.round(Number(n) || 0).toLocaleString('en-US')} ر.س`
+  const money = (n) =>
+    `${Number(n || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ر.س`
   return (
     <>
     <button
