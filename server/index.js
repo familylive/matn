@@ -1795,6 +1795,8 @@ function sweepExpiredAuctions() {
     if (count >= 5) {
       db.prepare("UPDATE users SET status = 'suspended' WHERE id = ?").run(u.id)
     }
+    io.to(`user:${r.user_id}`).emit('request:status', { id: r.id, status: 'canceled', violations: count })
+    io.to(`request:${r.id}`).emit('request:status', { id: r.id, status: 'canceled' })
     console.log('VIOLATION', u.id, count, 'request', r.id)
   }
 }

@@ -208,17 +208,28 @@ export default function RequestDetail() {
       })
     }
     const onAccepted = (updated) => setData(updated)
+    const onStatus = (p) => {
+      if (String(p?.id) === String(id)) load()
+    }
     const onMsg = (m) => setMessages((prev) => (prev.some((x) => x.id === m.id) ? prev : [...prev, m]))
     socket.on('message:new', onMsg)
     socket.on('bid:new', onBid)
     socket.on('request:accepted', onAccepted)
+    socket.on('request:status', onStatus)
     return () => {
       socket.emit('leave', id)
       socket.off('bid:new', onBid)
       socket.off('message:new', onMsg)
       socket.off('request:accepted', onAccepted)
+      socket.off('request:status', onStatus)
     }
   }, [id])
+
+  useEffect(() => {
+    if (!data || data.status !== 'open') return
+    const t = setInterval(() => { load() }, 15000)
+    return () => clearInterval(t)
+  }, [data?.status, load])
 
   const isAssignedExpert = useMemo(() => {
     if (!data || !myExpert) return false
