@@ -63,7 +63,7 @@ export default function MyRequests() {
 
       {loading && <p className="text-sm text-gray-500">جارٍ التحميل…</p>}
 
-      <div className="space-y-3">
+      <div className="grid gap-3 md:grid-cols-2">
         {rows.map((r) => (
           <Link key={r.id} to={`/requests/${r.id}`} className="block card-lux p-4">
             <div className="flex items-start justify-between gap-2">

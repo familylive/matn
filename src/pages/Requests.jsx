@@ -242,7 +242,7 @@ export default function Requests() {
       )}
       {loading && <p className="text-sm text-gray-500">{t('req.loading')}</p>}
 
-      <div className="space-y-3">
+      <div className="grid gap-3 md:grid-cols-2">
         {items.map((r) => (
           <Link key={r.id} to={`/requests/${r.id}`} className="block card-lux p-4">
             <div className="flex items-start justify-between gap-2">
