@@ -330,7 +330,7 @@ export default function RequestDetail() {
     : null
 
   return (
-    <div className="min-h-screen bg-gray-50 max-w-sm mx-auto">
+    <div className="min-h-screen bg-gray-50 w-full max-w-sm md:max-w-4xl lg:max-w-5xl mx-auto">
       <div className="bg-white border-b border-gray-100 px-4 py-4 flex items-center gap-3">
         <button onClick={() => navigate(-1)} className="text-gray-500" aria-label={t('expert.back')}>←</button>
         <h1 className="font-semibold text-gray-900 truncate">
