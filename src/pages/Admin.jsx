@@ -103,9 +103,53 @@ function Stat({ label, value, accent }) {
 
 function Overview() {
   const [s, setS] = useState(null)
-  useEffect(() => { api('/api/admin/overview').then(setS).catch(() => {}) }, [])
+  const [sums, setSums] = useState(null)
+  const [open, setOpen] = useState(false)
+  useEffect(() => {
+    api('/api/admin/overview').then(setS).catch(() => {})
+    api('/api/admin/commission-sums').then(setSums).catch(() => {})
+  }, [])
   if (!s) return <p className="text-gray-500">جارٍ التحميل…</p>
+  const money = (n) => `${Math.round(Number(n) || 0).toLocaleString('en-US')} ر.س`
   return (
+    <>
+    <button
+      onClick={() => setOpen((v) => !v)}
+      className="w-full card-lux p-4 mb-3 text-start active:scale-[.995] transition"
+    >
+      <div className="gold-bar absolute inset-x-0 top-0" />
+      <div className="flex items-center justify-between pt-1">
+        <div>
+          <p className="text-[11px] font-bold text-[#8a6d13]">💵 عمولة المنصة</p>
+          <p className="text-2xl font-extrabold text-[#006C35] mt-1">
+            {sums ? money(sums.all.commission) : '—'}
+          </p>
+          <p className="text-[10px] text-gray-500 mt-1">
+            من {sums?.all.c || 0} فاتورة · إجمالي المحصّل {sums ? money(sums.all.paid) : '—'}
+          </p>
+        </div>
+        <span className={`text-xl text-[#8a6d13] transition ${open ? 'rotate-180' : ''}`}>⌄</span>
+      </div>
+    </button>
+
+    {open && sums && (
+      <div className="grid grid-cols-2 gap-2 mb-3">
+        {[
+          ['اليوم', sums.today],
+          ['آخر ٧ أيام', sums.week],
+          ['هذا الشهر', sums.month],
+          ['هذه السنة', sums.year],
+          ['الإجمالي', sums.all],
+        ].map(([label, v]) => (
+          <div key={label} className="card-lux p-3">
+            <p className="text-[10px] text-gray-500">{label}</p>
+            <p className="text-base font-extrabold text-[#11221A] mt-0.5">{money(v.commission)}</p>
+            <p className="text-[10px] text-gray-400">{v.c} فاتورة</p>
+          </div>
+        ))}
+      </div>
+    )}
+
     <div className="grid grid-cols-2 gap-3">
       <Stat label="الطلبات" value={s.requests} />
       <Stat label="طلبات مفتوحة" value={s.open_requests} />
@@ -117,6 +161,7 @@ function Overview() {
       <Stat label="إجمالي الفواتير" value={`${s.invoices_total} ر.س`} />
       <Stat label="طلبات مدن جديدة" value={s.city_requests} accent="text-[#8a6d13]" />
     </div>
+    </>
   )
 }
 

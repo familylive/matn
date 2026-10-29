@@ -1286,6 +1286,31 @@ app.patch('/api/admin/verifications/:id', adminRequired, (req, res) => {
 
 /* ---------- تقرير العمولات ---------- */
 
+/* إجمالي عمولة المنصة حسب الفترات */
+app.get('/api/admin/commission-sums', adminRequired, (_req, res) => {
+  const one = (where = '', params = []) =>
+    db
+      .prepare(
+        `SELECT COUNT(*) c,
+          COALESCE(SUM(commission),0) commission,
+          COALESCE(SUM(total_paid),0) paid,
+          COALESCE(SUM(amount),0) amount
+         FROM invoices ${where}`,
+      )
+      .get(...params)
+
+  const today = one("WHERE date(issued_at) = date('now')")
+  const week = one("WHERE date(issued_at) >= date('now','-6 days')")
+  const month = one("WHERE strftime('%Y-%m', issued_at) = strftime('%Y-%m', 'now')")
+  const year = one("WHERE strftime('%Y', issued_at) = strftime('%Y', 'now')")
+  const all = one()
+
+  res.json({
+    today, week, month, year, all,
+    updated_at: new Date().toISOString(),
+  })
+})
+
 app.get('/api/admin/commissions', adminRequired, (_req, res) => {
   const rows = db
     .prepare(
