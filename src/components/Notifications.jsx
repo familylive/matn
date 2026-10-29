@@ -36,7 +36,9 @@ export default function Notifications() {
 
   useEffect(() => {
     if (!socket.connected) socket.connect()
-    if (user?.id) socket.emit('identify', user.id)
+    const identify = () => { if (user?.id) socket.emit('identify', user.id) }
+    identify()
+    socket.on('connect', identify)
 
     const onNotify = (n) => {
       // تنبيه الطلبات للفنيين: حسب التخصص فقط
@@ -45,10 +47,13 @@ export default function Notifications() {
       if (localStorage.getItem('soundOn') !== '0') beep()
       if (navigator.vibrate) navigator.vibrate([120, 60, 120])
       clearTimeout(timerRef.current)
-      timerRef.current = setTimeout(() => setToast(null), 6000)
+      timerRef.current = setTimeout(() => setToast(null), 12000)
     }
     socket.on('notify', onNotify)
-    return () => socket.off('notify', onNotify)
+    return () => {
+      socket.off('notify', onNotify)
+      socket.off('connect', identify)
+    }
   }, [user?.id])
 
   useEffect(() => {
@@ -57,7 +62,7 @@ export default function Notifications() {
     return () => window.removeEventListener('sound-pref', handler)
   }, [])
 
-  if (!toast || !soundOn) return null
+  if (!toast) return null
 
   return (
     <div className="fixed top-3 inset-x-3 z-50 max-w-sm mx-auto">
