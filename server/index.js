@@ -1299,10 +1299,11 @@ app.get('/api/admin/commission-sums', adminRequired, (_req, res) => {
       )
       .get(...params)
 
-  const today = one("WHERE date(issued_at) = date('now')")
-  const week = one("WHERE date(issued_at) >= date('now','-6 days')")
-  const month = one("WHERE strftime('%Y-%m', issued_at) = strftime('%Y-%m', 'now')")
-  const year = one("WHERE strftime('%Y', issued_at) = strftime('%Y', 'now')")
+  // بتوقيت الرياض (UTC+3) — لأن الفواتير محفوظة UTC
+  const today = one("WHERE date(issued_at,'+3 hours') = date('now','+3 hours')")
+  const week = one("WHERE date(issued_at,'+3 hours') >= date('now','+3 hours','-6 days')")
+  const month = one("WHERE strftime('%Y-%m', issued_at,'+3 hours') = strftime('%Y-%m', 'now','+3 hours')")
+  const year = one("WHERE strftime('%Y', issued_at,'+3 hours') = strftime('%Y', 'now','+3 hours')")
   const all = one()
 
   res.json({
