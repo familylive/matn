@@ -317,6 +317,11 @@ export default function RequestDetail() {
   const endMs = data.ends_at ? new Date(data.ends_at.replace(' ', 'T') + 'Z').getTime() : null
   const remaining = endMs ? endMs - now : null
   const ended = remaining !== null && remaining <= 0
+  const graceMs = ended ? 2 * 60 * 1000 - (now - endMs) : 0
+  const inGrace = ended && graceMs > 0 && data?.status === 'open'
+  const graceLabel = inGrace
+    ? `${String(Math.floor(graceMs / 60000)).padStart(2, '0')}:${String(Math.floor((graceMs % 60000) / 1000)).padStart(2, '0')}`
+    : ''
   const createdMs = data.created_at ? new Date(data.created_at.replace(' ', 'T') + 'Z').getTime() : null
   const cancelLeft = createdMs ? 3 * 60 * 1000 - (now - createdMs) : 0
 
@@ -372,6 +377,14 @@ export default function RequestDetail() {
             <p className="font-semibold text-green-600">{lowest ?? '—'} {t('common.tnd')}</p>
           </div>
         </div>
+
+        {isOwner && inGrace && (
+          <div className="mb-3 rounded-xl bg-red-50 border border-red-200 p-3 text-center">
+            <p className="text-xs font-extrabold text-red-600">⏱ انتهى المزاد — اختر الفني الآن</p>
+            <p className="text-2xl font-extrabold text-red-600 mt-1" dir="ltr">{graceLabel}</p>
+            <p className="text-[10px] text-red-500 mt-1">بعد انتهاء الوقت يُغلق الطلب وتُسجّل مخالفة على حسابك</p>
+          </div>
+        )}
 
         {isOwner && data.status === 'open' && cancelLeft > 0 && (
           <button
@@ -441,7 +454,7 @@ export default function RequestDetail() {
               </div>
               <div className="text-right">
                 <p className="font-bold text-gray-900">{b.amount} {t('common.tnd')}</p>
-                {isOwner && data.status === 'open' && (
+                {isOwner && data.status === 'open' && (inGrace || !ended) && (
                   <button onClick={() => accept(b.id)} className="text-xs text-blue-500 mt-1">{t('rd.accept')}</button>
                 )}
                 {data.accepted_bid_id === b.id && (
@@ -456,17 +469,6 @@ export default function RequestDetail() {
         {data.status === 'open' && !ended && myExpert && (
           <form onSubmit={placeBid} className="bg-white rounded-xl p-4 border border-gray-100 mt-5 space-y-3">
             <h3 className="font-semibold text-gray-900 text-sm">قدّم سومتك</h3>
-            <select
-              required
-              value={bid.expertId}
-              onChange={(e) => setBid({ ...bid, expertId: e.target.value })}
-              className="w-full px-3 py-2 border border-gray-200 rounded-lg bg-white text-sm"
-            >
-              <option value="">{t('rd.chooseExpert')}</option>
-              {experts.map((x) => (
-                <option key={x.id} value={x.id}>{(lang === 'ar' && x.name_ar) || x.name} — {t(`cat.${x.job}`, x.job)}</option>
-              ))}
-            </select>
             <input
               required
               type="number"

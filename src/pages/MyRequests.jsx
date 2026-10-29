@@ -42,7 +42,7 @@ export default function MyRequests() {
   const rows = tab === 'active' ? data.active : data.archived
 
   return (
-    <div className="px-4 py-5 mx-auto w-full max-w-3xl">
+    <div className="px-4 py-5 mx-auto w-full max-w-3xl lg:max-w-5xl">
       <h2 className="text-xl font-extrabold text-[#11221A] mb-1">طلباتي</h2>
       <p className="text-gray-500 text-xs mb-4">تابع طلباتك الجارية، وارجع لأرشيف طلباتك المغلقة</p>
 

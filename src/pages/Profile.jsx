@@ -57,7 +57,7 @@ export default function Profile() {
   }
 
   return (
-    <div className="px-4 py-5 mx-auto w-full max-w-2xl">
+    <div className="px-4 py-5 mx-auto w-full max-w-2xl lg:max-w-4xl">
       <div className="card-lux p-5 text-center">
         <div className="gold-bar absolute inset-x-0 top-0" />
         <button

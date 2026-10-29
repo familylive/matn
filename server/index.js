@@ -173,7 +173,7 @@ const fullUser = (id) =>
   db
     .prepare(
       `SELECT id, phone, name, city, role, email, nationality, specialty, lat, lng, avatar,
-        sound_on, last_seen, created_at,
+        sound_on, last_seen, created_at, COALESCE(violations,0) AS violations, status,
         CASE WHEN last_seen IS NOT NULL AND last_seen >= datetime('now', '-2 minutes') THEN 1 ELSE 0 END AS online
        FROM users WHERE id = ?`,
     )
@@ -1640,6 +1640,88 @@ async function autoRestoreOnBoot() {
 }
 
 try { await autoRestoreOnBoot() } catch (e) { console.error('AUTORESTORE_BOOT_FAIL', e.message) }
+
+
+/* ---------- نهاية المزاد + نظام المخالفات ----------
+   بعد انتهاء المزاد عند العميل دقيقتان لاختيار فني.
+   إذا سكت: الطلب يُغلق + مخالفة. ٣ = تنبيه · ٤ = إنذار أخير · ٥ = إيقاف الحساب. */
+function sweepExpiredAuctions() {
+  // ١) تنبيه للعميل عند انتهاء المزاد (مرة واحدة)
+  const justEnded = db
+    .prepare(
+      `SELECT r.* FROM requests r
+       WHERE r.status = 'open' AND r.ends_at IS NOT NULL
+         AND datetime(r.ends_at) <= datetime('now')
+         AND datetime(r.ends_at) > datetime('now','-1 minute')`,
+    )
+    .all()
+  for (const r of justEnded) {
+    io.to(`user:${r.user_id}`).emit('notify', {
+      type: 'auction_end',
+      title: 'انتهى المزاد ⏱',
+      body: 'عندك دقيقتين تختار الفني — بعدها يُغلق الطلب وتُسجّل مخالفة.',
+      requestId: r.id,
+    })
+    const low = db
+      .prepare("SELECT MIN(b.amount) m FROM bids b WHERE b.request_id = ? AND COALESCE(b.status,'active')='active'")
+      .get(r.id)
+    if (low?.m) {
+      io.to(`user:${r.user_id}`).emit('notify', {
+        type: 'bid',
+        title: 'أرخص سومة',
+        body: `${customerTotal(low.m)} ر.س — اضغط للاختيار`,
+        requestId: r.id,
+      })
+    }
+  }
+
+  // ٢) انتهت مهلة الدقيقتين بدون اختيار → إغلاق + مخالفة
+  const expired = db
+    .prepare(
+      `SELECT r.* FROM requests r
+       WHERE r.status = 'open' AND r.ends_at IS NOT NULL
+         AND datetime(r.ends_at, '+2 minutes') <= datetime('now')`,
+    )
+    .all()
+
+  for (const r of expired) {
+    db.prepare(
+      `UPDATE requests SET status = 'canceled', closed_at = datetime('now'),
+        closed_by = 'system', close_reason = 'انتهى المزاد بدون اختيار فني'
+       WHERE id = ?`,
+    ).run(r.id)
+
+    const u = db.prepare('SELECT * FROM users WHERE id = ?').get(r.user_id)
+    if (!u) continue
+    const count = Number(u.violations || 0) + 1
+    db.prepare("UPDATE users SET violations = ?, last_violation_at = datetime('now') WHERE id = ?").run(count, u.id)
+
+    const label = count >= 5 ? 'suspended' : count
+    io.to(`user:${u.id}`).emit('notify', {
+      type: 'violation',
+      title: count >= 5 ? 'تم إيقاف حسابك 🚫' : count === 4 ? 'إنذار أخير ⚠️' : 'مخالفة',
+      body:
+        count >= 5
+          ? 'تكرر عدم اختيار الفني ٥ مرات — تم إيقاف الحساب. تواصل مع الدعم.'
+          : count === 4
+            ? 'هذه المخالفة الرابعة — المخالفة الخامسة توقف حسابك.'
+            : count === 3
+              ? 'وصلت ٣ مخالفات — التزم باختيار فني بعد انتهاء المزاد.'
+              : `لديك ${count} مخالفة من ٥ — بعدها يتوقف الحساب.`,
+      requestId: r.id,
+    })
+
+    if (count >= 5) {
+      db.prepare("UPDATE users SET status = 'suspended' WHERE id = ?").run(u.id)
+    }
+    console.log('VIOLATION', u.id, count, 'request', r.id)
+  }
+}
+
+setInterval(() => {
+  try { sweepExpiredAuctions() } catch (e) { console.error('SWEEP_FAIL', e.message) }
+}, 30 * 1000)
+setTimeout(() => { try { sweepExpiredAuctions() } catch {} }, 8000)
 
 resumeBots(io)
 

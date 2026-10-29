@@ -102,7 +102,7 @@ export default function Requests() {
   }
 
   return (
-    <div className="px-4 py-5 mx-auto w-full max-w-3xl">
+    <div className="px-4 py-5 mx-auto w-full max-w-3xl lg:max-w-5xl">
       <div className="flex items-center justify-between mb-4">
         <div>
           <h2 className="text-xl font-extrabold text-[#11221A]">{t('req.title')}</h2>

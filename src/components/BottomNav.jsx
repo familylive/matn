@@ -26,7 +26,7 @@ export default function BottomNav() {
     return () => { alive = false; clearInterval(id) }
   }, [])
   return (
-    <nav className="md:hidden bg-white border-t border-gray-100 flex justify-around py-3">
+    <nav className="md:hidden shrink-0 bg-white border-t border-gray-100 flex justify-around pt-2 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
       {items.map((item) => (
         <NavLink
           key={item.to}

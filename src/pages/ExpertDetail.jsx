@@ -38,7 +38,18 @@ export default function ExpertDetail() {
   const wa = expert.phoneNumber?.replace(/[^\d]/g, '')
 
   return (
-    <div className="min-h-screen bg-gray-50 w-full max-w-sm md:max-w-3xl mx-auto">
+    <div className="min-h-screen bg-gray-50 w-full max-w-sm md:max-w-4xl mx-auto pb-24">
+      <div className="sticky top-0 z-30 bg-white/90 backdrop-blur border-b border-[#ECE3CE] px-3 py-2 flex items-center gap-2">
+        <button
+          onClick={() => (window.history.length > 1 ? navigate(-1) : navigate('/'))}
+          className="w-9 h-9 rounded-lg bg-[#FBF5E3] text-[#8a6d13] grid place-items-center font-bold"
+          aria-label="رجوع"
+        >
+          ›
+        </button>
+        <span className="text-sm font-extrabold text-[#11221A]">{expertName(expert, lang)}</span>
+        <button onClick={() => navigate('/')} className="ms-auto text-xs font-bold text-[#006C35]">الرئيسية</button>
+      </div>
       <div className="relative">
         <img src={expert.image} alt={expert.personName} className="w-full h-56 object-cover" />
         <button
