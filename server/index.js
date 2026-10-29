@@ -1,4 +1,5 @@
 import express from 'express'
+import webpush from 'web-push'
 import cors from 'cors'
 import http from 'node:http'
 import path from 'node:path'
@@ -71,6 +72,72 @@ function normalizePhones() {
   }
 }
 normalizePhones()
+
+
+/* ---------- إشعارات الويب (Web Push) ---------- */
+const VAPID_PUBLIC = process.env.VAPID_PUBLIC || 'BKE0kJxB5-FqnKA0SMw8J2Qa0IvDNHbHvWpyUCzyyzLGTn76L96ZRhDFXj_iwTMgj2lfrNroYVs56KcbR10VK1w'
+const VAPID_PRIVATE = process.env.VAPID_PRIVATE || '5fvKkpYYxBCQqH8w5Gfz5h9AvJYir7sDo7hIXzw3pms'
+try {
+  webpush.setVapidDetails('mailto:abdmmm9@gmail.com', VAPID_PUBLIC, VAPID_PRIVATE)
+} catch (e) {
+  console.error('VAPID_FAIL', e.message)
+}
+
+app.get('/api/push/key', (_req, res) => res.json({ key: VAPID_PUBLIC }))
+
+app.post('/api/push/subscribe', authRequired, (req, res) => {
+  const sub = req.body?.subscription || req.body
+  const endpoint = sub?.endpoint
+  const p256dh = sub?.keys?.p256dh
+  const auth = sub?.keys?.auth
+  if (!endpoint || !p256dh || !auth) return res.status(400).json({ error: 'bad_subscription' })
+  db.prepare(
+    `INSERT INTO push_subs (user_id, endpoint, p256dh, auth) VALUES (?, ?, ?, ?)
+     ON CONFLICT(endpoint) DO UPDATE SET user_id = excluded.user_id, p256dh = excluded.p256dh, auth = excluded.auth`,
+  ).run(req.userId, endpoint, p256dh, auth)
+  res.json({ ok: true })
+})
+
+app.post('/api/push/unsubscribe', authRequired, (req, res) => {
+  if (req.body?.endpoint) db.prepare('DELETE FROM push_subs WHERE endpoint = ?').run(req.body.endpoint)
+  res.json({ ok: true })
+})
+
+app.post('/api/push/test', authRequired, async (req, res) => {
+  const subs = db.prepare('SELECT * FROM push_subs WHERE user_id = ?').all(req.userId)
+  let sent = 0
+  for (const s of subs) {
+    try {
+      await webpush.sendNotification(
+        { endpoint: s.endpoint, keys: { p256dh: s.p256dh, auth: s.auth } },
+        JSON.stringify({ title: 'مهنتي — تجربة الإشعار 🔔', body: 'إذا وصلتك هذي، التنبيهات شغالة', url: '/requests' }),
+      )
+      sent++
+    } catch (e) {
+      if (e.statusCode === 404 || e.statusCode === 410) db.prepare('DELETE FROM push_subs WHERE id = ?').run(s.id)
+    }
+  }
+  res.json({ ok: true, subscriptions: subs.length, sent })
+})
+
+async function pushToUsers(userIds, payload) {
+  if (!userIds.length) return 0
+  const placeholders = userIds.map(() => '?').join(',')
+  const subs = db.prepare(`SELECT * FROM push_subs WHERE user_id IN (${placeholders})`).all(...userIds)
+  let sent = 0
+  for (const s of subs) {
+    try {
+      await webpush.sendNotification(
+        { endpoint: s.endpoint, keys: { p256dh: s.p256dh, auth: s.auth } },
+        JSON.stringify(payload),
+      )
+      sent++
+    } catch (e) {
+      if (e.statusCode === 404 || e.statusCode === 410) db.prepare('DELETE FROM push_subs WHERE id = ?').run(s.id)
+    }
+  }
+  return sent
+}
 
 /* ---------- auth (phone + OTP) ---------- */
 
@@ -504,6 +571,16 @@ app.post('/api/requests', authRequired, (req, res) => {
     .prepare("SELECT user_id FROM experts WHERE job = ? AND user_id IS NOT NULL")
     .all(request.category)
   for (const t of targets) io.to(`user:${t.user_id}`).emit('notify', notice)
+  // 📲 إشعار دفع حقيقي (يوصل حتى لو التطبيق مسكّر)
+  pushToUsers(
+    targets.map((t) => t.user_id),
+    {
+      title: '🔔 طلب جديد في تخصصك',
+      body: `${request.title}${request.subcategory ? ' · ' + request.subcategory : ''} — ${request.city || ''}`,
+      url: `/requests/${request.id}`,
+      tag: 'req-' + request.id,
+    },
+  ).catch((e) => console.error('PUSH_FAIL', e.message))
   onNewRequest(io, request)
   res.status(201).json(request)
 })

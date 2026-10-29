@@ -3,7 +3,8 @@ import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext.jsx'
 import { useFavorites } from '../hooks/useFavorites.js'
 import { useLang } from '../i18n/LanguageContext.jsx'
-import { api } from '../lib/api.js'
+import { api, getToken } from '../lib/api.js'
+import { enablePush, testPush, pushSupported } from '../lib/push.js'
 
 export default function Profile() {
   const { user, logout, login } = useAuth()
@@ -132,6 +133,43 @@ export default function Profile() {
           </span>
         </button>
       )}
+
+      <div className="card-lux p-4 mt-4">
+        <p className="font-extrabold text-sm text-[#11221A]">🔔 إشعارات الطلبات</p>
+        <p className="text-[11px] text-gray-500 mt-1 leading-5">
+          فعّل التنبيهات عشان يوصلك صوت وإشعار حتى لو التطبيق مسكّر.
+          <br />
+          <span className="text-[#8a6d13]">آيفون: أضف الموقع للشاشة الرئيسية أولاً (مشاركة ← إضافة إلى الشاشة الرئيسية).</span>
+        </p>
+        {!pushSupported() ? (
+          <p className="text-[11px] text-red-500 mt-2">جهازك/متصفحك ما يدعم الإشعارات.</p>
+        ) : (
+          <div className="flex gap-2 mt-3">
+            <button
+              onClick={async () => {
+                try {
+                  await enablePush(getToken())
+                  alert('تم تفعيل الإشعارات ✅')
+                } catch (e) {
+                  alert(e.message === 'denied' ? 'رفضت الإذن — اسمح بالإشعارات من إعدادات المتصفح' : 'تعذّر التفعيل')
+                }
+              }}
+              className="flex-1 bg-[#006C35] text-white py-2 rounded-lg text-xs font-bold"
+            >
+              تفعيل الإشعارات
+            </button>
+            <button
+              onClick={async () => {
+                const r = await testPush(getToken())
+                alert(r.sent ? 'أرسلنا إشعار تجربة ✅' : 'ما فيه اشتراك — فعّل الإشعارات أول')
+              }}
+              className="px-3 py-2 rounded-lg text-xs font-bold border border-[#E3D9BF] text-[#8a6d13]"
+            >
+              تجربة
+            </button>
+          </div>
+        )}
+      </div>
 
       <div className="grid grid-cols-2 gap-3 mt-4">
         <div className="card-lux p-4 text-center">
