@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 import { useLang } from '../i18n/LanguageContext.jsx'
 import { useAuth } from '../context/AuthContext.jsx'
@@ -20,32 +20,52 @@ export default function Header() {
   const { user, isAuthenticated } = useAuth()
 
   const [reqCount, setReqCount] = useState(0)
+  const [alertUntil, setAlertUntil] = useState(0)
+  const [tick, setTick] = useState(0)
+  const prevRef = useRef(0)
   useEffect(() => {
     if (!user || user.role !== 'expert') return
     let alive = true
     const load = () =>
       fetch('/api/requests/counts')
         .then((r) => r.json())
-        .then((d) => { if (alive) setReqCount(d.total || 0) })
+        .then((d) => {
+          if (!alive) return
+          const n = d.total || 0
+          setReqCount(n)
+          if (n > prevRef.current) setAlertUntil(Date.now() + 90 * 1000)
+          prevRef.current = n
+        })
         .catch(() => {})
     load()
     const id = setInterval(load, 20000)
     return () => { alive = false; clearInterval(id) }
   }, [user?.role])
 
+  useEffect(() => {
+    const id = setInterval(() => setTick((x) => x + 1), 1000)
+    return () => clearInterval(id)
+  }, [])
+
+  const leftMs = Math.max(0, alertUntil - Date.now())
+  const showAlert = isAuthenticated && user?.role === 'expert' && reqCount > 0 && leftMs > 0
+  const leftLabel = `${String(Math.floor(leftMs / 60000)).padStart(2, '0')}:${String(Math.floor((leftMs % 60000) / 1000)).padStart(2, '0')}`
+
   const name = user?.name || user?.userName || ''
   const initial = name.trim().charAt(0) || '؟'
 
   return (
     <header className="bg-white border-b border-[#ECE3CE]">
-      {isAuthenticated && user?.role === 'expert' && reqCount > 0 && (
+      {showAlert && (
         <Link
           to="/requests"
           className="flex items-center justify-center gap-2 bg-[#B3261E] text-white text-[14px] font-extrabold py-3.5 px-3 shadow-md"
         >
           <span className="text-xl animate-bounce">🔔</span>
           <span>{reqCount} طلب جديد في تخصصك</span>
-          <span className="bg-white/20 rounded-full px-2.5 py-0.5 text-[11px]">اضغط للسوم</span>
+          <span className="bg-white text-[#B3261E] rounded-full px-2.5 py-0.5 text-[12px] font-extrabold tabular-nums" dir="ltr">
+            {leftLabel}
+          </span>
         </Link>
       )}
       <div className="px-3 py-2.5 flex items-center gap-2">

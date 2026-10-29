@@ -44,8 +44,12 @@ export default function Notifications() {
       // تنبيه الطلبات للفنيين: حسب التخصص فقط
       if (n.type === 'request' && user?.role === 'expert' && n.category && n.category !== user.specialty) return
       setToast(n)
-      if (localStorage.getItem('soundOn') !== '0') beep()
-      if (navigator.vibrate) navigator.vibrate([120, 60, 120])
+      if (localStorage.getItem('soundOn') !== '0') {
+        beep()
+        setTimeout(beep, 1200)
+        setTimeout(beep, 2400)
+      }
+      if (navigator.vibrate) navigator.vibrate([300, 150, 300, 150, 300])
       clearTimeout(timerRef.current)
       timerRef.current = setTimeout(() => setToast(null), 12000)
     }
