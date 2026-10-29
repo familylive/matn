@@ -489,14 +489,19 @@ app.post('/api/requests', authRequired, (req, res) => {
     )
   const request = requestWithBids(info.lastInsertRowid)
   io.emit('request:new', request)
-  io.emit('notify', {
+  // 🔔 لافتة «طلب جديد» تروح لفنيّي نفس التخصص فقط (مو للعملاء ولا لباقي الفنيين)
+  const notice = {
     type: 'request',
-    title: 'طلب جديد',
-    body: `${request.title} — ${request.city || ''}`,
+    title: 'طلب جديد في تخصصك',
+    body: `${request.title}${request.subcategory ? ' · ' + request.subcategory : ''} — ${request.city || ''}`,
     requestId: request.id,
     category: request.category,
     subcategory: request.subcategory || null,
-  })
+  }
+  const targets = db
+    .prepare("SELECT user_id FROM experts WHERE job = ? AND user_id IS NOT NULL")
+    .all(request.category)
+  for (const t of targets) io.to(`user:${t.user_id}`).emit('notify', notice)
   onNewRequest(io, request)
   res.status(201).json(request)
 })

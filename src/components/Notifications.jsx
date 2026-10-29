@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { io } from 'socket.io-client'
 import { useAuth } from '../context/AuthContext.jsx'
+import { useNavigate } from 'react-router-dom'
 
 const socket = io({ autoConnect: false })
 
@@ -28,6 +29,7 @@ function beep() {
 
 export default function Notifications() {
   const { user } = useAuth()
+  const navigate = useNavigate()
   const [toast, setToast] = useState(null)
   const [soundOn, setSoundOn] = useState(localStorage.getItem('soundOn') !== '0')
   const timerRef = useRef(null)
@@ -59,7 +61,13 @@ export default function Notifications() {
 
   return (
     <div className="fixed top-3 inset-x-3 z-50 max-w-sm mx-auto">
-      <div className={`card-lux p-3 flex items-start gap-3 shadow-xl ${toast.type === 'request' ? 'ring-2 ring-[#C9A227]' : ''}`}>
+      <div
+        onClick={() => {
+          if (toast.requestId) navigate(`/requests/${toast.requestId}`)
+          setToast(null)
+        }}
+        className={`card-lux p-3 flex items-start gap-3 shadow-xl cursor-pointer ${toast.type === 'request' ? 'ring-2 ring-[#C9A227]' : ''}`}
+      >
         <span className="w-9 h-9 rounded-full bg-[#E9F5EE] text-[#006C35] grid place-items-center text-lg">
           {toast.type === 'bid' ? '💰' : '🔔'}
         </span>
@@ -67,7 +75,7 @@ export default function Notifications() {
           <p className="font-bold text-sm text-[#11221A]">{toast.title}</p>
           <p className="text-xs text-gray-600">{toast.body}</p>
         </div>
-        <button onClick={() => setToast(null)} className="text-gray-400 text-sm">✕</button>
+        <button onClick={(e) => { e.stopPropagation(); setToast(null) }} className="text-gray-400 text-sm">✕</button>
       </div>
     </div>
   )
