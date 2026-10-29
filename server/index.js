@@ -395,7 +395,9 @@ app.get('/api/requests', authRequired, (req, res) => {
           (SELECT MIN(b.amount) FROM bids b WHERE b.request_id = r.id AND b.expert_id = ?) AS lowest_bid,
           (SELECT amount FROM bids b WHERE b.request_id = r.id AND b.expert_id = ? ORDER BY b.id DESC LIMIT 1) AS my_bid
          FROM requests r JOIN users u ON u.id = r.user_id
-         WHERE (r.category = ? AND r.status = 'open') OR r.user_id = ?
+         WHERE (r.category = ? AND r.status = 'open'
+                AND (r.ends_at IS NULL OR datetime(r.ends_at) > datetime('now','-5 minutes')))
+            OR r.user_id = ?
          ORDER BY r.id DESC LIMIT 100`,
       )
       .all(mine.id, mine.id, mine.job, req.userId)
