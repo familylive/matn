@@ -412,7 +412,15 @@ app.get('/api/requests', authRequired, (req, res) => {
       )
       .all(req.userId)
   }
-  res.json(rows)
+  // للعميل: الأرخص = السعر النهائي الشامل (بدون ذكر عمولة)
+  const out = rows.map((r) => {
+    if (mine) return r
+    return {
+      ...r,
+      lowest_bid: r.lowest_bid != null ? customerTotal(r.lowest_bid) : null,
+    }
+  })
+  res.json(out)
 })
 
 app.get('/api/requests/:id', (req, res) => {
@@ -443,6 +451,13 @@ app.get('/api/requests/:id', (req, res) => {
         nearest_bid_id: null,
       })
     }
+  }
+  // العميل يشوف السعر النهائي لكل سومة (شامل — بدون تفصيل عمولة)
+  if (String(viewer?.uid || '').startsWith('admin:')) return res.json(data)
+  const ownerView = viewer && data.user_id === viewer.uid
+  if (ownerView) {
+    const priced = data.bids.map((b) => ({ ...b, amount: customerTotal(b.amount) }))
+    return res.json({ ...data, bids: priced })
   }
   res.json(data)
 })
@@ -1374,22 +1389,17 @@ app.get('/api/requests/:id/invoices', authRequired, (req, res) => {
   const custPct = commissionCustomer()
   const expPct = commissionExpert()
 
-  const custItems = [{ label: 'قيمة الخدمة', amount: bid?.amount || inv.amount }]
-  if (inv.extras_total > 0) {
-    for (const e of extras) custItems.push({ label: `عمل إضافي — ${e.title}`, amount: e.amount })
-    custItems.push({ label: 'إجمالي الأعمال الإضافية', amount: inv.extras_total })
-  }
-  custItems.push({ label: `رسوم خدمة الموقع (${custPct}%)`, amount: inv.customer_fee })
+  // فاتورة العميل: سعر واحد شامل — بدون أي سطر عمولة
+  const custDeferred = round2(applied.filter((x) => x.side === 'customer').reduce((a, x) => a + x.amount, 0))
+  const custItems = [{ label: 'قيمة الخدمة', amount: round2(inv.total_paid - custDeferred) }]
   for (const l of applied.filter((x) => x.side === 'customer')) {
-    custItems.push({ label: `عمولة أعمال إضافية للطلب #${l.source_number}`, amount: l.amount })
+    custItems.push({ label: `مستحق سابق — طلب #${l.source_number}`, amount: l.amount })
   }
 
-  const expItems = [{ label: 'قيمة الخدمة', amount: bid?.amount || inv.amount }]
-  if (inv.extras_total > 0) expItems.push({ label: 'أعمال إضافية', amount: inv.extras_total })
-  expItems.push({ label: `عمولة الموقع (${expPct}%)`, amount: -inv.expert_fee })
-  for (const l of applied.filter((x) => x.side === 'expert')) {
-    expItems.push({ label: `عمولة أعمال إضافية للطلب #${l.source_number}`, amount: -l.amount })
-  }
+  const expDeferred = round2(applied.filter((x) => x.side === 'expert').reduce((a, x) => a + x.amount, 0))
+  const expItems = [{ label: 'قيمة الخدمة (مستحقك)', amount: round2(inv.net) }]
+  if (expDeferred > 0) expItems.push({ label: 'مستحق سابق', amount: -expDeferred })
+  const dueToPlatform = round2(inv.customer_fee + inv.expert_fee)
 
   res.json({
     customer: {
@@ -1405,6 +1415,8 @@ app.get('/api/requests/:id/invoices', authRequired, (req, res) => {
       to: bid?.expert_name || 'الفني',
       items: expItems,
       total: inv.net,
+      due_to_platform: dueToPlatform,
+      note: dueToPlatform > 0 ? 'هذا المبلغ يُحوّل للمنصة — وهو جزء من المبلغ الذي استلمته من العميل.' : '',
     },
     issued_at: inv.issued_at,
     request: { id: request.id, number: request.number, title: request.title, city: request.city },

@@ -86,6 +86,15 @@ export default function Invoice() {
             <p className="font-extrabold text-lg text-[#006C35]">{inv.total} ر.س</p>
           </div>
 
+          {inv.due_to_platform > 0 && (
+            <div className="mt-3 rounded-xl bg-[#FBF5E3] border border-[#EADFC8] p-3">
+              <p className="text-xs font-extrabold text-[#8a6d13]">
+                مبلغ يُحوّل للمنصة: {inv.due_to_platform} ر.س
+              </p>
+              <p className="text-[10px] text-gray-600 mt-1">{inv.note}</p>
+            </div>
+          )}
+
           <p className="text-[10px] text-gray-400 mt-5 text-center">
             هذه الفاتورة صادرة إلكترونياً من منصة مهنتي · mihnati.dellini.net
           </p>
