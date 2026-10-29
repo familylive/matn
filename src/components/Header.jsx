@@ -41,9 +41,11 @@ export default function Header() {
       {isAuthenticated && user?.role === 'expert' && reqCount > 0 && (
         <Link
           to="/requests"
-          className="block bg-[#B3261E] text-white text-center text-[12px] font-extrabold py-2 animate-pulse"
+          className="flex items-center justify-center gap-2 bg-[#B3261E] text-white text-[14px] font-extrabold py-3.5 px-3 shadow-md"
         >
-          🔔 {reqCount} طلب جديد في تخصصك — اضغط للسوم الآن
+          <span className="text-xl animate-bounce">🔔</span>
+          <span>{reqCount} طلب جديد في تخصصك</span>
+          <span className="bg-white/20 rounded-full px-2.5 py-0.5 text-[11px]">اضغط للسوم</span>
         </Link>
       )}
       <div className="px-3 py-2.5 flex items-center gap-2">
