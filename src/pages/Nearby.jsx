@@ -118,7 +118,7 @@ export default function Nearby() {
       <h2 className="text-xl font-extrabold text-[#11221A]">🗺️ الفنيون القريبون الآن</h2>
       <p className="text-gray-500 text-xs mt-1">خلال ١٠ كم من موقعك · اطلب أحدهم مباشرة بدون مزاد</p>
 
-      <div ref={el} className="mt-3 rounded-2xl overflow-hidden border border-[#EADFC8]" style={{ height: 300 }} />
+      <div ref={el} className="relative z-0 mt-3 rounded-2xl overflow-hidden border border-[#EADFC8]" style={{ height: 300, isolation: 'isolate' }} />
 
       <div className="mt-3 text-xs text-gray-600">
         {status === 'locating' && '📍 جارٍ تحديد موقعك…'}
@@ -128,7 +128,7 @@ export default function Nearby() {
         {status === 'ok' && `${list.length} فني متصل داخل ١٠ كم`}
       </div>
 
-      {(status === 'denied' || status === 'unsupported') && (
+      {!pos && (status === 'denied' || status === 'unsupported') && (
         <div className="card-lux p-4 mt-3 space-y-2">
           <p className="text-xs font-bold text-[#11221A]">📍 اختر مدينتك يدوياً</p>
           <select
@@ -193,7 +193,7 @@ export default function Nearby() {
       )}
 
       {picked && (
-        <div className="fixed inset-0 z-50 bg-black/50 grid place-items-end sm:place-items-center p-0 sm:p-4" onClick={() => setPicked(null)}>
+        <div className="fixed inset-0 z-[2000] bg-black/50 grid place-items-end sm:place-items-center p-0 sm:p-4" onClick={() => setPicked(null)}>
           <form onSubmit={send} onClick={(ev) => ev.stopPropagation()} className="bg-white w-full sm:max-w-sm rounded-t-3xl sm:rounded-2xl p-5 space-y-3">
             <div className="flex items-center gap-3">
               <img src={picked.image} alt="" className="w-12 h-12 rounded-xl object-cover" />
