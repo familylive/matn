@@ -1402,7 +1402,7 @@ function Loyalty() {
         <p className="text-white font-extrabold text-base tracking-wide">👑 نادي الولاء</p>
         <div className="mt-2 space-y-1.5">
           <p className="text-white font-bold text-[13px] leading-6 border-b border-white/20 pb-1.5">
-            • كل {d.settings.target} عضو نشط = {d.settings.bonus} نقطة
+            • كل {d.settings.target} عضو بطلب حقيقي = {d.settings.bonus} نقطة
           </p>
           <p className="text-white font-bold text-[13px] leading-6 border-b border-white/20 pb-1.5">
             • كل نقطة = 1 ريال تُستخدم في طلبات الفنيين فقط

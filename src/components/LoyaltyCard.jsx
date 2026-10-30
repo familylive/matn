@@ -68,7 +68,7 @@ export default function LoyaltyCard() {
         <div className="mt-3 pt-3 border-t border-[#F0E9D8]">
           <div className="rounded-xl p-3" style={{ background: 'linear-gradient(135deg,#4A0A1E 0%,#7A1230 60%,#3A0817 100%)' }}>
             <p className="text-white font-bold text-[12px] leading-6 border-b border-white/20 pb-1">
-              • كل {d.target} عضو نشط = {d.bonus} نقطة
+              • كل {d.target} عضو يطلب طلب حقيقي = {d.bonus} نقطة
             </p>
             <p className="text-white font-bold text-[12px] leading-6 border-b border-white/20 py-1">
               • كل نقطة = 1 ريال في طلبات الفنيين
@@ -104,7 +104,7 @@ export default function LoyaltyCard() {
                 <li key={i} className="flex items-center justify-between text-[11px] bg-white border border-[#F0E9D8] rounded-lg px-2 py-1.5">
                   <span className="truncate">{x.name || 'عضو'}</span>
                   <span className={x.qualified ? 'text-[#006C35] font-bold' : 'text-gray-400'}>
-                    {x.qualified ? '✓ مؤهل' : '⏳ غير نشط'}
+                    {x.qualified ? '✓ مؤهل' : '⏳ بعد أول طلب حقيقي'}
                   </span>
                 </li>
               ))}

@@ -82,6 +82,7 @@ export function fixSettings() {
 fixSettings()
 
 export const LOYALTY_TARGET = () => Number(setting('loyalty_target', 30))
+export const REQUIRE_REAL_ORDER = () => setting('loyalty_require_order', '1') === '1'
 export const LOYALTY_BONUS = () => Number(setting('loyalty_bonus', 50))
 export const CREDIT_DAYS = () => Number(setting('credit_valid_days', 365))
 
@@ -182,20 +183,28 @@ export function releaseDue() {
 export function invitesOf(expertId) {
   const rows = db
     .prepare(
-      `SELECT u.id AS user_id, u.name, u.phone, u.created_at, u.last_seen,
+      `SELECT u.id AS user_id, u.name, u.phone, u.created_at, u.last_seen, u.phone_verified, u.status,
               e.id AS expert_id, COALESCE(e.verify_status,'approved') AS verify_status,
               (SELECT COUNT(*) FROM bids b WHERE b.expert_id = e.id) AS bids,
-              (SELECT COUNT(*) FROM bids b WHERE b.expert_id = e.id AND b.created_at >= datetime('now','-7 days')) AS bids7
+              (SELECT COUNT(*) FROM bids b WHERE b.expert_id = e.id AND b.created_at >= datetime('now','-30 days')) AS bids30,
+              (SELECT COUNT(*) FROM requests r2 JOIN payments p2 ON p2.request_id = r2.id
+                 WHERE r2.user_id = u.id AND p2.status IN ('paid','pending_cash')) AS paid_orders
        FROM users u LEFT JOIN experts e ON e.user_id = u.id
        WHERE u.referred_by = ?
        ORDER BY u.id DESC`,
     )
     .all(expertId)
-  return rows.map((r) => ({
-    ...r,
-    qualified: !!(r.expert_id && 'approved' === r.verify_status && r.bids > 0 && r.last_seen &&
-      new Date(r.last_seen.replace(' ', 'T') + 'Z').getTime() > Date.now() - 7 * 864e5),
-  }))
+  return rows.map((r) => {
+    const active = !!r.last_seen && new Date(String(r.last_seen).replace(' ', 'T') + 'Z').getTime() > Date.now() - 30 * 864e5
+    return {
+      ...r,
+      real_orders: r.paid_orders || 0,
+      qualified: !!(
+        r.expert_id && r.status !== 'suspended' && r.verify_status === 'approved' &&
+        ((r.bids || 0) > 0 || (r.paid_orders || 0) > 0) && active
+      ),
+    }
+  })
 }
 
 /** يصرف مكافأة الدعوة عند وصول العدد المؤهل للهدف (مرة واحدة) */
@@ -332,17 +341,21 @@ export function spendCredit(userId, maxAmount) {
 export function clientInvites(inviterUserId) {
   const rows = db
     .prepare(
-      `SELECT u.id, u.name, u.phone, u.created_at, u.last_seen, u.role,
+      `SELECT u.id, u.name, u.phone, u.created_at, u.last_seen, u.role, u.status, u.phone_verified,
               (SELECT COUNT(*) FROM requests r WHERE r.user_id = u.id) AS orders,
+              (SELECT COUNT(*) FROM requests r2 JOIN payments p ON p.request_id = r2.id
+                 WHERE r2.user_id = u.id AND p.status IN ('paid','pending_cash')) AS paid_orders,
               (SELECT COUNT(*) FROM bids b JOIN experts e2 ON e2.id = b.expert_id WHERE e2.user_id = u.id) AS bids
        FROM users u WHERE u.referred_by = ? ORDER BY u.id DESC`,
     )
     .all(inviterUserId)
   const active = (last) =>
-    !!last && new Date(String(last).replace(' ', 'T') + 'Z').getTime() > Date.now() - 7 * 864e5
+    !!last && new Date(String(last).replace(' ', 'T') + 'Z').getTime() > Date.now() - 30 * 864e5
   return rows.map((r) => ({
     ...r,
-    qualified: (r.orders > 0 || r.bids > 0) && active(r.last_seen),
+    real_orders: r.paid_orders || 0,
+    // ✅ لا يُحتسب إلا بعد طلب حقيقي (مدفوع) — الأرقام الوهمية والمجرد تسجيل لا تُحسب
+    qualified: r.status !== 'suspended' && (r.paid_orders > 0 || r.bids > 0) && active(r.last_seen),
   }))
 }
 

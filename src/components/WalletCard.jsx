@@ -127,7 +127,7 @@ export default function WalletCard() {
         <div className="mt-4 pt-3 border-t border-[#F0E9D8]">
           <p className="font-extrabold text-sm text-[#11221A]">🎁 كود الدعوة</p>
           <p className="text-[11px] text-gray-500 mt-0.5">
-            كل ما سجّل فني بكودك وزاد العدد إلى {r.target || 10} فني نشط → {r.bonus || 50} ر.س في محفظتك.
+            كل ما سجّل فني بكودك وله سومة أو طلب حقيقي، ووصل العدد إلى {r.target || 20} → {r.bonus || 50} ر.س في محفظتك.
           </p>
 
           <div className="mt-2 flex items-center gap-2">
@@ -156,7 +156,7 @@ export default function WalletCard() {
                 <li key={i} className="flex items-center justify-between text-[11px] bg-white border border-[#F0E9D8] rounded-lg px-2 py-1.5">
                   <span className="truncate">{x.name || 'فني'}</span>
                   <span className={x.qualified ? 'text-[#006C35] font-bold' : 'text-gray-400'}>
-                    {x.qualified ? '✓ مؤهل' : '⏳ غير مؤهل بعد'}
+                    {x.qualified ? '✓ مؤهل' : '⏳ بانتظار سومة/طلب حقيقي'}
                   </span>
                 </li>
               ))}

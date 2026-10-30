@@ -277,6 +277,7 @@ addColumn('experts', 'bio', 'TEXT')
 addColumn('experts', 'invite_code', 'TEXT')
 addColumn('users', 'referred_by', 'INTEGER')
 addColumn('users', 'invite_code', 'TEXT')
+addColumn('users', 'phone_verified', 'INTEGER DEFAULT 0')
 addColumn('admins', 'role', "TEXT DEFAULT 'admin'")
 
 export default db

@@ -371,8 +371,11 @@ app.post('/api/auth/verify', (req, res) => {
 
   let user = db.prepare('SELECT * FROM users WHERE phone = ?').get(phone)
   if (!user) {
-    const info = db.prepare('INSERT INTO users (phone, name) VALUES (?, ?)').run(phone, req.body?.name || null)
+    const info = db.prepare('INSERT INTO users (phone, name, phone_verified) VALUES (?, ?, 1)').run(phone, req.body?.name || null)
     user = db.prepare('SELECT * FROM users WHERE id = ?').get(info.lastInsertRowid)
+    ensureUserCode(user.id)
+  } else {
+    db.prepare('UPDATE users SET phone_verified = 1 WHERE id = ?').run(user.id)
   }
   res.json({ ...startSession(user.id), user })
 })
@@ -1993,7 +1996,8 @@ app.get('/api/admin/loyalty', adminRequired, (req, res) => {
   const invites = db
     .prepare(
       `SELECT referred_by AS uid, COUNT(*) total,
-        SUM(CASE WHEN (SELECT COUNT(*) FROM requests r WHERE r.user_id = u.id) > 0
+        SUM(CASE WHEN (SELECT COUNT(*) FROM requests r JOIN payments p2 ON p2.request_id = r.id
+                        WHERE r.user_id = u.id AND p2.status IN ('paid','pending_cash')) > 0
                   OR (SELECT COUNT(*) FROM bids b JOIN experts e2 ON e2.id = b.expert_id WHERE e2.user_id = u.id) > 0
                  THEN 1 ELSE 0 END) AS active
        FROM users u WHERE referred_by IS NOT NULL GROUP BY referred_by`,
