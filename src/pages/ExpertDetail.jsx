@@ -148,12 +148,19 @@ export default function ExpertDetail() {
           </div>
         )}
 
-        {isAuthenticated && (
+        {isAuthenticated ? (
           <button
             onClick={() => setDirectOpen(true)}
             className="w-full mt-6 bg-[#11221A] text-white py-3.5 rounded-xl font-extrabold flex items-center justify-center gap-2"
           >
             📩 طلب مباشر لهذا الفني
+          </button>
+        ) : (
+          <button
+            onClick={() => navigate('/login')}
+            className="w-full mt-6 bg-[#11221A] text-white py-3.5 rounded-xl font-extrabold"
+          >
+            سجّل دخول لتطلب من هذا الفني
           </button>
         )}
 
@@ -196,6 +203,23 @@ export default function ExpertDetail() {
             <p className="text-[10px] text-gray-500 mt-1">اطلب خدمتك وسوم معه — وبعد الدفع يظهر الجوال والواتساب</p>
           </div>
         )}
+      </div>
+
+      <div className="fixed bottom-0 inset-x-0 z-40 bg-white/95 backdrop-blur border-t border-[#ECE3CE] p-3">
+        <div className="max-w-sm md:max-w-4xl mx-auto flex gap-2">
+          <button
+            onClick={() => (isAuthenticated ? setDirectOpen(true) : navigate('/login'))}
+            className="flex-1 bg-[#11221A] text-white py-3 rounded-xl font-extrabold text-sm"
+          >
+            📩 طلب مباشر
+          </button>
+          <button
+            onClick={() => navigate('/')}
+            className="px-4 bg-[#FBF5E3] text-[#8a6d13] border border-[#EADFC8] rounded-xl font-bold text-sm"
+          >
+            الرئيسية
+          </button>
+        </div>
       </div>
     </div>
   )
