@@ -2439,7 +2439,7 @@ app.get('/api/requests/:id/invoices', authRequired, (req, res) => {
 
 /* ---------- نسخ احتياطي ---------- */
 
-const BACKUP_TABLES = ['users', 'experts', 'requests', 'bids', 'reviews', 'invoices', 'ads', 'city_requests', 'categories', 'payments', 'settings', 'wallet_tx', 'withdrawals', 'credits', 'finance_reports']
+const BACKUP_TABLES = ['users', 'experts', 'requests', 'bids', 'reviews', 'invoices', 'ads', 'city_requests', 'categories', 'payments', 'settings', 'wallet_tx', 'withdrawals', 'credits', 'finance_reports', 'admins', 'blocked_phones']
 
 const collectUploads = () => {
   const refs = new Set()
@@ -2466,7 +2466,7 @@ app.get('/api/admin/backup', adminRequired, (_req, res) => {
 })
 
 function applyBackup(tables, files) {
-  const order = ['reviews', 'payments', 'bids', 'invoices', 'wallet_tx', 'withdrawals', 'credits', 'finance_reports', 'requests', 'city_requests', 'ads', 'experts', 'users', 'categories', 'settings'].filter(t => BACKUP_TABLES.includes(t))
+  const order = ['reviews', 'payments', 'bids', 'invoices', 'wallet_tx', 'withdrawals', 'credits', 'finance_reports', 'admins', 'blocked_phones', 'requests', 'city_requests', 'ads', 'experts', 'users', 'categories', 'settings'].filter(t => BACKUP_TABLES.includes(t))
 
   db.pragma('foreign_keys = OFF')
   try {
@@ -2624,7 +2624,7 @@ async function autoRestoreOnBoot() {
     const tables = snap?.tables
     if (!tables || typeof tables !== 'object') return console.log('AUTORESTORE: bad snapshot')
 
-    const order = ['users', 'experts', 'categories', 'requests', 'bids', 'payments', 'invoices', 'reviews', 'ads', 'city_requests', 'wallet_tx', 'withdrawals', 'credits', 'finance_reports']
+    const order = ['users', 'experts', 'categories', 'requests', 'bids', 'payments', 'invoices', 'reviews', 'ads', 'city_requests', 'wallet_tx', 'withdrawals', 'credits', 'finance_reports', 'admins', 'blocked_phones']
     db.pragma('foreign_keys = OFF')
     let restored = 0
     for (const t of order) {
