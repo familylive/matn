@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import experts from '../data/experts.json'
-import { useCategories, catLabel } from '../hooks/useCategories.js'
+import { useParentCategories as useCategories, catLabel } from '../hooks/useCategories.js'
 import ExpertCard from '../components/ExpertCard.jsx'
 import { useLang } from '../i18n/LanguageContext.jsx'
 

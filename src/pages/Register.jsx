@@ -3,14 +3,13 @@ import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext.jsx'
 import { api, setToken } from '../lib/api.js'
 import { SAUDI_CITIES } from '../data/cities.js'
-import { useCategories, catLabel } from '../hooks/useCategories.js'
 import MapPicker from '../components/MapPicker.jsx'
+import TradesEditor from '../components/TradesEditor.jsx'
 import { useLang } from '../i18n/LanguageContext.jsx'
 
 export default function Register() {
   const { user, login, isAuthenticated } = useAuth()
   const { t, lang } = useLang()
-  const categories = useCategories()
   const navigate = useNavigate()
   const cities = SAUDI_CITIES
   const [busy, setBusy] = useState(false)
@@ -25,6 +24,8 @@ export default function Register() {
     nationality: 'سعودي',
     city: '',
     specialty: 'AC',
+    trades: [{ cat: 'AC', subs: [] }],
+    exp_years: '',
     lat: null,
     lng: null,
     has_car: false,
@@ -40,6 +41,8 @@ export default function Register() {
         city: user.city || user.userLocation || '',
         role: user.role || 'customer',
         specialty: user.specialty || 'AC',
+        trades: Array.isArray(user.trades) && user.trades.length ? user.trades : [{ cat: user.specialty || 'AC', subs: [] }],
+        exp_years: user.exp_years ?? '',
         lat: user.lat ?? null,
         lng: user.lng ?? null,
       }))
@@ -51,6 +54,7 @@ export default function Register() {
     setError('')
     if (!form.city) return setError('اختر مدينتك')
     if (!form.lat || !form.lng) return setError('حدد موقعك على الخريطة')
+    if (form.role === 'expert' && !(form.trades || []).length) return setError('اختر تخصصاً واحداً على الأقل')
     setBusy(true)
     try {
       let updated
@@ -176,14 +180,22 @@ export default function Register() {
             )}
 
             {form.role === 'expert' && (
-              <div>
-                <label className="text-xs font-bold text-gray-600">التخصص *</label>
-                <select value={form.specialty} onChange={(e) => setForm({ ...form, specialty: e.target.value })}
-                  className="w-full mt-1 px-3 py-2.5 border border-[#E3D9BF] rounded-xl bg-white">
-                  {categories.map((c) => (
-                    <option key={c.name} value={c.name}>{c.icon} {catLabel(c, lang)}</option>
-                  ))}
-                </select>
+              <div className="pt-1 space-y-3">
+                <TradesEditor
+                  value={form.trades}
+                  onChange={(trades) => setForm({ ...form, trades, specialty: trades[0]?.cat || form.specialty })}
+                />
+                <div>
+                  <label className="text-xs font-bold text-gray-600">سنوات الخبرة في المجال</label>
+                  <input
+                    type="number" min="0" max="60" inputMode="numeric"
+                    value={form.exp_years}
+                    onChange={(e) => setForm({ ...form, exp_years: e.target.value })}
+                    placeholder="مثال: 7"
+                    className="w-full mt-1 px-3 py-2.5 border border-[#E3D9BF] rounded-xl outline-none focus:border-[#006C35]"
+                  />
+                </div>
+                <p className="text-[10px] text-gray-500">📄 الشهادات ترفعها من جهازك بعد إنشاء الحساب — من صفحة «حسابي».</p>
               </div>
             )}
           </div>

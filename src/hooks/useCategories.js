@@ -17,3 +17,9 @@ export function useCategories() {
 }
 
 export const catLabel = (c, lang) => (lang === 'ar' ? c.ar || c.name : c.en || c.name)
+
+/** الأقسام الرئيسية فقط (بدون الأقسام الفرعية/الخدمات) */
+export function useParentCategories() {
+  const cats = useCategories()
+  return cats.filter((c) => !c.parent_id)
+}

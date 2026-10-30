@@ -822,9 +822,247 @@ function Payments() {
   )
 }
 
+const BADGE_PRESETS = ['#006C35', '#C9A227', '#0B5DA8', '#7A1FA2', '#B3261E', '#0F766E', '#111827', '#C2410C']
+const CAT_OPTS = [
+  ['AC', '❄️ فني تكييف'], ['Plumber', '🔧 سباك'], ['Electrician', '⚡ كهربائي'],
+  ['Carpenter', '🔨 نجار'], ['Painter', '🎨 دهّان'], ['Mechanic', '🛠️ ميكانيكي'],
+]
+
+function ExpertEditor({ expert, onSaved, onClose }) {
+  const [f, setF] = useState({
+    name: expert.name_ar || expert.name || '',
+    job: expert.job || 'AC',
+    city: expert.city || '',
+    phone: expert.phone || '',
+    verify_status: expert.verify_status || 'approved',
+    badge_label: expert.badge_label || '',
+    badge_color: expert.badge_color || '#006C35',
+    is_company: !!expert.is_company,
+    company_name: expert.company_name || '',
+    exp_years: expert.exp_years ?? '',
+    rate: expert.rate || '',
+    image: expert.image || '',
+  })
+  const [certs, setCerts] = useState(Array.isArray(expert.certs) ? expert.certs : [])
+  const [busy, setBusy] = useState(false)
+  const [msg, setMsg] = useState('')
+  const [up, setUp] = useState(false)
+
+  const set = (k, v) => setF((x) => ({ ...x, [k]: v }))
+
+  const uploadCert = async (e) => {
+    const file = e.target.files?.[0]
+    e.target.value = ''
+    if (!file) return
+    setUp(true)
+    try {
+      const fd = new FormData()
+      fd.append('file', file)
+      const r = await api('/api/admin/upload-file', { method: 'POST', form: fd })
+      setCerts((c) => [...c, { url: r.url, name: r.name || file.name }])
+      setMsg('تم رفع الملف — لا تنسَ الحفظ')
+    } catch {
+      setMsg('تعذّر رفع الملف')
+    } finally {
+      setUp(false)
+    }
+  }
+
+  const save = async () => {
+    setBusy(true); setMsg('')
+    try {
+      const body = {
+        ...f,
+        exp_years: f.exp_years === '' ? null : Number(f.exp_years),
+        is_company: f.is_company ? 1 : 0,
+        badge_label: f.badge_label || null,
+        badge_color: f.badge_color || null,
+        company_name: f.company_name || null,
+        certs,
+      }
+      const r = await api(`/api/admin/experts/${expert.id}`, { method: 'PATCH', body })
+      onSaved(r)
+      setMsg('✅ تم الحفظ')
+    } catch {
+      setMsg('تعذّر الحفظ')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <div className="mt-2 rounded-xl border border-[#E3D9BF] bg-[#FBF9F2] p-3 space-y-2">
+      <div className="grid grid-cols-2 gap-2">
+        <input value={f.name} onChange={(e) => set('name', e.target.value)} placeholder="الاسم"
+          className="px-2 py-1.5 border border-[#E3D9BF] rounded-lg text-xs" />
+        <input value={f.city} onChange={(e) => set('city', e.target.value)} placeholder="المدينة"
+          className="px-2 py-1.5 border border-[#E3D9BF] rounded-lg text-xs" />
+        <input value={f.phone} onChange={(e) => set('phone', e.target.value)} placeholder="الجوال"
+          className="px-2 py-1.5 border border-[#E3D9BF] rounded-lg text-xs" />
+        <input value={f.rate} onChange={(e) => set('rate', e.target.value)} placeholder="السعر المعروض"
+          className="px-2 py-1.5 border border-[#E3D9BF] rounded-lg text-xs" />
+        <input value={f.exp_years} onChange={(e) => set('exp_years', e.target.value)} placeholder="سنوات الخبرة" type="number"
+          className="px-2 py-1.5 border border-[#E3D9BF] rounded-lg text-xs" />
+        <select value={f.job} onChange={(e) => set('job', e.target.value)}
+          className="px-2 py-1.5 border border-[#E3D9BF] rounded-lg text-xs bg-white">
+          {CAT_OPTS.map(([k, l]) => <option key={k} value={k}>{l}</option>)}
+        </select>
+        <select value={f.verify_status} onChange={(e) => set('verify_status', e.target.value)}
+          className="col-span-2 px-2 py-1.5 border border-[#E3D9BF] rounded-lg text-xs bg-white">
+          <option value="approved">✅ موثّق (يظهر للعملاء)</option>
+          <option value="pending">⏳ قيد المراجعة (مخفي)</option>
+          <option value="rejected">⛔ مرفوض</option>
+        </select>
+      </div>
+
+      <div className="grid grid-cols-2 gap-2 items-center">
+        <input value={f.badge_label} onChange={(e) => set('badge_label', e.target.value)}
+          placeholder="نص الشارة (مثال: محترف معتمد)"
+          className="px-2 py-1.5 border border-[#E3D9BF] rounded-lg text-xs" />
+        <div className="flex items-center gap-1.5">
+          <input type="color" value={f.badge_color} onChange={(e) => set('badge_color', e.target.value)}
+            className="w-8 h-8 rounded border border-[#E3D9BF] bg-white p-0.5" />
+          <div className="flex gap-1 flex-wrap">
+            {BADGE_PRESETS.map((c) => (
+              <button key={c} type="button" onClick={() => set('badge_color', c)}
+                className="w-4 h-4 rounded-full border border-white shadow"
+                style={{ background: c, outline: f.badge_color === c ? '2px solid #11221A' : 'none' }} />
+            ))}
+          </div>
+        </div>
+      </div>
+
+      <div className="flex items-center gap-2">
+        <input value={f.badge_label} onChange={(e) => set('badge_label', e.target.value)} readOnly hidden />
+        <label className="flex items-center gap-1.5 text-[11px] font-bold text-[#11221A]">
+          <input type="checkbox" checked={f.is_company} onChange={(e) => set('is_company', e.target.checked)}
+            className="w-3.5 h-3.5 accent-[#006C35]" />
+          🏢 شركة متخصصة
+        </label>
+        {f.is_company && (
+          <input value={f.company_name} onChange={(e) => set('company_name', e.target.value)}
+            placeholder="اسم الشركة" className="flex-1 px-2 py-1.5 border border-[#E3D9BF] rounded-lg text-xs" />
+        )}
+      </div>
+
+      <div>
+        <p className="text-[11px] font-bold text-gray-600 mb-1">📄 الشهادات</p>
+        {certs.length > 0 && (
+          <ul className="space-y-1 mb-1">
+            {certs.map((c, i) => (
+              <li key={c.url} className="flex items-center gap-2 text-[11px] bg-white border border-[#EADFC8] rounded-lg px-2 py-1">
+                <a href={c.url} target="_blank" rel="noreferrer" className="flex-1 truncate text-[#0B5DA8] underline">{c.name || 'ملف'}</a>
+                <button onClick={() => setCerts(certs.filter((_, j) => j !== i))} className="text-red-500 font-bold">حذف</button>
+              </li>
+            ))}
+          </ul>
+        )}
+        <label className="inline-block cursor-pointer text-[11px] font-bold text-[#006C35] border border-dashed border-[#E3D9BF] rounded-lg px-2 py-1 bg-white">
+          {up ? 'جارٍ الرفع…' : '＋ رفع شهادة (صورة/PDF)'}
+          <input type="file" accept="image/*,application/pdf" className="hidden" onChange={uploadCert} />
+        </label>
+      </div>
+
+      {msg && <p className="text-[11px] font-bold text-[#006C35]">{msg}</p>}
+      <div className="flex gap-2">
+        <button onClick={save} disabled={busy} className="flex-1 bg-[#006C35] text-white py-2 rounded-lg text-xs font-bold">
+          {busy ? 'جارٍ الحفظ…' : 'حفظ التعديلات'}
+        </button>
+        <button onClick={onClose} className="px-3 bg-white border border-[#E3D9BF] text-gray-600 py-2 rounded-lg text-xs font-bold">إغلاق</button>
+      </div>
+    </div>
+  )
+}
+
+function AddExpert({ onAdded }) {
+  const [open, setOpen] = useState(false)
+  const [f, setF] = useState({
+    name: '', job: 'AC', city: '', phone: '', badge_label: 'محترف معتمد', badge_color: '#C9A227',
+    is_company: false, company_name: '', exp_years: '', rate: 'حسب الاتفاق', verify_status: 'approved',
+  })
+  const [busy, setBusy] = useState(false)
+  const [msg, setMsg] = useState('')
+  const set = (k, v) => setF((x) => ({ ...x, [k]: v }))
+
+  const save = async () => {
+    if (!f.name.trim()) return setMsg('اكتب الاسم')
+    setBusy(true); setMsg('')
+    try {
+      const r = await api('/api/admin/experts', {
+        method: 'POST',
+        body: {
+          ...f,
+          exp_years: f.exp_years === '' ? null : Number(f.exp_years),
+          is_company: f.is_company ? 1 : 0,
+          trades: [{ cat: f.job, subs: [] }],
+        },
+      })
+      onAdded(r)
+      setMsg('✅ تمت الإضافة — ظهر في قائمة الفنيين')
+      setF({ ...f, name: '', phone: '', company_name: '', exp_years: '' })
+    } catch {
+      setMsg('تعذّرت الإضافة')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  if (!open) {
+    return (
+      <button onClick={() => setOpen(true)} className="w-full bg-[#11221A] text-white py-2.5 rounded-xl text-xs font-bold">
+        ➕ إضافة فني / شركة متخصصة
+      </button>
+    )
+  }
+
+  return (
+    <div className="card-lux p-3 space-y-2">
+      <p className="text-sm font-extrabold text-[#11221A]">➕ إضافة فني أو شركة</p>
+      <div className="grid grid-cols-2 gap-2">
+        <input value={f.name} onChange={(e) => set('name', e.target.value)} placeholder="الاسم / اسم الشركة"
+          className="px-2 py-1.5 border border-[#E3D9BF] rounded-lg text-xs" />
+        <input value={f.city} onChange={(e) => set('city', e.target.value)} placeholder="المدينة"
+          className="px-2 py-1.5 border border-[#E3D9BF] rounded-lg text-xs" />
+        <input value={f.phone} onChange={(e) => set('phone', e.target.value)} placeholder="الجوال"
+          className="px-2 py-1.5 border border-[#E3D9BF] rounded-lg text-xs" />
+        <input value={f.exp_years} onChange={(e) => set('exp_years', e.target.value)} placeholder="سنوات الخبرة" type="number"
+          className="px-2 py-1.5 border border-[#E3D9BF] rounded-lg text-xs" />
+        <select value={f.job} onChange={(e) => set('job', e.target.value)}
+          className="col-span-2 px-2 py-1.5 border border-[#E3D9BF] rounded-lg text-xs bg-white">
+          {CAT_OPTS.map(([k, l]) => <option key={k} value={k}>{l}</option>)}
+        </select>
+        <input value={f.badge_label} onChange={(e) => set('badge_label', e.target.value)} placeholder="نص الشارة"
+          className="px-2 py-1.5 border border-[#E3D9BF] rounded-lg text-xs" />
+        <input type="color" value={f.badge_color} onChange={(e) => set('badge_color', e.target.value)}
+          className="h-8 rounded border border-[#E3D9BF] bg-white p-0.5" />
+      </div>
+      <div className="flex items-center gap-2">
+        <label className="flex items-center gap-1.5 text-[11px] font-bold">
+          <input type="checkbox" checked={f.is_company} onChange={(e) => set('is_company', e.target.checked)}
+            className="w-3.5 h-3.5 accent-[#006C35]" />
+          🏢 شركة
+        </label>
+        {f.is_company && (
+          <input value={f.company_name} onChange={(e) => set('company_name', e.target.value)} placeholder="اسم الشركة"
+            className="flex-1 px-2 py-1.5 border border-[#E3D9BF] rounded-lg text-xs" />
+        )}
+      </div>
+      <p className="text-[10px] text-gray-500">الشهادات تُرفع بعد الإضافة من زر «تعديل».</p>
+      {msg && <p className="text-[11px] font-bold text-[#006C35]">{msg}</p>}
+      <div className="flex gap-2">
+        <button onClick={save} disabled={busy} className="flex-1 bg-[#006C35] text-white py-2 rounded-lg text-xs font-bold">
+          {busy ? 'جارٍ الإضافة…' : 'إضافة'}
+        </button>
+        <button onClick={() => setOpen(false)} className="px-3 bg-white border border-[#E3D9BF] py-2 rounded-lg text-xs font-bold">إلغاء</button>
+      </div>
+    </div>
+  )
+}
+
 function Verifications() {
   const [rows, setRows] = useState([])
   const [tab, setTab] = useState('pending')
+  const [editId, setEditId] = useState(null)
   const load = (st) => api(`/api/admin/verifications?status=${st}`).then(setRows).catch(() => {})
   useEffect(() => { load(tab) }, [tab])
 
@@ -834,8 +1072,12 @@ function Verifications() {
     load(tab)
   }
 
+  const patchLocal = (e) => setRows((rs) => rs.map((r) => (r.id === e.id ? { ...r, ...e } : r)))
+
   return (
     <div className="space-y-3">
+      <AddExpert onAdded={(e) => { setRows((rs) => [e, ...rs]); setTab('approved'); load('approved') }} />
+
       <div className="flex gap-2">
         {[['pending', 'قيد المراجعة'], ['approved', 'موثّقون'], ['rejected', 'مرفوضون']].map(([k, l]) => (
           <button key={k} onClick={() => setTab(k)}
@@ -854,8 +1096,20 @@ function Verifications() {
               </a>
             )}
             <div className="flex-1 min-w-0">
-              <p className="font-bold text-sm text-[#11221A]">{e.name_ar || e.name}</p>
-              <p className="text-[11px] text-gray-500">{e.job} · {e.city || '—'}</p>
+              <div className="flex items-center gap-2 flex-wrap">
+                <p className="font-bold text-sm text-[#11221A]">{e.name_ar || e.name}</p>
+                {e.badge_label && (
+                  <span className="text-[9px] font-extrabold px-1.5 py-0.5 rounded-full border"
+                    style={{ color: e.badge_color || '#006C35', borderColor: e.badge_color || '#006C35' }}>
+                    {e.badge_label}
+                  </span>
+                )}
+                {!!e.is_company && <span className="text-[9px] font-bold text-gray-500">🏢 شركة</span>}
+              </div>
+              <p className="text-[11px] text-gray-500">{e.job} · {e.city || '—'} · خبرة {e.exp_years ?? '—'} سنة</p>
+              {Array.isArray(e.certs) && e.certs.length > 0 && (
+                <p className="text-[10px] text-[#0B5DA8] mt-0.5">📄 {e.certs.length} شهادة مرفوعة</p>
+              )}
               {e.iqama_number && (
                 <p className="text-[11px] text-gray-500 mt-1">
                   إقامة: {e.iqama_number} · {e.nationality || '—'} · {e.profession || '—'}
@@ -863,11 +1117,25 @@ function Verifications() {
               )}
             </div>
           </div>
+
           {tab === 'pending' && (
             <div className="flex gap-2">
               <button onClick={() => act(e.id, 'approved')} className="flex-1 bg-[#006C35] text-white py-2 rounded-lg text-xs font-bold">موافقة وتفعيل</button>
               <button onClick={() => act(e.id, 'rejected')} className="flex-1 bg-red-50 text-red-500 py-2 rounded-lg text-xs font-bold">رفض</button>
             </div>
+          )}
+
+          <div className="flex gap-2">
+            <button onClick={() => setEditId(editId === e.id ? null : e.id)}
+              className="flex-1 bg-white border border-[#E3D9BF] text-[#11221A] py-1.5 rounded-lg text-xs font-bold">
+              {editId === e.id ? 'إخفاء التعديل' : '✎ تعديل + شهادات + لون الشارة'}
+            </button>
+            <button onClick={async () => { if (!confirm('حذف هذا الفني؟')) return; await api(`/api/admin/experts/${e.id}`, { method: 'DELETE' }); setRows((rs) => rs.filter((r) => r.id !== e.id)) }}
+              className="px-3 bg-red-50 text-red-500 py-1.5 rounded-lg text-xs font-bold">حذف</button>
+          </div>
+
+          {editId === e.id && (
+            <ExpertEditor expert={e} onSaved={(r) => { patchLocal(r); setEditId(null) }} onClose={() => setEditId(null)} />
           )}
         </div>
       ))}

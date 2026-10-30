@@ -259,4 +259,13 @@ addColumn('invoices', 'total_paid', 'REAL DEFAULT 0')
 addColumn('admins', 'status', "TEXT DEFAULT 'active'")
 addColumn('admins', 'name', 'TEXT')
 
+addColumn('experts', 'trades', 'TEXT')
+addColumn('experts', 'exp_years', 'INTEGER')
+addColumn('experts', 'certs', 'TEXT')
+addColumn('experts', 'badge_color', 'TEXT')
+addColumn('experts', 'badge_label', 'TEXT')
+addColumn('experts', 'is_company', 'INTEGER DEFAULT 0')
+addColumn('experts', 'company_name', 'TEXT')
+addColumn('experts', 'bio', 'TEXT')
+
 export default db

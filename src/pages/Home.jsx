@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import experts from '../data/experts.json'
-import { useCategories, catLabel } from '../hooks/useCategories.js'
+import { useParentCategories as useCategories, catLabel } from '../hooks/useCategories.js'
 import ExpertCard from '../components/ExpertCard.jsx'
 import LocationSetup from '../components/LocationSetup.jsx'
 import AdsCarousel from '../components/AdsCarousel.jsx'
@@ -32,6 +32,12 @@ export default function Home() {
             reviews: r.reviews_count,
             image: r.image,
             hasCar: !!r.has_car,
+            trades: r.trades || [],
+            exp_years: r.exp_years ?? null,
+            badge_color: r.badge_color || null,
+            badge_label: r.badge_label || null,
+            is_company: !!r.is_company,
+            company_name: r.company_name || null,
           })),
         )
       })

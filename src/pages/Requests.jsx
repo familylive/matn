@@ -133,7 +133,7 @@ export default function Requests() {
                 onChange={(e) => setForm({ ...form, category: e.target.value })}
                 className="px-3 py-2.5 border border-[#E3D9BF] rounded-xl bg-white"
               >
-                {categories.map((c) => (
+                {categories.filter((c) => !c.parent_id).map((c) => (
                   <option key={c.name} value={c.name}>{catLabel(c, lang)}</option>
                 ))}
               </select>

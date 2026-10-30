@@ -14,6 +14,7 @@ import { seedAdmin, checkAdmin, adminToken, adminRequired, hashPassword } from '
 import { seedBots, onNewRequest, resumeBots } from './bots.js'
 import { hashPassword as hashUserPassword, verifyPassword, findByIdentifier, normalizePhone } from './accounts.js'
 import { issueInvoice, autoSettle, getSetting as getSet } from './flow.js'
+import { seedServices, tradesOf, catsOf, certsOf, decorateExpert, parseJson } from './services.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const app = express()
@@ -40,8 +41,22 @@ const upload = multer({
   fileFilter: (_req, file, cb) => cb(null, /image\//.test(file.mimetype)),
 })
 
+/* شهادات وملفات: صور + PDF */
+const uploadAny = multer({
+  storage: multer.diskStorage({
+    destination: (_req, _file, cb) => cb(null, uploadsDir),
+    filename: (_req, file, cb) => {
+      const ext = (path.extname(file.originalname) || '.jpg').toLowerCase()
+      cb(null, `doc-${Date.now()}-${Math.random().toString(36).slice(2, 8)}${ext}`)
+    },
+  }),
+  limits: { fileSize: 20 * 1024 * 1024 },
+  fileFilter: (_req, file, cb) => cb(null, /image\/|pdf/.test(file.mimetype)),
+})
+
 seedAdmin()
 seedBots()
+seedServices(db)
 
 function backfillNumbers() {
   const rows = db.prepare('SELECT id FROM requests WHERE number IS NULL ORDER BY id').all()
@@ -295,11 +310,16 @@ app.post('/api/auth/signup', (req, res) => {
 
   const userId = info.lastInsertRowid
   if (role === 'expert') {
+    const trades = sanitizeTrades(b.trades, b.specialty)
+    const job = trades[0]?.cat || 'AC'
+    const years = Number(b.exp_years) > 0 ? Number(b.exp_years) : 0
     db.prepare(
-      `INSERT INTO experts (name, name_ar, job, city, rate, rating, reviews_count, image, phone, skills, experience, lat, lng, user_id, verify_status, has_car)
-       VALUES (?, ?, ?, ?, '150 ريال/ساعة', 4.5, 0, '/experts/ac.jpg', ?, '[]', '1 سنة', ?, ?, ?, 'pending', ?)`,
-    ).run(name, name, b.specialty || 'AC', b.city || 'الرياض', phone,
-      b.lat != null ? Number(b.lat) : null, b.lng != null ? Number(b.lng) : null, userId, b.has_car ? 1 : 0)
+      `INSERT INTO experts (name, name_ar, job, city, rate, rating, reviews_count, image, phone, skills, experience, lat, lng, user_id, verify_status, has_car, trades, exp_years)
+       VALUES (?, ?, ?, ?, '150 ريال/ساعة', 4.5, 0, '/experts/ac.jpg', ?, '[]', ?, ?, ?, ?, 'pending', ?, ?, ?)`,
+    ).run(name, name, job, b.city || 'الرياض', phone,
+      years ? `${years} سنة` : '1 سنة',
+      b.lat != null ? Number(b.lat) : null, b.lng != null ? Number(b.lng) : null, userId, b.has_car ? 1 : 0,
+      JSON.stringify(trades), b.exp_years != null ? Number(b.exp_years) : null)
   }
 
   res.status(201).json({ ...startSession(userId), user: fullUser(userId) })
@@ -376,19 +396,26 @@ app.post('/api/auth/register', authRequired, (req, res) => {
   )
 
   if (role === 'expert') {
+    const trades = sanitizeTrades(b.trades, b.specialty)
+    const job = trades[0]?.cat || b.specialty || null
     const existing = db.prepare('SELECT * FROM experts WHERE user_id = ?').get(req.userId)
     if (existing) {
       db.prepare(
-        `UPDATE experts SET name = ?, name_ar = ?, job = ?, city = ?, phone = ?, lat = ?, lng = ?, has_car = ? WHERE id = ?`,
-      ).run(name, name, b.specialty || existing.job, b.city || existing.city, b.phone || existing.phone,
+        `UPDATE experts SET name = ?, name_ar = ?, job = ?, city = ?, phone = ?, lat = ?, lng = ?, has_car = ?, trades = ?, exp_years = ? WHERE id = ?`,
+      ).run(name, name, job || existing.job, b.city || existing.city, b.phone || existing.phone,
         b.lat != null ? Number(b.lat) : existing.lat, b.lng != null ? Number(b.lng) : existing.lng,
-        b.has_car !== undefined ? (b.has_car ? 1 : 0) : existing.has_car, existing.id)
+        b.has_car !== undefined ? (b.has_car ? 1 : 0) : existing.has_car,
+        trades ? JSON.stringify(trades) : existing.trades,
+        b.exp_years != null ? Number(b.exp_years) : existing.exp_years,
+        existing.id)
     } else {
       db.prepare(
-        `INSERT INTO experts (name, name_ar, job, city, rate, rating, reviews_count, image, phone, skills, experience, lat, lng, user_id, verify_status, has_car)
-         VALUES (?, ?, ?, ?, '150 ريال/ساعة', 4.5, 0, '/experts/ac.jpg', ?, '[]', '1 سنة', ?, ?, ?, 'pending', ?)`,
-      ).run(name, name, b.specialty || 'AC', b.city || 'الرياض', b.phone || null,
-        b.lat != null ? Number(b.lat) : null, b.lng != null ? Number(b.lng) : null, req.userId, b.has_car ? 1 : 0)
+        `INSERT INTO experts (name, name_ar, job, city, rate, rating, reviews_count, image, phone, skills, experience, lat, lng, user_id, verify_status, has_car, trades, exp_years)
+         VALUES (?, ?, ?, ?, '150 ريال/ساعة', 4.5, 0, '/experts/ac.jpg', ?, '[]', ?, ?, ?, ?, 'pending', ?, ?, ?)`,
+      ).run(name, name, job || 'AC', b.city || 'الرياض', b.phone || null,
+        b.exp_years ? `${Number(b.exp_years)} سنة` : '1 سنة',
+        b.lat != null ? Number(b.lat) : null, b.lng != null ? Number(b.lng) : null, req.userId, b.has_car ? 1 : 0,
+        JSON.stringify(trades || []), b.exp_years != null ? Number(b.exp_years) : null)
     }
   }
 
@@ -426,21 +453,52 @@ app.get('/api/experts', (req, res) => {
   const { category, q } = req.query
   let sql = "SELECT * FROM experts WHERE COALESCE(verify_status, 'approved') = 'approved'"
   const params = []
-  if (category) { sql += ' AND job = ?'; params.push(category) }
+  if (category) { sql += " AND (job = ? OR COALESCE(trades,'') LIKE ?)"; params.push(category, `%"cat":"${category}"%`) }
   if (q) { sql += ' AND (name LIKE ? OR job LIKE ? OR city LIKE ?)'; params.push(`%${q}%`, `%${q}%`, `%${q}%`) }
   sql += ' ORDER BY has_car DESC, rating DESC'
   const rows = db.prepare(sql).all(...params)
-  res.json(rows.map((r) => ({ ...r, skills: r.skills ? JSON.parse(r.skills) : [] })))
+  res.json(rows.map(decorateExpert))
 })
 
 app.patch('/api/me/expert', authRequired, (req, res) => {
   const e = db.prepare('SELECT * FROM experts WHERE user_id = ?').get(req.userId)
   if (!e) return res.status(404).json({ error: 'not_expert' })
-  if (req.body?.has_car !== undefined) {
-    db.prepare('UPDATE experts SET has_car = ? WHERE id = ?').run(req.body.has_car ? 1 : 0, e.id)
+  const b = req.body || {}
+  if (b.has_car !== undefined) db.prepare('UPDATE experts SET has_car = ? WHERE id = ?').run(b.has_car ? 1 : 0, e.id)
+  if (b.trades !== undefined) {
+    const trades = sanitizeTrades(b.trades, e.job)
+    if (trades.length) {
+      db.prepare('UPDATE experts SET trades = ?, job = ? WHERE id = ?').run(JSON.stringify(trades), trades[0].cat, e.id)
+    }
   }
+  if (b.exp_years !== undefined) {
+    const y = Math.max(0, Math.min(70, Number(b.exp_years) || 0))
+    db.prepare('UPDATE experts SET exp_years = ?, experience = ? WHERE id = ?').run(y, y ? `${y} سنة` : null, e.id)
+  }
+  if (b.bio !== undefined) db.prepare('UPDATE experts SET bio = ? WHERE id = ?').run(String(b.bio || '').slice(0, 600), e.id)
   const updated = db.prepare('SELECT * FROM experts WHERE id = ?').get(e.id)
-  res.json({ ...updated, skills: updated.skills ? JSON.parse(updated.skills) : [] })
+  res.json(decorateExpert(updated))
+})
+
+/* شهادات الفني — رفع من جهازه */
+app.post('/api/me/certs', authRequired, uploadAny.single('file'), (req, res) => {
+  const e = db.prepare('SELECT * FROM experts WHERE user_id = ?').get(req.userId)
+  if (!e) return res.status(404).json({ error: 'not_expert' })
+  if (!req.file) return res.status(400).json({ error: 'file_required' })
+  const certs = certsOf(e)
+  if (certs.length >= 10) return res.status(400).json({ error: 'too_many_certs' })
+  certs.push({ url: `/uploads/${req.file.filename}`, name: String(req.body?.name || req.file.originalname || 'شهادة').slice(0, 90) })
+  db.prepare('UPDATE experts SET certs = ? WHERE id = ?').run(JSON.stringify(certs), e.id)
+  res.status(201).json(decorateExpert(db.prepare('SELECT * FROM experts WHERE id = ?').get(e.id)))
+})
+
+app.delete('/api/me/certs/:idx', authRequired, (req, res) => {
+  const e = db.prepare('SELECT * FROM experts WHERE user_id = ?').get(req.userId)
+  if (!e) return res.status(404).json({ error: 'not_expert' })
+  const certs = certsOf(e)
+  certs.splice(Number(req.params.idx), 1)
+  db.prepare('UPDATE experts SET certs = ? WHERE id = ?').run(JSON.stringify(certs), e.id)
+  res.json(decorateExpert(db.prepare('SELECT * FROM experts WHERE id = ?').get(e.id)))
 })
 
 /* الفنيون المتصلون القريبون (٥ كم) — للطلب المباشر بدون مزاد */
@@ -462,7 +520,7 @@ app.get('/api/experts/nearby', (req, res) => {
     .all()
 
   const out = rows
-    .map((e) => ({ ...e, skills: e.skills ? JSON.parse(e.skills) : [], distance_km: haversineKm(lat, lng, e.lat, e.lng) }))
+    .map((e) => ({ ...decorateExpert(e), distance_km: haversineKm(lat, lng, e.lat, e.lng) }))
     .filter((e) => e.distance_km !== null && e.distance_km <= km)
     .sort((a, b) => a.distance_km - b.distance_km)
 
@@ -472,7 +530,7 @@ app.get('/api/experts/nearby', (req, res) => {
 app.get('/api/me/expert', authRequired, (req, res) => {
   const e = db.prepare('SELECT * FROM experts WHERE user_id = ?').get(req.userId)
   if (!e) return res.json(null)
-  res.json({ ...e, skills: e.skills ? JSON.parse(e.skills) : [] })
+  res.json(decorateExpert(e))
 })
 
 app.patch('/api/admin/experts/:id', adminRequired, (req, res) => {
@@ -481,11 +539,63 @@ app.patch('/api/admin/experts/:id', adminRequired, (req, res) => {
   const b = req.body || {}
   const sets = []
   const params = []
-  for (const f of ['lat', 'lng', 'city', 'job', 'name', 'name_ar', 'rate']) {
-    if (b[f] !== undefined) { sets.push(`${f} = ?`); params.push(b[f]) }
+  for (const f of ['lat', 'lng', 'city', 'job', 'name', 'name_ar', 'rate', 'badge_color', 'badge_label',
+    'company_name', 'bio', 'image', 'phone', 'experience']) {
+    if (b[f] !== undefined) { sets.push(`${f} = ?`); params.push(b[f] === '' ? null : b[f]) }
+  }
+  for (const f of ['verify_status', 'is_company', 'exp_years']) {
+    if (b[f] !== undefined) { sets.push(`${f} = ?`); params.push(f === 'is_company' ? (b[f] ? 1 : 0) : b[f]) }
+  }
+  if (b.trades !== undefined) {
+    const trades = sanitizeTrades(b.trades, b.job || e.job)
+    sets.push('trades = ?'); params.push(JSON.stringify(trades))
+    if (b.job === undefined) { sets.push('job = ?'); params.push(trades[0]?.cat || e.job) }
+  }
+  if (b.certs !== undefined) {
+    sets.push('certs = ?'); params.push(JSON.stringify(Array.isArray(b.certs) ? b.certs.filter((c) => c && c.url) : []))
+  }
+  if (b.experience !== undefined && b.exp_years === undefined) {
+    const y = parseInt(String(b.experience), 10)
+    if (!Number.isNaN(y)) { sets.push('exp_years = ?'); params.push(y) }
   }
   if (sets.length) db.prepare(`UPDATE experts SET ${sets.join(', ')} WHERE id = ?`).run(...params, e.id)
-  res.json(db.prepare('SELECT * FROM experts WHERE id = ?').get(e.id))
+  res.json(decorateExpert(db.prepare('SELECT * FROM experts WHERE id = ?').get(e.id)))
+})
+
+/* ➕ إضافة فني أو شركة متخصصة من لوحة التحكم (بأي شعار لون) */
+app.post('/api/admin/experts', adminRequired, (req, res) => {
+  const b = req.body || {}
+  const name = String(b.name || '').trim()
+  if (!name) return res.status(400).json({ error: 'name_required' })
+  const trades = sanitizeTrades(b.trades, b.job)
+  const job = trades[0]?.cat || String(b.job || 'AC')
+  const years = Number(b.exp_years) > 0 ? Number(b.exp_years) : null
+  const info = db
+    .prepare(
+      `INSERT INTO experts (name, name_ar, job, city, rate, rating, reviews_count, image, phone, skills, experience,
+        lat, lng, verify_status, has_car, trades, exp_years, badge_color, badge_label, is_company, company_name, bio)
+       VALUES (?, ?, ?, ?, ?, 5, 0, ?, ?, '[]', ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?)`,
+    )
+    .run(name, b.name_ar || name, job, b.city || 'الرياض', b.rate || 'حسب الاتفاق', b.image || '/experts/ac.jpg',
+      b.phone || null, years ? `${years} سنة` : null,
+      b.lat != null ? Number(b.lat) : null, b.lng != null ? Number(b.lng) : null,
+      b.verify_status || 'approved', JSON.stringify(trades), years,
+      b.badge_color || null, b.badge_label || null, b.is_company ? 1 : 0, b.company_name || null, b.bio || null)
+  res.status(201).json(decorateExpert(db.prepare('SELECT * FROM experts WHERE id = ?').get(info.lastInsertRowid)))
+})
+
+app.delete('/api/admin/experts/:id', adminRequired, (req, res) => {
+  const e = db.prepare('SELECT * FROM experts WHERE id = ?').get(req.params.id)
+  if (!e) return res.status(404).json({ error: 'not_found' })
+  db.prepare('DELETE FROM experts WHERE id = ?').run(e.id)
+  if (e.user_id) db.prepare("UPDATE users SET role = 'customer' WHERE id = ?").run(e.user_id)
+  res.json({ ok: true })
+})
+
+/* رفع ملفات (شهادات PDF/صور) من لوحة التحكم */
+app.post('/api/admin/upload-file', adminRequired, uploadAny.single('file'), (req, res) => {
+  if (!req.file) return res.status(400).json({ error: 'no_file' })
+  res.status(201).json({ url: `/uploads/${req.file.filename}`, name: req.file.originalname })
 })
 
 app.get('/api/experts/:id/contact', authRequired, (req, res) => {
@@ -519,8 +629,26 @@ app.get('/api/experts/:id/reviews', (req, res) => {
 app.get('/api/experts/:id', (req, res) => {
   const row = db.prepare("SELECT * FROM experts WHERE id = ? AND COALESCE(verify_status, 'approved') = 'approved'").get(req.params.id)
   if (!row) return res.status(404).json({ error: 'not_found' })
-  res.json({ ...row, skills: row.skills ? JSON.parse(row.skills) : [] })
+  res.json(decorateExpert(row))
 })
+
+
+/* ---------- تخصصات الفني (أكثر من تخصص + خدماته) ---------- */
+function sanitizeTrades(input, fallbackJob) {
+  let arr = []
+  if (Array.isArray(input)) arr = input
+  else if (typeof input === 'string' && input.trim()) arr = [{ cat: input.trim(), subs: [] }]
+  const out = []
+  for (const t of arr.slice(0, 8)) {
+    const cat = String((t && (t.cat || t.key || t.name)) || '').trim()
+    if (!cat) continue
+    if (out.some((x) => x.cat === cat)) continue
+    const subs = Array.isArray(t?.subs) ? t.subs.map((x) => String(x).trim()).filter(Boolean).slice(0, 15) : []
+    out.push({ cat, subs: [...new Set(subs)] })
+  }
+  if (!out.length && fallbackJob) out.push({ cat: String(fallbackJob), subs: [] })
+  return out
+}
 
 /* ---------- requests + live bidding ---------- */
 
@@ -594,7 +722,9 @@ app.get('/api/requests', authRequired, (req, res) => {
 
   let rows
   if (mine) {
-    // الفني: الطلبات المفتوحة في تخصصه + طلباته هو
+    // الفني: الطلبات المفتوحة في أي من تخصصاته + طلباته هو
+    const myCats = catsOf(mine)
+    const catPh = myCats.map(() => '?').join(',') || "''"
     rows = db
       .prepare(
         `SELECT r.*, u.name AS owner_name,
@@ -602,13 +732,13 @@ app.get('/api/requests', authRequired, (req, res) => {
           (SELECT MIN(b.amount) FROM bids b WHERE b.request_id = r.id AND b.expert_id = ?) AS lowest_bid,
           (SELECT amount FROM bids b WHERE b.request_id = r.id AND b.expert_id = ? ORDER BY b.id DESC LIMIT 1) AS my_bid
          FROM requests r JOIN users u ON u.id = r.user_id
-         WHERE (r.category = ? AND r.status = 'open' AND r.direct_expert_id IS NULL
+         WHERE (r.category IN (${catPh}) AND r.status = 'open' AND r.direct_expert_id IS NULL
                 AND (r.ends_at IS NULL OR datetime(r.ends_at) > datetime('now','-5 minutes')))
             OR r.user_id = ?
             OR r.direct_expert_id = ?
          ORDER BY r.id DESC LIMIT 100`,
       )
-      .all(mine.id, mine.id, mine.job, req.userId, mine.id)
+      .all(mine.id, mine.id, ...myCats, req.userId, mine.id)
   } else {
     // العميل: طلباته فقط
     rows = db
@@ -646,7 +776,7 @@ app.get('/api/requests/:id', (req, res) => {
     const mine = db.prepare('SELECT * FROM experts WHERE user_id = ?').get(uid)
     const accepted = data.bids.find((b) => b.id === data.accepted_bid_id)
     const isAssigned = !!(mine && accepted && accepted.expert_id === mine.id)
-    const sameSpecialty = !!(mine && mine.job === data.category && data.status === 'open' && !data.direct_expert_id)
+    const sameSpecialty = !!(mine && catsOf(mine).includes(data.category) && data.status === 'open' && !data.direct_expert_id)
     const isDirectTarget = !!(mine && data.direct_expert_id === mine.id)
     if (!isOwner && !isAssigned && !sameSpecialty && !isDirectTarget) {
       return res.status(403).json({ error: 'forbidden' })
@@ -709,9 +839,8 @@ app.post('/api/requests', authRequired, (req, res) => {
     category: request.category,
     subcategory: request.subcategory || null,
   }
-  const targets = db
-    .prepare("SELECT user_id FROM experts WHERE job = ? AND user_id IS NOT NULL")
-    .all(request.category)
+  const allExperts = db.prepare('SELECT id, job, trades, user_id FROM experts WHERE user_id IS NOT NULL').all()
+  const targets = allExperts.filter((e) => catsOf(e).includes(request.category))
   for (const t of targets) io.to(`user:${t.user_id}`).emit('notify', notice)
   // 📲 إشعار دفع حقيقي (يوصل حتى لو التطبيق مسكّر)
   pushToUsers(
@@ -737,6 +866,8 @@ app.post('/api/requests/:id/bids', authRequired, (req, res) => {
   const mine = db.prepare('SELECT * FROM experts WHERE user_id = ?').get(req.userId)
   if (!mine) return res.status(403).json({ error: 'not_an_expert' })
   if ((mine.verify_status || 'approved') !== 'approved') return res.status(403).json({ error: 'not_verified' })
+  if (!catsOf(mine).includes(request.category) && request.direct_expert_id !== mine.id)
+    return res.status(403).json({ error: 'not_your_specialty' })
   const expertId = mine.id
   const amount = Number(req.body?.amount)
   if (!amount || amount <= 0) return res.status(400).json({ error: 'invalid_bid' })
@@ -1506,7 +1637,7 @@ app.get('/api/admin/verifications', adminRequired, (req, res) => {
   const rows = status
     ? db.prepare('SELECT * FROM experts WHERE verify_status = ? ORDER BY id DESC').all(status)
     : db.prepare('SELECT * FROM experts ORDER BY id DESC').all()
-  res.json(rows)
+  res.json(rows.map(decorateExpert))
 })
 
 app.patch('/api/admin/verifications/:id', adminRequired, (req, res) => {

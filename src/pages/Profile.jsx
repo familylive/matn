@@ -5,6 +5,7 @@ import { useFavorites } from '../hooks/useFavorites.js'
 import { useLang } from '../i18n/LanguageContext.jsx'
 import { api, getToken } from '../lib/api.js'
 import { enablePush, testPush, pushSupported } from '../lib/push.js'
+import ExpertWorkspace from '../components/ExpertWorkspace.jsx'
 
 export default function Profile() {
   const { user, logout, login } = useAuth()
@@ -105,7 +106,7 @@ export default function Profile() {
           </span>
         </div>
         {profile.city && <p className="text-gray-500 text-sm mt-1">📍 {profile.city}</p>}
-        {profile.specialty && isExpert && (
+        {!!profile.specialty && isExpert && (
           <p className="text-gray-500 text-xs mt-1">{t(`cat.${profile.specialty}`, profile.specialty)}</p>
         )}
         {profile.email && <p className="text-gray-500 text-xs mt-0.5">{profile.email}</p>}
@@ -133,6 +134,8 @@ export default function Profile() {
           </span>
         </button>
       )}
+
+      {isExpert && myExpert && <ExpertWorkspace expert={myExpert} onChange={setMyExpert} />}
 
       <div className="card-lux p-4 mt-4">
         <p className="font-extrabold text-sm text-[#11221A]">🔔 إشعارات الطلبات</p>

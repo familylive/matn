@@ -2,6 +2,7 @@ import { useNavigate } from 'react-router-dom'
 import FavoriteButton from './FavoriteButton.jsx'
 import { useLang } from '../i18n/LanguageContext.jsx'
 import { expertName } from '../i18n/display.js'
+import { ExpertBadge, TradesChips } from './Trades.jsx'
 
 export default function ExpertCard({ expert }) {
   const navigate = useNavigate()
@@ -20,9 +21,14 @@ export default function ExpertCard({ expert }) {
           <div className="flex-1 min-w-0">
             <div className="flex items-start justify-between gap-2">
               <h4 className="font-extrabold text-[#11221A] truncate">{expertName(expert, lang)}</h4>
+              <ExpertBadge color={expert.badge_color} label={expert.badge_label || (expert.is_company ? 'شركة موثقة' : '')} className="shrink-0" />
               <FavoriteButton expertId={expert.id} />
             </div>
             <p className="text-[#006C35] text-sm font-semibold">{t(`cat.${expert.jobName}`, expert.jobName)}</p>
+            <TradesChips expert={expert} max={3} />
+            {expert.exp_years ? (
+              <p className="text-[10px] text-gray-500 mt-1">🧾 خبرة {expert.exp_years} سنة</p>
+            ) : null}
             <div className="flex items-center gap-2 mt-1.5">
               <span className="text-[#C9A227]">★</span>
               <span className="text-sm font-bold text-gray-900">{Number(expert.rating).toFixed(1)}</span>

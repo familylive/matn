@@ -63,6 +63,21 @@ export const api = {
     return data
   },
 
+  uploadCert: async (file, name) => {
+    const fd = new FormData()
+    fd.append('file', file)
+    if (name) fd.append('name', name)
+    const res = await fetch('/api/me/certs', {
+      method: 'POST',
+      headers: { authorization: `Bearer ${getToken()}` },
+      body: fd,
+    })
+    const data = await res.json().catch(() => ({}))
+    if (!res.ok) throw new Error(data.error || 'upload_failed')
+    return data
+  },
+  deleteCert: (idx) => request(`/api/me/certs/${idx}`, { method: 'DELETE', auth: true }),
+
   experts: (params = {}) => {
     const qs = new URLSearchParams(Object.entries(params).filter(([, v]) => v)).toString()
     return request(`/api/experts${qs ? `?${qs}` : ''}`)

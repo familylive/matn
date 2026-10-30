@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import experts from '../data/experts.json'
 import FavoriteButton from '../components/FavoriteButton.jsx'
+import { ExpertBadge, TradesChips } from '../components/Trades.jsx'
 import { useLang } from '../i18n/LanguageContext.jsx'
 import { expertName } from '../i18n/display.js'
 import { useAuth } from '../context/AuthContext.jsx'
@@ -65,6 +66,14 @@ export default function ExpertDetail() {
           reviews: row.reviews_count,
           image: row.image,
           hasCar: !!row.has_car,
+          trades: row.trades || [],
+          certs: row.certs || [],
+          exp_years: row.exp_years ?? null,
+          badge_color: row.badge_color || null,
+          badge_label: row.badge_label || null,
+          is_company: !!row.is_company,
+          company_name: row.company_name || null,
+          bio: row.bio || null,
           experience: row.experience,
           skills: Array.isArray(row.skills) ? row.skills : [],
           city: row.city,
@@ -126,8 +135,15 @@ export default function ExpertDetail() {
       </div>
 
       <div className="px-4 py-5 -mt-6 bg-gray-50 rounded-t-2xl relative">
-        <h1 className="text-2xl font-bold text-gray-900">{expertName(expert, lang)}</h1>
+        <div className="flex items-center gap-2 flex-wrap">
+          <h1 className="text-2xl font-bold text-gray-900">{expertName(expert, lang)}</h1>
+          {!!(expert.badge_label || expert.is_company) && (
+            <ExpertBadge color={expert.badge_color} label={expert.badge_label || 'شركة موثقة'} />
+          )}
+        </div>
+        {expert.company_name && <p className="text-[12px] text-gray-500 mt-0.5">🏢 {expert.company_name}</p>}
         <p className="text-gray-600">{t(`cat.${expert.jobName}`, expert.jobName)}</p>
+        <TradesChips expert={expert} max={6} />
 
         <div className="flex items-center gap-2 mt-3">
           <span className="text-yellow-500">★</span>
@@ -155,6 +171,35 @@ export default function ExpertDetail() {
         </div>
 
         <p className="mt-5 text-gray-600">{expert.description}</p>
+
+        {Array.isArray(expert.trades) && expert.trades.some((t) => (t.subs || []).length) && (
+          <div className="mt-4 bg-white rounded-xl border border-[#F0E9D8] p-3">
+            <p className="text-[12px] font-extrabold text-[#11221A] mb-2">🛠️ الأعمال التي ينفذها</p>
+            <div className="flex flex-wrap gap-1.5">
+              {expert.trades.flatMap((t) => t.subs || []).map((s) => (
+                <span key={s} className="text-[11px] font-bold text-[#006C35] bg-[#EAF4EE] border border-[#CFE6D8] px-2.5 py-1 rounded-full">
+                  ✓ {s}
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {Array.isArray(expert.certs) && expert.certs.length > 0 && (
+          <div className="mt-3 bg-white rounded-xl border border-[#F0E9D8] p-3">
+            <p className="text-[12px] font-extrabold text-[#11221A] mb-2">📄 الشهادات ({expert.certs.length})</p>
+            <ul className="space-y-1.5">
+              {expert.certs.map((c) => (
+                <li key={c.url}>
+                  <a href={c.url} target="_blank" rel="noreferrer" className="flex items-center gap-2 text-[12px] font-bold text-[#0B5DA8] underline">
+                    <span>{(c.url || '').toLowerCase().endsWith('.pdf') ? '📄' : '🖼️'}</span>
+                    {c.name || 'شهادة'}
+                  </a>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
 
         {Array.isArray(expert.skills) && (
           <div className="flex flex-wrap gap-2 mt-4">
