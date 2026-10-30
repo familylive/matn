@@ -90,6 +90,20 @@ export default function Home() {
 
       <AdsCarousel />
 
+      <div className="px-4 mt-5">
+        <button
+          onClick={() => navigate('/nearby')}
+          className="w-full card-ornate p-4 flex items-center gap-3 text-start"
+        >
+          <span className="text-3xl">🗺️</span>
+          <span className="flex-1">
+            <span className="block font-extrabold text-[15px] text-[#0B0A08]">فنيون قريبون منك الآن</span>
+            <span className="block text-[11px] text-[#8a6d13] font-bold">خلال ٥ كم · اطلب مباشرة بدون مزاد</span>
+          </span>
+          <span className="text-[#006C35] font-extrabold">←</span>
+        </button>
+      </div>
+
       <div className="px-4 mt-6">
         <h3 className="section-title mb-3">{t('home.categories')}</h3>
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">

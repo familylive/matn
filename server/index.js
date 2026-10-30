@@ -443,6 +443,32 @@ app.patch('/api/me/expert', authRequired, (req, res) => {
   res.json({ ...updated, skills: updated.skills ? JSON.parse(updated.skills) : [] })
 })
 
+/* الفنيون المتصلون القريبون (٥ كم) — للطلب المباشر بدون مزاد */
+app.get('/api/experts/nearby', (req, res) => {
+  const lat = Number(req.query.lat)
+  const lng = Number(req.query.lng)
+  const km = Math.min(Number(req.query.km) || 5, 20)
+  if (!lat || !lng) return res.status(400).json({ error: 'location_required' })
+
+  const rows = db
+    .prepare(
+      `SELECT e.*, u.last_seen AS user_last_seen
+       FROM experts e JOIN users u ON u.id = e.user_id
+       WHERE COALESCE(e.verify_status,'approved') = 'approved'
+         AND e.lat IS NOT NULL AND e.lng IS NOT NULL
+         AND u.last_seen IS NOT NULL
+         AND u.last_seen >= datetime('now','-3 minutes')`,
+    )
+    .all()
+
+  const out = rows
+    .map((e) => ({ ...e, skills: e.skills ? JSON.parse(e.skills) : [], distance_km: haversineKm(lat, lng, e.lat, e.lng) }))
+    .filter((e) => e.distance_km !== null && e.distance_km <= km)
+    .sort((a, b) => a.distance_km - b.distance_km)
+
+  res.json(out)
+})
+
 app.get('/api/me/expert', authRequired, (req, res) => {
   const e = db.prepare('SELECT * FROM experts WHERE user_id = ?').get(req.userId)
   if (!e) return res.json(null)

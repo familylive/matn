@@ -14,6 +14,7 @@ import Verify from './pages/Verify.jsx'
 import MyRequests from './pages/MyRequests.jsx'
 import Invoice from './pages/Invoice.jsx'
 import Terms from './pages/Terms.jsx'
+import Nearby from './pages/Nearby.jsx'
 import { useAuth } from './context/AuthContext.jsx'
 
 function RequireAuth({ children }) {
@@ -50,6 +51,7 @@ export default function App() {
       <Route path="/my-requests" element={<Layout><MyRequests /></Layout>} />
       <Route path="/invoice/:id/:type" element={<Invoice />} />
       <Route path="/terms" element={<Layout><Terms /></Layout>} />
+      <Route path="/nearby" element={<Layout><Nearby /></Layout>} />
       <Route path="/admin/*" element={<Admin />} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
