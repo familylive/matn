@@ -2114,12 +2114,28 @@ function Shell({ onLogout }) {
         <div className="fixed inset-0 z-30" onClick={() => setOpen(false)}>
           <div className="absolute inset-0 bg-black/40" />
           <aside onClick={(e) => e.stopPropagation()} className="absolute inset-y-0 start-0 w-72 bg-white shadow-2xl p-4 flex flex-col overflow-y-auto">
-            <div className="flex items-center gap-2 mb-6">
+            <div className="flex items-center gap-2 mb-3">
               <img src="/logo.png" alt="مهنتي" className="w-9 h-9 object-contain" />
               <div>
                 <p className="font-extrabold text-[#11221A]">مهنتي</p>
                 <p className="text-[11px] text-gray-500">الإدارة</p>
               </div>
+            </div>
+
+            {/* أزرار سريعة أعلى القائمة */}
+            <div className="grid grid-cols-2 gap-2 mb-3">
+              <button
+                onClick={() => { setOpen(false); navigate('/') }}
+                className="flex items-center justify-center gap-1.5 bg-[#006C35] text-white rounded-xl py-2.5 text-[12px] font-extrabold"
+              >
+                🏠 العودة للموقع
+              </button>
+              <button
+                onClick={onLogout}
+                className="flex items-center justify-center gap-1.5 bg-red-50 text-red-600 border border-red-200 rounded-xl py-2.5 text-[12px] font-extrabold"
+              >
+                🚪 تسجيل الخروج
+              </button>
             </div>
 
             <nav className="space-y-1 flex-1">
@@ -2171,7 +2187,7 @@ function Shell({ onLogout }) {
               )}
             </nav>
 
-            <button onClick={onLogout} className="text-sm text-red-500 py-2 font-semibold">تسجيل الخروج</button>
+
           </aside>
         </div>
       )}
