@@ -101,11 +101,7 @@ export default function Profile() {
             className={`absolute top-1 end-0 w-4 h-4 rounded-full border-2 border-white ${profile.online ? 'bg-green-500' : 'bg-gray-300'}`}
             title={profile.online ? 'متصل الآن' : 'غير متصل'}
           />
-          {!!profile.verified && (
-            <span className="absolute -bottom-3 -start-3 bg-white rounded-full p-0.5 shadow-lg ring-2 ring-[#C9A227]/60">
-              <VerifiedBadge size={32} title="موثّق" />
-            </span>
-          )}
+
         </div>
         <h2 className="text-lg font-extrabold text-[#11221A] mt-4 flex items-center justify-center gap-1.5">
           <span className="truncate">{profile.name || profile.userName}</span>
