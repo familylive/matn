@@ -54,7 +54,7 @@ const setSetting = (k, v) =>
 
 export const HOLD_DAYS = () => Number(setting('wallet_hold_days', 7))
 export const REF_BONUS = () => Number(setting('referral_bonus', 50))
-export const REF_TARGET = () => Number(setting('referral_target', 10))
+export const REF_TARGET = () => Math.max(20, Number(setting('referral_target', 20)) || 20)
 
 for (const [k, v] of [
   ['wallet_hold_days', 7],

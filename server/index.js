@@ -2213,7 +2213,9 @@ function applyBackup(tables, files) {
     backfillNumbers()
     normalizePhones()
     seedBots()
-    try { backfillInviteCodes(); backfillUserCodes(); fixSettings() } catch (e) { console.error('INVITE_BACKFILL_FAIL', e.message) }
+    try { backfillInviteCodes() } catch (e) { console.error('INVITE_BACKFILL_FAIL', e.message) }
+    try { backfillUserCodes() } catch (e) { console.error('USERCODE_BACKFILL_FAIL', e.message) }
+    try { fixSettings() } catch (e) { console.error('SETTINGS_FIX_FAIL', e.message) }
     if (files && typeof files === 'object') {
       for (const [name, b64] of Object.entries(files)) {
         if (typeof b64 !== 'string') continue
@@ -2356,7 +2358,9 @@ async function autoRestoreOnBoot() {
     backfillNumbers()
     normalizePhones()
     seedBots()
-    try { backfillInviteCodes(); backfillUserCodes(); fixSettings() } catch (e) { console.error('INVITE_BACKFILL_FAIL', e.message) }
+    try { backfillInviteCodes() } catch (e) { console.error('INVITE_BACKFILL_FAIL', e.message) }
+    try { backfillUserCodes() } catch (e) { console.error('USERCODE_BACKFILL_FAIL', e.message) }
+    try { fixSettings() } catch (e) { console.error('SETTINGS_FIX_FAIL', e.message) }
     console.log(`AUTORESTORE_OK rows=${restored} snapshot=${snap.taken_at || ''}`)
   } catch (e) {
     console.error('AUTORESTORE_FAIL', e.message)
