@@ -31,6 +31,7 @@ export default function Favorites() {
                 reviews: r.reviews_count,
                 image: r.image,
                 hasCar: !!r.has_car,
+                approved: (r.verify_status || 'approved') === 'approved',
               }))
             : [],
         ),

@@ -3,6 +3,7 @@ import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import experts from '../data/experts.json'
 import FavoriteButton from '../components/FavoriteButton.jsx'
 import { ExpertBadge, TradesChips } from '../components/Trades.jsx'
+import VerifiedBadge from '../components/VerifiedBadge.jsx'
 import { useLang } from '../i18n/LanguageContext.jsx'
 import { expertName } from '../i18n/display.js'
 import { useAuth } from '../context/AuthContext.jsx'
@@ -46,8 +47,10 @@ export default function ExpertDetail() {
 
   useEffect(() => {
     fetch(`/api/experts/${id}/reviews`).then((r) => r.json()).then(setReviews).catch(() => {})
+    fetch(`/api/experts/${id}/rating`).then((r) => r.json()).then(setRatingInfo).catch(() => {})
   }, [id])
   const [apiExpert, setApiExpert] = useState(null)
+  const [ratingInfo, setRatingInfo] = useState(null)
   const [loadingExpert, setLoadingExpert] = useState(true)
 
   useEffect(() => {
@@ -66,6 +69,7 @@ export default function ExpertDetail() {
           reviews: row.reviews_count,
           image: row.image,
           hasCar: !!row.has_car,
+          approved: true,
           trades: row.trades || [],
           certs: row.certs || [],
           exp_years: row.exp_years ?? null,
@@ -136,7 +140,10 @@ export default function ExpertDetail() {
 
       <div className="px-4 py-5 -mt-6 bg-gray-50 rounded-t-2xl relative">
         <div className="flex items-center gap-2 flex-wrap">
-          <h1 className="text-2xl font-bold text-gray-900">{expertName(expert, lang)}</h1>
+          <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-1.5">
+            {expertName(expert, lang)}
+            {expert.approved !== false && <VerifiedBadge size={22} />}
+          </h1>
           {!!(expert.badge_label || expert.is_company) && (
             <ExpertBadge color={expert.badge_color} label={expert.badge_label || 'شركة موثقة'} />
           )}
@@ -171,6 +178,23 @@ export default function ExpertDetail() {
         </div>
 
         <p className="mt-5 text-gray-600">{expert.description}</p>
+
+        {ratingInfo && ratingInfo.count > 0 && (
+          <div className="mt-3 bg-white rounded-xl border border-[#F0E9D8] p-3">
+            <div className="flex items-center justify-between">
+              <p className="text-[12px] font-extrabold text-[#11221A]">⭐ تقييم الطلبات المدفوعة</p>
+              <span className="text-[11px] font-bold text-[#006C35]">{ratingInfo.positive}% إيجابي</span>
+            </div>
+            <p className="text-[11px] text-gray-500 mt-0.5">{ratingInfo.avg} من 5 · {ratingInfo.count} تقييم</p>
+            <div className="flex flex-wrap gap-1 mt-2">
+              {Object.entries(ratingInfo.tags || {}).sort((a, b) => b[1] - a[1]).map(([t, n]) => (
+                <span key={t} className="text-[10px] font-bold text-[#8a6d13] bg-[#FBF5E3] border border-[#EADFC8] px-2 py-0.5 rounded-full">
+                  {t} ({n})
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
 
         {Array.isArray(expert.trades) && expert.trades.some((t) => (t.subs || []).length) && (
           <div className="mt-4 bg-white rounded-xl border border-[#F0E9D8] p-3">

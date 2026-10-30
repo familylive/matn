@@ -32,6 +32,7 @@ export default function Home() {
             reviews: r.reviews_count,
             image: r.image,
             hasCar: !!r.has_car,
+            approved: (r.verify_status || 'approved') === 'approved',
             trades: r.trades || [],
             exp_years: r.exp_years ?? null,
             badge_color: r.badge_color || null,

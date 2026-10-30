@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { io } from 'socket.io-client'
+import ReviewBox from '../components/ReviewBox.jsx'
 import { api } from '../lib/api.js'
 import { useAuth } from '../context/AuthContext.jsx'
 import { useLang } from '../i18n/LanguageContext.jsx'
@@ -707,6 +708,14 @@ export default function RequestDetail() {
             {t('rd.complete')}
           </button>
         )}
+
+        <ReviewBox
+          requestId={id}
+          isOwner={isOwner}
+          isExpert={isAssignedExpert}
+          paid={!!pay.done || ['assigned','done','closed'].includes(data.status)}
+          done={['assigned','done','closed'].includes(data.status)}
+        />
 
         {invoices && (
           <div className="mt-4 space-y-3">

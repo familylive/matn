@@ -86,6 +86,7 @@ const NAV = [
     { key: 'requests:closed', label: 'المغلقة', icon: '⚪' },
   ]},
   { key: 'verifications', label: 'طلبات التوثيق', icon: '🪪' },
+  { key: 'reviews', label: 'التقييمات', icon: '⭐' },
   { key: 'loyalty', label: 'نادي الولاء', icon: '👑' },
   { key: 'reports', label: 'التقارير', icon: '📈' },
   { key: 'commissions', label: 'تقرير العمولات', icon: '💵' },
@@ -103,7 +104,7 @@ const TITLES = {
   'users:ceo': 'المدير التنفيذي', 'users:finance': 'المشرف المالي', 'users:support': 'الدعم الفني',
   'users:admin': 'المشرفون',
   overview: 'نظرة عامة', reports: 'التقارير', ads: 'الإعلانات', invoices: 'الفواتير',
-  categories: 'التصنيفات', payments: 'المدفوعات', commissions: 'تقرير العمولات', verifications: 'طلبات التوثيق', finance: 'المالية والمحافظ', loyalty: 'نادي الولاء',
+  categories: 'التصنيفات', payments: 'المدفوعات', commissions: 'تقرير العمولات', verifications: 'طلبات التوثيق', finance: 'المالية والمحافظ', loyalty: 'نادي الولاء', reviews: 'التقييمات',
   cities: 'طلبات المدن', backup: 'النسخ الاحتياطي',
   'users:admins': 'المستخدمون — الإدارة', 'users:experts': 'المستخدمون — الفنيون',
   'users:customers': 'المستخدمون — العملاء', 'users:support': 'المستخدمون — الدعم الفني',
@@ -186,7 +187,7 @@ function Overview() {
 
 
 const PERM_LABELS = {
-  site: 'إعدادات الموقع', finance: 'المالية والمحافظ', loyalty: 'نادي الولاء', users: 'المستخدمون',
+  site: 'إعدادات الموقع', finance: 'المالية والمحافظ', loyalty: 'نادي الولاء', reviews: 'التقييمات', users: 'المستخدمون',
   requests: 'الطلبات', verifications: 'التوثيق', categories: 'التصنيفات', ads: 'الإعلانات',
   invoices: 'الفواتير', payments: 'المدفوعات', backup: 'النسخ الاحتياطي', reports: 'التقارير',
 }
@@ -1493,6 +1494,51 @@ function LoyaltySettings({ onSaved }) {
   )
 }
 
+
+function ReviewsAdmin() {
+  const [tab, setTab] = useState('customer')
+  const [rows, setRows] = useState([])
+  useEffect(() => { api(`/api/admin/reviews?target=${tab}`).then(setRows).catch(() => {}) }, [tab])
+  const stars = (n) => '★'.repeat(n) + '☆'.repeat(5 - n)
+  return (
+    <div className="space-y-3">
+      <div className="flex gap-2">
+        {[['customer', 'تقييمات الفنيين للعملاء'], ['expert', 'تقييمات العملاء للفنيين']].map(([k, l]) => (
+          <button key={k} onClick={() => setTab(k)}
+            className={`px-3 py-1.5 rounded-full text-[11px] font-bold ${tab === k ? 'bg-[#006C35] text-white' : 'bg-white border border-[#E3D9BF] text-gray-600'}`}>
+            {l}
+          </button>
+        ))}
+      </div>
+      <p className="text-[11px] text-gray-500">
+        التقارير المكتوبة هنا تظهر للإدارة فقط — العميل يشوف عدد النجوم فقط.
+      </p>
+      {rows.length === 0 && <p className="text-sm text-gray-500">ما فيه تقييمات بعد.</p>}
+      {rows.map((r) => (
+        <div key={r.id} className="card-lux p-3">
+          <div className="flex items-center justify-between">
+            <p className="font-bold text-sm text-[#11221A]">
+              {tab === 'customer' ? (r.customer_name || 'عميل') : (r.expert_name || 'فني')}
+            </p>
+            <span className="text-[#C9A227] text-sm">{stars(r.rating)}</span>
+          </div>
+          <p className="text-[10px] text-gray-500 mt-0.5">
+            من: {r.author_name || '—'} · طلب #{r.request_number || r.request_id} · {String(r.created_at).slice(0, 16)}
+          </p>
+          {r.tags?.length > 0 && (
+            <div className="flex flex-wrap gap-1 mt-1.5">
+              {r.tags.map((t) => (
+                <span key={t} className="text-[10px] font-bold text-[#006C35] bg-[#EAF4EE] border border-[#CFE6D8] px-2 py-0.5 rounded-full">{t}</span>
+              ))}
+            </div>
+          )}
+          {r.comment && <p className="text-[12px] text-gray-700 mt-1.5 bg-[#FBF9F2] rounded-lg p-2 leading-5">{r.comment}</p>}
+        </div>
+      ))}
+    </div>
+  )
+}
+
 function Loyalty() {
   const [d, setD] = useState(null)
   const [q, setQ] = useState('')
@@ -2043,6 +2089,7 @@ function Shell({ onLogout }) {
       case 'bank': return <BankSettings />
       case 'finance_reports': return <FinanceReports />
       case 'blocked': return <Blocked />
+      case 'reviews': return <ReviewsAdmin />
       case 'loyalty': return <Loyalty />
       case 'finance': return <Finance />
       case 'commissions': return <Commissions />

@@ -3,6 +3,7 @@ import FavoriteButton from './FavoriteButton.jsx'
 import { useLang } from '../i18n/LanguageContext.jsx'
 import { expertName } from '../i18n/display.js'
 import { ExpertBadge, TradesChips } from './Trades.jsx'
+import VerifiedBadge from './VerifiedBadge.jsx'
 
 export default function ExpertCard({ expert }) {
   const navigate = useNavigate()
@@ -20,7 +21,10 @@ export default function ExpertCard({ expert }) {
           </div>
           <div className="flex-1 min-w-0">
             <div className="flex items-start justify-between gap-2">
-              <h4 className="font-extrabold text-[#11221A] truncate">{expertName(expert, lang)}</h4>
+              <h4 className="font-extrabold text-[#11221A] truncate flex items-center gap-1">
+                <span className="truncate">{expertName(expert, lang)}</span>
+                {expert.approved !== false && <VerifiedBadge size={16} />}
+              </h4>
               <ExpertBadge color={expert.badge_color} label={expert.badge_label || (expert.is_company ? 'شركة موثقة' : '')} className="shrink-0" />
               <FavoriteButton expertId={expert.id} />
             </div>

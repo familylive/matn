@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import experts from '../data/experts.json'
 import { useParentCategories as useCategories, catLabel } from '../hooks/useCategories.js'
@@ -13,23 +13,55 @@ export default function Search() {
   const { t, lang } = useLang()
   const categories = useCategories()
 
+  // البحث الحقيقي من السيرفر (فنيون مسجّلون فعلاً)
+  const [rows, setRows] = useState([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    let alive = true
+    setLoading(true)
+    const qs = new URLSearchParams()
+    if (query.trim()) qs.set('q', query.trim())
+    if (category) qs.set('category', category)
+    fetch(`/api/experts?${qs.toString()}`)
+      .then((r) => r.json())
+      .then((d) => {
+        if (!alive || !Array.isArray(d)) return
+        setRows(
+          d.map((r) => ({
+            id: r.id,
+            personName: r.name_ar || r.name,
+            name: r.name_ar || r.name,
+            name_ar: r.name_ar,
+            jobName: r.job,
+            job: r.job,
+            location: r.city,
+            city: r.city,
+            hourlyRate: r.rate,
+            rating: r.rating,
+            reviews: r.reviews_count,
+            image: r.image,
+            hasCar: !!r.has_car,
+            approved: (r.verify_status || 'approved') === 'approved',
+            trades: r.trades || [],
+            exp_years: r.exp_years ?? null,
+            badge_color: r.badge_color || null,
+            badge_label: r.badge_label || null,
+            is_company: !!r.is_company,
+          })),
+        )
+      })
+      .catch(() => {})
+      .finally(() => { if (alive) setLoading(false) })
+    return () => { alive = false }
+  }, [query, category])
+
   const results = useMemo(() => {
-    const q = query.trim().toLowerCase()
-    let list = experts.filter((e) => {
-      const matchesQuery =
-        !q ||
-        e.personName.toLowerCase().includes(q) ||
-        e.jobName.toLowerCase().includes(q) ||
-        e.location.toLowerCase().includes(q) ||
-        t(`cat.${e.jobName}`, e.jobName).includes(q)
-      const matchesCategory = !category || e.jobName === category
-      return matchesQuery && matchesCategory
-    })
-    list = [...list].sort((a, b) =>
-      sort === 'rating' ? b.rating - a.rating : a.personName.localeCompare(b.personName),
-    )
-    return list
-  }, [query, category, sort, t])
+    const list = [...rows]
+    return sort === 'rating'
+      ? list.sort((a, b) => Number(b.rating || 0) - Number(a.rating || 0))
+      : list.sort((a, b) => String(a.personName || '').localeCompare(String(b.personName || '')))
+  }, [rows, sort])
 
   return (
     <div className="px-4 py-6">

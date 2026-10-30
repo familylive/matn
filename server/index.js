@@ -480,7 +480,11 @@ app.get('/api/experts', (req, res) => {
   let sql = "SELECT * FROM experts WHERE COALESCE(verify_status, 'approved') = 'approved'"
   const params = []
   if (category) { sql += " AND (job = ? OR COALESCE(trades,'') LIKE ?)"; params.push(category, `%"cat":"${category}"%`) }
-  if (q) { sql += ' AND (name LIKE ? OR job LIKE ? OR city LIKE ?)'; params.push(`%${q}%`, `%${q}%`, `%${q}%`) }
+  if (q) {
+    const like = `%${q}%`
+    sql += " AND (name LIKE ? OR name_ar LIKE ? OR job LIKE ? OR city LIKE ? OR COALESCE(skills,'') LIKE ? OR COALESCE(trades,'') LIKE ?)"
+    params.push(like, like, like, like, like, like)
+  }
   sql += ' ORDER BY has_car DESC, rating DESC'
   const rows = db.prepare(sql).all(...params)
   res.json(rows.map(decorateExpert))
@@ -1207,26 +1211,6 @@ app.post('/api/requests/:id/close', authRequired, (req, res) => {
   res.json(requestWithBids(request.id))
 })
 
-app.post('/api/requests/:id/review', authRequired, (req, res) => {
-  const request = db.prepare('SELECT * FROM requests WHERE id = ?').get(req.params.id)
-  if (!request) return res.status(404).json({ error: 'not_found' })
-  if (!['done', 'closed'].includes(request.status)) return res.status(409).json({ error: 'not_done' })
-  const rating = Number(req.body?.rating)
-  if (!(rating >= 1 && rating <= 5)) return res.status(400).json({ error: 'invalid_rating' })
-
-  const bid = db.prepare('SELECT * FROM bids WHERE id = ?').get(request.accepted_bid_id)
-  if (!bid) return res.status(409).json({ error: 'no_accepted_bid' })
-
-  db.prepare('INSERT INTO reviews (request_id, expert_id, rating, comment) VALUES (?, ?, ?, ?)').run(
-    request.id, bid.expert_id, rating, req.body?.comment || null,
-  )
-  const agg = db.prepare('SELECT AVG(rating) avg, COUNT(*) c FROM reviews WHERE expert_id = ?').get(bid.expert_id)
-  db.prepare('UPDATE experts SET rating = ?, reviews_count = ? WHERE id = ?').run(
-    Math.round(agg.avg * 10) / 10, agg.c, bid.expert_id,
-  )
-  res.status(201).json({ ok: true })
-})
-
 /* ---------- static client + realtime ---------- */
 
 /* ---------- cities ---------- */
@@ -1887,6 +1871,153 @@ app.get('/api/me/referrals', authRequired, (req, res) => {
     total: list.length,
     list,
   })
+})
+
+
+/* ================= التقييمات (نجوم + وسوم) ================= */
+const EXPERT_TAGS = ['أنصح بالتعامل معه', 'سريع في عمله', 'منجز', 'محترف', 'أسعار مناسبة', 'نظيف في عمله']
+const CUSTOMER_TAGS = ['حسن التعامل', 'طيب الأخلاق', 'محترم', 'صادق في تعاملاته', 'أنصح بالتعامل معه']
+const starsOf = (tags) => (Array.isArray(tags) ? tags : [])
+
+function paidOrder(requestId) {
+  return !!db.prepare("SELECT 1 FROM payments WHERE request_id = ? AND status IN ('paid','pending_cash')").get(requestId)
+}
+
+function customerStats(userId) {
+  const row = db
+    .prepare(
+      `SELECT COUNT(*) c, COALESCE(SUM(rating),0) total, COALESCE(AVG(rating),0) avg,
+        SUM(CASE WHEN rating >= 4 THEN 1 ELSE 0 END) pos
+       FROM reviews WHERE target = 'customer' AND customer_id = ?`,
+    )
+    .get(userId)
+  const tags = {}
+  for (const r of db.prepare("SELECT tags FROM reviews WHERE target = 'customer' AND customer_id = ?").all(userId)) {
+    for (const t of parseJson(r.tags, [])) tags[t] = (tags[t] || 0) + 1
+  }
+  return {
+    count: row.c,
+    stars_total: row.total,
+    avg: Math.round(Number(row.avg) * 10) / 10,
+    positive: row.c ? Math.round((row.pos / row.c) * 100) : 0,
+    tags,
+  }
+}
+
+app.post('/api/requests/:id/review', authRequired, (req, res) => {
+  const request = db.prepare('SELECT * FROM requests WHERE id = ?').get(req.params.id)
+  if (!request) return res.status(404).json({ error: 'not_found' })
+  if (!['done', 'closed', 'assigned'].includes(request.status)) return res.status(409).json({ error: 'not_completed' })
+  if (!paidOrder(request.id)) return res.status(409).json({ error: 'order_not_paid' })
+
+  const stars = Math.max(1, Math.min(5, Number(req.body?.stars) || 0))
+  if (!stars) return res.status(400).json({ error: 'stars_required' })
+  const tags = Array.isArray(req.body?.tags) ? req.body.tags.map(String).slice(0, 6) : []
+  const comment = String(req.body?.comment || '').slice(0, 600) || null
+
+  const bid = request.accepted_bid_id ? db.prepare('SELECT * FROM bids WHERE id = ?').get(request.accepted_bid_id) : null
+  const mine = db.prepare('SELECT * FROM experts WHERE user_id = ?').get(req.userId)
+  const isOwner = request.user_id === req.userId
+  const isExpert = !!(mine && bid && bid.expert_id === mine.id)
+
+  if (!isOwner && !isExpert) return res.status(403).json({ error: 'forbidden' })
+
+  const target = isOwner ? 'expert' : 'customer'
+  const already = db
+    .prepare("SELECT id FROM reviews WHERE request_id = ? AND target = ?")
+    .get(request.id, target)
+  if (already) return res.status(409).json({ error: 'already_reviewed' })
+
+  if (target === 'expert') {
+    db.prepare(
+      `INSERT INTO reviews (request_id, expert_id, rating, comment, author_id, target, tags)
+       VALUES (?, ?, ?, ?, ?, 'expert', ?)`,
+    ).run(request.id, bid.expert_id, stars, comment, req.userId, JSON.stringify(tags))
+
+    // تحديث معدل الفني
+    const agg = db
+      .prepare("SELECT COUNT(*) c, AVG(rating) a FROM reviews WHERE expert_id = ? AND target = 'expert'")
+      .get(bid.expert_id)
+    db.prepare('UPDATE experts SET rating = ?, reviews_count = ? WHERE id = ?')
+      .run(Math.round(Number(agg.a) * 10) / 10, agg.c, bid.expert_id)
+  } else {
+    db.prepare(
+      `INSERT INTO reviews (request_id, expert_id, rating, comment, author_id, target, tags, customer_id)
+       VALUES (?, ?, ?, ?, ?, 'customer', ?, ?)`,
+    ).run(request.id, bid?.expert_id || 0, stars, comment, req.userId, JSON.stringify(tags), request.user_id)
+
+    const st = customerStats(request.user_id)
+    const verified = st.count > 0 && st.stars_total >= 100 && st.positive >= 80 ? 1 : 0
+    db.prepare('UPDATE users SET stars_total = ?, reviews_count = ?, verified = ? WHERE id = ?')
+      .run(st.stars_total, st.count, verified, request.user_id)
+
+    if (verified) {
+      io.to(`user:${request.user_id}`).emit('notify', {
+        type: 'verify',
+        title: '✅ تم توثيق حسابك كعميل',
+        body: 'حصلت على 100 نجمة وتقييمات إيجابية من الفنيين',
+      })
+    }
+  }
+
+  res.status(201).json({ ok: true, target })
+})
+
+app.get('/api/requests/:id/review-status', authRequired, (req, res) => {
+  const r = db.prepare('SELECT * FROM requests WHERE id = ?').get(req.params.id)
+  if (!r) return res.status(404).json({ error: 'not_found' })
+  const mine = db.prepare('SELECT * FROM experts WHERE user_id = ?').get(req.userId)
+  const bid = r.accepted_bid_id ? db.prepare('SELECT * FROM bids WHERE id = ?').get(r.accepted_bid_id) : null
+  const isOwner = r.user_id === req.userId
+  const isExpert = !!(mine && bid && bid.expert_id === mine.id)
+  const target = isOwner ? 'expert' : isExpert ? 'customer' : null
+  const reviewed = target
+    ? !!db.prepare('SELECT 1 FROM reviews WHERE request_id = ? AND target = ?').get(r.id, target)
+    : false
+  res.json({ target, reviewed, paid: paidOrder(r.id) })
+})
+
+/* ملخص تقييمات العميل (للعامة: النجوم فقط) */
+app.get('/api/users/:id/rating', (req, res) => {
+  const u = db.prepare('SELECT id, name, verified, stars_total, reviews_count FROM users WHERE id = ?').get(req.params.id)
+  if (!u) return res.status(404).json({ error: 'not_found' })
+  const st = customerStats(u.id)
+  res.json({ id: u.id, verified: !!u.verified, stars_total: st.stars_total, count: st.count, avg: st.avg })
+})
+
+app.get('/api/experts/:id/rating', (req, res) => {
+  const expertId = req.params.id
+  const agg = db
+    .prepare("SELECT COUNT(*) c, COALESCE(AVG(rating),0) a, SUM(CASE WHEN rating >= 4 THEN 1 ELSE 0 END) pos FROM reviews WHERE expert_id = ? AND target = 'expert'")
+    .get(expertId)
+  const tags = {}
+  for (const r of db.prepare("SELECT tags FROM reviews WHERE expert_id = ? AND target = 'expert'").all(expertId)) {
+    for (const t of parseJson(r.tags, [])) tags[t] = (tags[t] || 0) + 1
+  }
+  res.json({
+    count: agg.c,
+    avg: Math.round(Number(agg.a) * 10) / 10,
+    positive: agg.c ? Math.round((agg.pos / agg.c) * 100) : 0,
+    tags,
+  })
+})
+
+/* الإدارة: التقارير المكتوبة */
+app.get('/api/admin/reviews', adminRequired, (req, res) => {
+  const target = String(req.query.target || 'customer')
+  const rows = db
+    .prepare(
+      `SELECT r.*, u.name AS author_name, cu.name AS customer_name, e.name_ar AS expert_name,
+              q.title AS request_title, q.number AS request_number
+       FROM reviews r
+       LEFT JOIN users u ON u.id = r.author_id
+       LEFT JOIN users cu ON cu.id = r.customer_id
+       LEFT JOIN experts e ON e.id = r.expert_id
+       LEFT JOIN requests q ON q.id = r.request_id
+       WHERE r.target = ? ORDER BY r.id DESC LIMIT 300`,
+    )
+    .all(target)
+  res.json(rows.map((r) => ({ ...r, tags: parseJson(r.tags, []) })))
 })
 
 /* ================= نادي الولاء (العملاء) ================= */

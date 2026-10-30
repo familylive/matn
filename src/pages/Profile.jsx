@@ -8,6 +8,7 @@ import { enablePush, testPush, pushSupported } from '../lib/push.js'
 import ExpertWorkspace from '../components/ExpertWorkspace.jsx'
 import WalletCard from '../components/WalletCard.jsx'
 import LoyaltyCard from '../components/LoyaltyCard.jsx'
+import VerifiedBadge from '../components/VerifiedBadge.jsx'
 
 export default function Profile() {
   const { user, logout, login } = useAuth()

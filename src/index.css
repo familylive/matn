@@ -75,3 +75,13 @@ body {
     @apply inline-block w-1.5 h-5 rounded-full bg-gradient-to-b from-[#C9A227] to-[#006C35];
   }
 }
+
+
+/* شارة التوثيق — حلقة ذهبية دوّارة */
+@keyframes mh-spin { to { transform: rotate(360deg); } }
+.mh-ring {
+  background: conic-gradient(from 0deg, #C9A227 0deg, #F5E6A8 90deg, #C9A227 180deg, #8a6d13 270deg, #C9A227 360deg);
+  box-shadow: 0 0 0 1.5px rgba(255,255,255,.9) inset, 0 1px 4px rgba(0,0,0,.15);
+  animation: mh-spin 3.2s linear infinite;
+}
+@media (prefers-reduced-motion: reduce) { .mh-ring { animation: none; } }
