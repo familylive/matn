@@ -1359,6 +1359,7 @@ app.post('/api/admin/users', adminRequired, (req, res) => {
     password ? hashUserPassword(password) : null,
   )
   const userId = info.lastInsertRowid
+  ensureUserCode(userId)
 
   if (role === 'expert') {
     db.prepare(
@@ -1881,6 +1882,94 @@ app.get('/api/me/loyalty', authRequired, (req, res) => {
     expert_target: REF_TARGET(),
     expert_bonus: REF_BONUS(),
   })
+})
+
+/* ================= نادي الولاء (الإدارة) ================= */
+app.get('/api/admin/loyalty', adminRequired, (req, res) => {
+  try { expireCredits() } catch {}
+  const q = String(req.query.q || '').trim()
+  let users = db
+    .prepare(
+      `SELECT id, name, phone, role, city, invite_code, referred_by, last_seen, created_at
+       FROM users ORDER BY id DESC`,
+    )
+    .all()
+  if (q) users = users.filter((u) => `${u.name || ''} ${u.phone || ''} ${u.invite_code || ''}`.includes(q))
+
+  const creditsAgg = db
+    .prepare(
+      `SELECT user_id,
+        COALESCE(SUM(CASE WHEN remaining > 0 AND expires_at > datetime('now') THEN remaining ELSE 0 END),0) AS balance,
+        COALESCE(MIN(CASE WHEN remaining > 0 AND expires_at > datetime('now') THEN expires_at END), NULL) AS next_expiry
+       FROM credits GROUP BY user_id`,
+    )
+    .all()
+  const cmap = new Map(creditsAgg.map((c) => [c.user_id, c]))
+  const invites = db
+    .prepare(
+      `SELECT referred_by AS uid, COUNT(*) total,
+        SUM(CASE WHEN (SELECT COUNT(*) FROM requests r WHERE r.user_id = u.id) > 0
+                  OR (SELECT COUNT(*) FROM bids b JOIN experts e2 ON e2.id = b.expert_id WHERE e2.user_id = u.id) > 0
+                 THEN 1 ELSE 0 END) AS active
+       FROM users u WHERE referred_by IS NOT NULL GROUP BY referred_by`,
+    )
+    .all()
+  const imap = new Map(invites.map((i) => [i.uid, i]))
+
+  const rows = users.map((u) => {
+    for (const c of []) void c
+    const c = cmap.get(u.id) || {}
+    const inv = imap.get(u.id) || {}
+    return {
+      id: u.id,
+      name: u.name,
+      phone: u.phone,
+      role: u.role,
+      city: u.city,
+      code: u.invite_code,
+      referred_by: u.referred_by,
+      invited: inv.total || 0,
+      active_invited: inv.active || 0,
+      balance: money(c.balance || 0),
+      next_expiry: c.next_expiry || null,
+      last_seen: u.last_seen,
+    }
+  })
+
+  const tot = (k) => money(rows.reduce((a, r) => a + Number(r[k] || 0), 0))
+  res.json({
+    settings: { target: LOYALTY_TARGET(), bonus: LOYALTY_BONUS(), valid_days: CREDIT_DAYS(), expert_target: REF_TARGET(), expert_bonus: REF_BONUS() },
+    totals: {
+      members: rows.length,
+      with_balance: rows.filter((r) => r.balance > 0.009).length,
+      balance: tot('balance'),
+      invited_total: rows.reduce((a, r) => a + r.invited, 0),
+      expiring_7d: money(
+        db.prepare("SELECT COALESCE(SUM(remaining),0) v FROM credits WHERE remaining > 0 AND expires_at > datetime('now') AND expires_at <= datetime('now','+7 days')").get().v,
+      ),
+      used: money(db.prepare('SELECT COALESCE(SUM(amount - remaining),0) v FROM credits').get().v),
+    },
+    rows: rows.filter((r) => r.role !== 'admin'),
+  })
+})
+
+app.post('/api/admin/loyalty/grant', adminRequired, (req, res) => {
+  const userId = Number(req.body?.user_id)
+  const amount = Number(req.body?.amount)
+  const note = String(req.body?.note || 'منحة من الإدارة').slice(0, 120)
+  if (!userId || !(amount > 0)) return res.status(400).json({ error: 'invalid' })
+  const u = db.prepare('SELECT * FROM users WHERE id = ?').get(userId)
+  if (!u) return res.status(404).json({ error: 'not_found' })
+  ensureUserCode(u.id)
+  const tx = grantCredit({ userId, amount, source: 'admin', note, ref: `admin-${userId}-${Date.now()}` })
+  if (!tx) return res.status(400).json({ error: 'failed' })
+  io.to(`user:${userId}`).emit('notify', {
+    type: 'credit',
+    title: '🎁 رصيد جديد في نادي الولاء',
+    body: `أضفنا لك ${money(amount)} ر.س — استخدمها في طلب فني`,
+    url: '/profile',
+  })
+  res.status(201).json({ ok: true, balance: creditBalance(userId) })
 })
 
 /* ================= المالية (الإدارة) ================= */

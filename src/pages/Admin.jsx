@@ -75,6 +75,7 @@ const NAV = [
   { key: 'verifications', label: 'طلبات التوثيق', icon: '🪪' },
   { key: 'reports', label: 'التقارير', icon: '📈' },
   { key: 'finance', label: 'المالية والمحافظ', icon: '💰' },
+  { key: 'loyalty', label: 'نادي الولاء', icon: '👑' },
   { key: 'commissions', label: 'تقرير العمولات', icon: '📈' },
   { key: 'categories', label: 'التصنيفات', icon: '🗂️' },
   { key: 'ads', label: 'الإعلانات', icon: '📣' },
@@ -86,7 +87,7 @@ const NAV = [
 
 const TITLES = {
   overview: 'نظرة عامة', reports: 'التقارير', ads: 'الإعلانات', invoices: 'الفواتير',
-  categories: 'التصنيفات', payments: 'المدفوعات', commissions: 'تقرير العمولات', verifications: 'طلبات التوثيق', finance: 'المالية والمحافظ',
+  categories: 'التصنيفات', payments: 'المدفوعات', commissions: 'تقرير العمولات', verifications: 'طلبات التوثيق', finance: 'المالية والمحافظ', loyalty: 'نادي الولاء',
   cities: 'طلبات المدن', backup: 'النسخ الاحتياطي',
   'users:admins': 'المستخدمون — الإدارة', 'users:experts': 'المستخدمون — الفنيون',
   'users:customers': 'المستخدمون — العملاء', 'users:support': 'المستخدمون — الدعم الفني',
@@ -282,8 +283,9 @@ function Users({ type }) {
   const [nf, setNf] = useState({ email: '', password: '', name: '', phone: '', city: '' })
   const [err, setErr] = useState('')
 
+  const roleKey = type === 'customers' ? 'customer' : type === 'experts' ? 'expert' : type
   const load = () => {
-    const path = type === 'admins' ? '/api/admin/admins' : `/api/admin/users?role=${type}`
+    const path = type === 'admins' ? '/api/admin/admins' : `/api/admin/users?role=${roleKey}`
     api(path).then(setRows).catch(() => {})
   }
   useEffect(load, [type])
@@ -292,7 +294,7 @@ function Users({ type }) {
     e.preventDefault()
     setErr('')
     try {
-      await api('/api/admin/users', { method: 'POST', body: { ...nf, role: type } })
+      await api('/api/admin/users', { method: 'POST', body: { ...nf, role: roleKey } })
       setAddOpen(false)
       setNf({ email: '', password: '', name: '', phone: '', city: '' })
       load()
@@ -324,7 +326,7 @@ function Users({ type }) {
         <div className="mb-2">
           {!addOpen ? (
             <button onClick={() => setAddOpen(true)} className="btn-primary">
-              + إضافة {type === 'customer' ? 'عميل' : type === 'expert' ? 'فني' : 'مستخدم'}
+              + إضافة {roleKey === 'customer' ? 'عميل' : roleKey === 'expert' ? 'فني' : 'مستخدم'}
             </button>
           ) : (
             <form onSubmit={addUser} className="card-lux p-3 space-y-2">
@@ -1148,6 +1150,101 @@ function Verifications() {
 }
 
 
+
+function Loyalty() {
+  const [d, setD] = useState(null)
+  const [q, setQ] = useState('')
+  const [msg, setMsg] = useState('')
+  const [grant, setGrant] = useState(null)
+  const [amount, setAmount] = useState('50')
+
+  const load = (search = '') => api(`/api/admin/loyalty${search ? `?q=${encodeURIComponent(search)}` : ''}`).then(setD).catch(() => {})
+  useEffect(() => { load() }, [])
+  const money = (n) => Number(n || 0).toFixed(2)
+
+  const doGrant = async () => {
+    if (!grant) return
+    try {
+      await api('/api/admin/loyalty/grant', { method: 'POST', body: { user_id: grant.id, amount: Number(amount), note: 'منحة من الإدارة' } })
+      setMsg(`✅ أُضيف ${amount} ر.س لرصيد ${grant.name}`)
+      setGrant(null)
+      load(q)
+    } catch { setMsg('تعذّرت الإضافة') }
+  }
+
+  if (!d) return <p className="text-gray-500">جارٍ التحميل…</p>
+
+  return (
+    <div className="space-y-3">
+      <div className="rounded-xl bg-gradient-to-l from-[#11221A] to-[#1d3a2a] text-white p-3">
+        <p className="text-xs opacity-70">نادي الولاء — برنامج ولاء العملاء</p>
+        <p className="text-[11px] opacity-90 mt-1">
+          كل {d.settings.target} عضو نشط = {d.settings.bonus} ر.س رصيد (يُستخدم في طلبات الفنيين فقط) · صلاحية {d.settings.valid_days} يوم
+          · مكافأة الفني {d.settings.expert_target} فني = {d.settings.expert_bonus} ر.س
+        </p>
+      </div>
+
+      <div className="grid grid-cols-2 gap-2">
+        <div className="card-lux p-3 text-center"><p className="text-[10px] text-gray-500">رصيد قائم</p><p className="text-xl font-extrabold text-[#8a6d13]">{money(d.totals.balance)}</p></div>
+        <div className="card-lux p-3 text-center"><p className="text-[10px] text-gray-500">رصيد مستخدم</p><p className="text-xl font-extrabold text-[#006C35]">{money(d.totals.used)}</p></div>
+        <div className="card-lux p-3 text-center"><p className="text-[10px] text-gray-500">أعضاء برصيد</p><p className="text-lg font-extrabold text-[#11221A]">{d.totals.with_balance} / {d.totals.members}</p></div>
+        <div className="card-lux p-3 text-center"><p className="text-[10px] text-gray-500">ينتهي خلال 7 أيام</p><p className="text-lg font-extrabold text-red-500">{money(d.totals.expiring_7d)}</p></div>
+      </div>
+
+      <div className="flex gap-2">
+        <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="بحث بالاسم أو الجوال أو الكود"
+          className="flex-1 px-3 py-2 border border-[#E3D9BF] rounded-lg text-sm" />
+        <button onClick={() => load(q)} className="bg-[#006C35] text-white px-3 rounded-lg text-xs font-bold">بحث</button>
+      </div>
+
+      {msg && <p className="text-[11px] font-bold text-[#006C35]">{msg}</p>}
+
+      <div className="card-lux p-0 overflow-x-auto">
+        <table className="w-full text-[11px]">
+          <thead className="bg-[#006C35] text-white">
+            <tr>{['#', 'الاسم', 'الجوال', 'الكود', 'دعا', 'نشط', 'الرصيد', 'ينتهي', ''].map((h) => (
+              <th key={h} className="px-2 py-2 text-start font-bold whitespace-nowrap">{h}</th>
+            ))}</tr>
+          </thead>
+          <tbody>
+            {d.rows.map((r) => (
+              <tr key={r.id} className="border-b border-[#F0E9D8]">
+                <td className="px-2 py-1.5 font-mono text-gray-500">{r.id}</td>
+                <td className="px-2 py-1.5 font-bold text-[#11221A] whitespace-nowrap">{r.name || '—'}</td>
+                <td className="px-2 py-1.5 text-gray-500" dir="ltr">{r.phone}</td>
+                <td className="px-2 py-1.5 font-mono text-[10px]">{r.code || '—'}</td>
+                <td className="px-2 py-1.5">{r.invited}</td>
+                <td className="px-2 py-1.5 text-[#006C35] font-bold">{r.active_invited}</td>
+                <td className="px-2 py-1.5 font-extrabold text-[#8a6d13]">{money(r.balance)}</td>
+                <td className="px-2 py-1.5 text-gray-500">{r.next_expiry ? String(r.next_expiry).slice(0, 10) : '—'}</td>
+                <td className="px-2 py-1.5">
+                  <button onClick={() => { setGrant(r); setAmount('50') }} className="bg-[#C9A227] text-white px-2 py-1 rounded text-[10px] font-bold whitespace-nowrap">منح رصيد</button>
+                </td>
+              </tr>
+            ))}
+            {d.rows.length === 0 && <tr><td colSpan="9" className="text-center py-4 text-gray-500">ما فيه أعضاء</td></tr>}
+          </tbody>
+        </table>
+      </div>
+
+      {grant && (
+        <div className="fixed inset-0 z-[2000] bg-black/50 grid place-items-center p-4" onClick={() => setGrant(null)}>
+          <div onClick={(e) => e.stopPropagation()} className="bg-white rounded-2xl p-4 w-full max-w-xs space-y-2">
+            <p className="font-extrabold text-sm text-[#11221A]">منح رصيد — {grant.name}</p>
+            <input type="number" min="1" value={amount} onChange={(e) => setAmount(e.target.value)}
+              className="w-full px-3 py-2 border border-[#E3D9BF] rounded-lg text-sm" />
+            <div className="flex gap-2">
+              <button onClick={doGrant} className="flex-1 bg-[#006C35] text-white py-2 rounded-lg text-xs font-bold">إضافة</button>
+              <button onClick={() => setGrant(null)} className="px-3 border border-[#E3D9BF] rounded-lg text-xs font-bold">إلغاء</button>
+            </div>
+            <p className="text-[10px] text-gray-500">الرصيد صالح سنة ويُستخدم في طلبات الفنيين فقط.</p>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
 function Finance() {
   const [d, setD] = useState(null)
   const [from, setFrom] = useState('')
@@ -1561,6 +1658,7 @@ function Shell({ onLogout }) {
       case 'ads': return <Ads />
       case 'invoices': return <Invoices />
       case 'categories': return <Categories />
+      case 'loyalty': return <Loyalty />
       case 'finance': return <Finance />
       case 'commissions': return <Commissions />
       case 'verifications': return <Verifications />
