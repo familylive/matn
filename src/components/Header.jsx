@@ -15,6 +15,14 @@ const titleKeys = {
 
 export default function Header() {
   const [siteName, setSiteName] = useState('')
+  const [isAdmin, setIsAdmin] = useState(false)
+  useEffect(() => {
+    const check = () => setIsAdmin(!!localStorage.getItem('adminToken'))
+    check()
+    window.addEventListener('storage', check)
+    const id = setInterval(check, 4000)
+    return () => { window.removeEventListener('storage', check); clearInterval(id) }
+  }, [])
   useEffect(() => {
     fetch('/api/site-config').then((r) => r.json()).then((d) => { if (d?.site_name) setSiteName(d.site_name) }).catch(() => {})
   }, [])
@@ -100,6 +108,20 @@ export default function Header() {
         <span className="md:hidden flex-1 text-center text-[13px] text-gray-500 truncate">
           {t(titleKeys[pathname] || 'app.name')}
         </span>
+
+        {isAdmin && (
+          <Link
+            to="/admin"
+            aria-label="لوحة التحكم"
+            title="لوحة التحكم"
+            className="flex items-center gap-1 shrink-0 bg-[#11221A] text-white rounded-lg px-2 py-1.5"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2.2" viewBox="0 0 24 24">
+              <path strokeLinecap="round" d="M4 6h16M4 12h16M4 18h16" />
+            </svg>
+            <span className="hidden sm:inline text-[11px] font-bold">لوحة التحكم</span>
+          </Link>
+        )}
 
         <button
           onClick={toggleLang}
