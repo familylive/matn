@@ -67,7 +67,13 @@ for (const [k, v] of [
   if (setting(k, null) == null) setSetting(k, v)
 }
 // ترقية هدف الفنيين من 10 إلى 20 (طلب عبدالله 2026-10-30)
-if (Number(setting('referral_target', 20)) === 10) setSetting('referral_target', 20)
+export function fixSettings() {
+  if (Number(setting('referral_target', 20)) === 10) setSetting('referral_target', 20)
+  for (const [k, v] of [['loyalty_target', 30], ['loyalty_bonus', 50], ['credit_valid_days', 365]]) {
+    if (setting(k, null) == null) setSetting(k, v)
+  }
+}
+fixSettings()
 
 export const LOYALTY_TARGET = () => Number(setting('loyalty_target', 30))
 export const LOYALTY_BONUS = () => Number(setting('loyalty_bonus', 50))

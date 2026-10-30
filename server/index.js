@@ -21,7 +21,7 @@ import {
   HOLD_DAYS, REF_BONUS, REF_TARGET,
   ensureUserCode, backfillUserCodes, inviterUserOf, creditBalance, listCredits,
   spendCredit, clientInvites, checkLoyaltyBonus, expireCredits,
-  LOYALTY_TARGET, LOYALTY_BONUS, CREDIT_DAYS,
+  LOYALTY_TARGET, LOYALTY_BONUS, CREDIT_DAYS, fixSettings,
 } from './wallet.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
@@ -2213,7 +2213,7 @@ function applyBackup(tables, files) {
     backfillNumbers()
     normalizePhones()
     seedBots()
-    try { backfillInviteCodes(); backfillUserCodes() } catch (e) { console.error('INVITE_BACKFILL_FAIL', e.message) }
+    try { backfillInviteCodes(); backfillUserCodes(); fixSettings() } catch (e) { console.error('INVITE_BACKFILL_FAIL', e.message) }
     if (files && typeof files === 'object') {
       for (const [name, b64] of Object.entries(files)) {
         if (typeof b64 !== 'string') continue
@@ -2356,7 +2356,7 @@ async function autoRestoreOnBoot() {
     backfillNumbers()
     normalizePhones()
     seedBots()
-    try { backfillInviteCodes(); backfillUserCodes() } catch (e) { console.error('INVITE_BACKFILL_FAIL', e.message) }
+    try { backfillInviteCodes(); backfillUserCodes(); fixSettings() } catch (e) { console.error('INVITE_BACKFILL_FAIL', e.message) }
     console.log(`AUTORESTORE_OK rows=${restored} snapshot=${snap.taken_at || ''}`)
   } catch (e) {
     console.error('AUTORESTORE_FAIL', e.message)
