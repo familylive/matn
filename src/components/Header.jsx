@@ -70,8 +70,8 @@ export default function Header() {
       )}
       <div className="px-3 py-2.5 flex items-center gap-2">
         <Link to="/" className="flex items-center gap-1.5 shrink-0">
-          <img src="/logo-mark.png" alt="مهنتي" className="h-9 w-auto object-contain" />
-          <span className="font-extrabold text-[#11221A] hidden sm:inline">{t('app.name')}</span>
+          <img src="/logo-mark.png" alt="مهنتي" className="h-11 w-auto object-contain" />
+          <span className="font-extrabold text-[15px] text-[#11221A]">{t('app.name')}</span>
         </Link>
 
         <nav className="hidden md:flex items-center gap-1 flex-1 justify-center">
