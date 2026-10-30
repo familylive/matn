@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext.jsx'
 import { api, setToken } from '../lib/api.js'
 import { SAUDI_CITIES } from '../data/cities.js'
@@ -11,6 +11,8 @@ export default function Register() {
   const { user, login, isAuthenticated } = useAuth()
   const { t, lang } = useLang()
   const navigate = useNavigate()
+  const [params] = useSearchParams()
+  const refCode = params.get('ref') || localStorage.getItem('refCode') || ''
   const cities = SAUDI_CITIES
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
@@ -64,7 +66,7 @@ export default function Register() {
           setBusy(false)
           return
         }
-        const r = await api.signup(form)
+        const r = await api.signup({ ...form, ref: refCode || undefined })
         setToken(r.token)
         updated = r.user
       } else {

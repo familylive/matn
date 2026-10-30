@@ -267,5 +267,7 @@ addColumn('experts', 'badge_label', 'TEXT')
 addColumn('experts', 'is_company', 'INTEGER DEFAULT 0')
 addColumn('experts', 'company_name', 'TEXT')
 addColumn('experts', 'bio', 'TEXT')
+addColumn('experts', 'invite_code', 'TEXT')
+addColumn('users', 'referred_by', 'INTEGER')
 
 export default db

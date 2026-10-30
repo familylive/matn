@@ -6,6 +6,7 @@ import { useLang } from '../i18n/LanguageContext.jsx'
 import { api, getToken } from '../lib/api.js'
 import { enablePush, testPush, pushSupported } from '../lib/push.js'
 import ExpertWorkspace from '../components/ExpertWorkspace.jsx'
+import WalletCard from '../components/WalletCard.jsx'
 
 export default function Profile() {
   const { user, logout, login } = useAuth()
@@ -134,6 +135,8 @@ export default function Profile() {
           </span>
         </button>
       )}
+
+      {isExpert && <WalletCard />}
 
       {isExpert && myExpert && <ExpertWorkspace expert={myExpert} onChange={setMyExpert} />}
 

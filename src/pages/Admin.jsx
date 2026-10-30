@@ -74,7 +74,8 @@ const NAV = [
   ]},
   { key: 'verifications', label: 'طلبات التوثيق', icon: '🪪' },
   { key: 'reports', label: 'التقارير', icon: '📈' },
-  { key: 'commissions', label: 'تقرير العمولات', icon: '💰' },
+  { key: 'finance', label: 'المالية والمحافظ', icon: '💰' },
+  { key: 'commissions', label: 'تقرير العمولات', icon: '📈' },
   { key: 'categories', label: 'التصنيفات', icon: '🗂️' },
   { key: 'ads', label: 'الإعلانات', icon: '📣' },
   { key: 'invoices', label: 'الفواتير', icon: '🧾' },
@@ -85,7 +86,7 @@ const NAV = [
 
 const TITLES = {
   overview: 'نظرة عامة', reports: 'التقارير', ads: 'الإعلانات', invoices: 'الفواتير',
-  categories: 'التصنيفات', payments: 'المدفوعات', commissions: 'تقرير العمولات', verifications: 'طلبات التوثيق',
+  categories: 'التصنيفات', payments: 'المدفوعات', commissions: 'تقرير العمولات', verifications: 'طلبات التوثيق', finance: 'المالية والمحافظ',
   cities: 'طلبات المدن', backup: 'النسخ الاحتياطي',
   'users:admins': 'المستخدمون — الإدارة', 'users:experts': 'المستخدمون — الفنيون',
   'users:customers': 'المستخدمون — العملاء', 'users:support': 'المستخدمون — الدعم الفني',
@@ -1146,6 +1147,142 @@ function Verifications() {
   )
 }
 
+
+function Finance() {
+  const [d, setD] = useState(null)
+  const [from, setFrom] = useState('')
+  const [to, setTo] = useState('')
+  const [msg, setMsg] = useState('')
+  const [busy, setBusy] = useState(false)
+
+  const load = () => {
+    const qs = from && to ? `?from=${from}&to=${to}` : ''
+    api(`/api/admin/finance${qs}`).then((r) => {
+      setD(r)
+      if (!from) { setFrom(r.period.from); setTo(r.period.to) }
+    }).catch(() => {})
+  }
+  useEffect(() => { load() }, []) // eslint-disable-line
+
+  const pay = async (row) => {
+    if (!confirm(`تحويل ${row.available} ر.س إلى ${row.name}؟`)) return
+    setBusy(true)
+    try {
+      await api(`/api/admin/finance/pay/${row.id}`, { method: 'POST', body: { amount: row.available } })
+      setMsg(`✅ تم تسجيل تحويل ${row.available} ر.س لـ ${row.name}`)
+      load()
+    } catch { setMsg('تعذّر التسجيل') } finally { setBusy(false) }
+  }
+
+  const setW = async (id, status) => {
+    await api(`/api/admin/finance/withdrawals/${id}`, { method: 'POST', body: { status } }).catch(() => {})
+    load()
+  }
+
+  const openReport = (type) => {
+    window.open(`/admin/finance/report?type=${type}`, '_blank')
+  }
+
+  if (!d) return <p className="text-gray-500">جارٍ التحميل…</p>
+  const t = d.totals
+  const money = (n) => Number(n || 0).toFixed(2)
+
+  return (
+    <div className="space-y-3">
+      {d.due_count > 0 && (
+        <div className="rounded-xl bg-[#FBF5E3] border border-[#E9D9A6] p-3">
+          <p className="text-sm font-extrabold text-[#8a6d13]">
+            🔔 {d.due_count} فني يستحقون تحويل — إجمالي {money(t.available)} ر.س
+          </p>
+          <p className="text-[11px] text-[#8a6d13]/80 mt-0.5">التحويلات تُسجل في الجدول أدناه وتظهر في التقارير.</p>
+        </div>
+      )}
+
+      <div className="grid grid-cols-2 gap-2">
+        <div className="card-lux p-3 text-center"><p className="text-[10px] text-gray-500">متاح للتحويل</p><p className="text-xl font-extrabold text-[#006C35]">{money(t.available)}</p></div>
+        <div className="card-lux p-3 text-center"><p className="text-[10px] text-gray-500">محجوز عند المنصة</p><p className="text-xl font-extrabold text-[#8a6d13]">{money(t.pending)}</p></div>
+        <div className="card-lux p-3 text-center"><p className="text-[10px] text-gray-500">مستحق الفترة</p><p className="text-lg font-extrabold text-[#11221A]">{money(t.week_earned)}</p></div>
+        <div className="card-lux p-3 text-center"><p className="text-[10px] text-gray-500">طُلب سحبه</p><p className="text-lg font-extrabold text-[#11221A]">{money(t.requested)}</p></div>
+      </div>
+
+      <div className="card-lux p-3 space-y-2">
+        <p className="text-sm font-extrabold text-[#11221A]">📅 الفترة (السبت → الجمعة)</p>
+        <div className="flex gap-2 items-center">
+          <input type="date" value={from} onChange={(e) => setFrom(e.target.value)} className="px-2 py-1.5 border border-[#E3D9BF] rounded-lg text-xs" />
+          <span className="text-xs text-gray-400">→</span>
+          <input type="date" value={to} onChange={(e) => setTo(e.target.value)} className="px-2 py-1.5 border border-[#E3D9BF] rounded-lg text-xs" />
+          <button onClick={load} className="bg-[#006C35] text-white px-3 py-1.5 rounded-lg text-xs font-bold">عرض</button>
+        </div>
+        <div className="flex flex-wrap gap-2 pt-1">
+          {[['daily', 'تقرير يومي'], ['weekly', 'أسبوعي'], ['monthly', 'شهري'], ['yearly', 'سنوي']].map(([k, l]) => (
+            <button key={k} onClick={() => openReport(k)} className="bg-white border border-[#E3D9BF] text-[#11221A] px-3 py-1.5 rounded-lg text-[11px] font-bold">
+              🖨️ {l}
+            </button>
+          ))}
+        </div>
+        <p className="text-[10px] text-gray-500">التقارير تُفتح بصفحة قابلة للطباعة فيها شعار الموقع ورقم التقرير وكل فني برقمه.</p>
+      </div>
+
+      {msg && <p className="text-[11px] font-bold text-[#006C35]">{msg}</p>}
+
+      <div className="card-lux p-0 overflow-x-auto">
+        <table className="w-full text-[11px]">
+          <thead className="bg-[#006C35] text-white">
+            <tr>
+              {['رقم', 'الفني', 'التخصص', 'مستحق الفترة', 'محجوز', 'متاح', 'مدفوع', ''].map((h) => (
+                <th key={h} className="px-2 py-2 text-start font-bold whitespace-nowrap">{h}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {d.rows.map((r) => (
+              <tr key={r.id} className="border-b border-[#F0E9D8]">
+                <td className="px-2 py-1.5 font-mono text-gray-500">{r.id}</td>
+                <td className="px-2 py-1.5 font-bold text-[#11221A] whitespace-nowrap">{r.name}</td>
+                <td className="px-2 py-1.5 text-gray-500">{r.job}</td>
+                <td className="px-2 py-1.5">{money(r.week_earned)}</td>
+                <td className="px-2 py-1.5 text-[#8a6d13]">{money(r.pending)}</td>
+                <td className="px-2 py-1.5 font-extrabold text-[#006C35]">{money(r.available)}</td>
+                <td className="px-2 py-1.5 text-gray-500">{money(r.paid_total)}</td>
+                <td className="px-2 py-1.5">
+                  {r.available > 0.009 && (
+                    <button disabled={busy} onClick={() => pay(r)} className="bg-[#11221A] text-white px-2 py-1 rounded text-[10px] font-bold whitespace-nowrap">
+                      تحويل
+                    </button>
+                  )}
+                </td>
+              </tr>
+            ))}
+            {d.rows.length === 0 && <tr><td colSpan="8" className="text-center py-4 text-gray-500">ما فيه مستحقات</td></tr>}
+          </tbody>
+        </table>
+      </div>
+
+      <div className="card-lux p-3">
+        <p className="text-sm font-extrabold text-[#11221A] mb-2">🏦 طلبات السحب</p>
+        {d.withdrawals.length === 0 && <p className="text-[11px] text-gray-500">ما فيه طلبات.</p>}
+        <ul className="space-y-1.5">
+          {d.withdrawals.slice(0, 20).map((w) => (
+            <li key={w.id} className="flex items-center gap-2 text-[11px] bg-[#FBF9F2] border border-[#EADFC8] rounded-lg px-2 py-1.5">
+              <span className="font-bold text-[#11221A] flex-1 truncate">{w.name_ar || w.name} — {money(w.amount)} ر.س</span>
+              <span className="text-[10px] text-gray-500" dir="ltr">{w.iban}</span>
+              <span className={`text-[10px] font-bold ${w.status === 'paid' ? 'text-[#006C35]' : w.status === 'rejected' ? 'text-red-500' : 'text-[#8a6d13]'}`}>
+                {w.status === 'paid' ? 'تم' : w.status === 'rejected' ? 'مرفوض' : 'قيد التنفيذ'}
+              </span>
+              {w.status === 'requested' && (
+                <>
+                  <button onClick={() => setW(w.id, 'paid')} className="bg-[#006C35] text-white px-2 py-0.5 rounded text-[10px] font-bold">تم التحويل</button>
+                  <button onClick={() => setW(w.id, 'rejected')} className="bg-red-50 text-red-500 px-2 py-0.5 rounded text-[10px] font-bold">رفض</button>
+                </>
+              )}
+            </li>
+          ))}
+        </ul>
+      </div>
+    </div>
+  )
+}
+
 function Commissions() {
   const [d, setD] = useState(null)
   useEffect(() => { api('/api/admin/commissions').then(setD).catch(() => {}) }, [])
@@ -1411,6 +1548,7 @@ function Shell({ onLogout }) {
       case 'ads': return <Ads />
       case 'invoices': return <Invoices />
       case 'categories': return <Categories />
+      case 'finance': return <Finance />
       case 'commissions': return <Commissions />
       case 'verifications': return <Verifications />
       case 'payments': return <Payments />

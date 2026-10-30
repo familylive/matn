@@ -15,6 +15,11 @@ import { seedBots, onNewRequest, resumeBots } from './bots.js'
 import { hashPassword as hashUserPassword, verifyPassword, findByIdentifier, normalizePhone } from './accounts.js'
 import { issueInvoice, autoSettle, getSetting as getSet } from './flow.js'
 import { seedServices, tradesOf, catsOf, certsOf, decorateExpert, parseJson } from './services.js'
+import {
+  ensureInviteCode, backfillInviteCodes, expertByCode, walletSummary, listTx, releaseDue,
+  requestWithdrawal, invitesOf, checkReferralBonus, weekRange, money,
+  HOLD_DAYS, REF_BONUS, REF_TARGET,
+} from './wallet.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const app = express()
@@ -57,6 +62,9 @@ const uploadAny = multer({
 seedAdmin()
 seedBots()
 seedServices(db)
+backfillInviteCodes()
+releaseDue()
+setInterval(() => { try { releaseDue() } catch (e) { console.error('RELEASE_FAIL', e.message) } }, 30 * 60 * 1000)
 
 function backfillNumbers() {
   const rows = db.prepare('SELECT id FROM requests WHERE number IS NULL ORDER BY id').all()
@@ -301,12 +309,12 @@ app.post('/api/auth/signup', (req, res) => {
   const role = ['expert', 'support', 'customer'].includes(b.role) ? b.role : 'customer'
   const info = db
     .prepare(
-      `INSERT INTO users (phone, name, city, role, email, nationality, specialty, lat, lng, username, password_hash, last_seen)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))`,
+      `INSERT INTO users (phone, name, city, role, email, nationality, specialty, lat, lng, username, password_hash, last_seen, referred_by)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), ?)`,
     )
     .run(phone, name, b.city || null, role, b.email || null, b.nationality || null, b.specialty || null,
       b.lat != null ? Number(b.lat) : null, b.lng != null ? Number(b.lng) : null,
-      username, hashUserPassword(password))
+      username, hashUserPassword(password), expertByCode(b.ref)?.id || null)
 
   const userId = info.lastInsertRowid
   if (role === 'expert') {
@@ -320,6 +328,8 @@ app.post('/api/auth/signup', (req, res) => {
       years ? `${years} سنة` : '1 سنة',
       b.lat != null ? Number(b.lat) : null, b.lng != null ? Number(b.lng) : null, userId, b.has_car ? 1 : 0,
       JSON.stringify(trades), b.exp_years != null ? Number(b.exp_years) : null)
+    const created = db.prepare('SELECT id FROM experts WHERE user_id = ?').get(userId)
+    if (created) ensureInviteCode(created.id)
   }
 
   res.status(201).json({ ...startSession(userId), user: fullUser(userId) })
@@ -416,6 +426,8 @@ app.post('/api/auth/register', authRequired, (req, res) => {
         b.exp_years ? `${Number(b.exp_years)} سنة` : '1 سنة',
         b.lat != null ? Number(b.lat) : null, b.lng != null ? Number(b.lng) : null, req.userId, b.has_car ? 1 : 0,
         JSON.stringify(trades || []), b.exp_years != null ? Number(b.exp_years) : null)
+      const created = db.prepare('SELECT id FROM experts WHERE user_id = ?').get(req.userId)
+      if (created) ensureInviteCode(created.id)
     }
   }
 
@@ -581,6 +593,7 @@ app.post('/api/admin/experts', adminRequired, (req, res) => {
       b.lat != null ? Number(b.lat) : null, b.lng != null ? Number(b.lng) : null,
       b.verify_status || 'approved', JSON.stringify(trades), years,
       b.badge_color || null, b.badge_label || null, b.is_company ? 1 : 0, b.company_name || null, b.bio || null)
+  ensureInviteCode(info.lastInsertRowid)
   res.status(201).json(decorateExpert(db.prepare('SELECT * FROM experts WHERE id = ?').get(info.lastInsertRowid)))
 })
 
@@ -648,6 +661,26 @@ function sanitizeTrades(input, fallbackJob) {
   }
   if (!out.length && fallbackJob) out.push({ cat: String(fallbackJob), subs: [] })
   return out
+}
+
+
+/* ---------- المحفظة والدعوات ---------- */
+function refreshInviterBonus(userId) {
+  try {
+    const u = db.prepare('SELECT referred_by FROM users WHERE id = ?').get(userId)
+    if (!u?.referred_by) return
+    const r = checkReferralBonus(u.referred_by)
+    if (r.credited) {
+      const inv = db.prepare('SELECT user_id, name_ar, name FROM experts WHERE id = ?').get(u.referred_by)
+      if (inv?.user_id) {
+        io.to(`user:${inv.user_id}`).emit('notify', {
+          type: 'wallet',
+          title: '🎁 مكافأة دعوة',
+          body: `وصل ${r.credited} ر.س لمحفظتك — ${r.qualified} فني نشط سجّل بكودك`,
+        })
+      }
+    }
+  } catch (e) { console.error('REF_BONUS_FAIL', e.message) }
 }
 
 /* ---------- requests + live bidding ---------- */
@@ -877,6 +910,7 @@ app.post('/api/requests/:id/bids', authRequired, (req, res) => {
   const info = db
     .prepare('INSERT INTO bids (request_id, expert_id, amount, note) VALUES (?, ?, ?, ?)')
     .run(request.id, expertId, amount, req.body?.note || null)
+  refreshInviterBonus(req.userId)
 
   const bid = db
     .prepare(
@@ -1648,6 +1682,7 @@ app.patch('/api/admin/verifications/:id', adminRequired, (req, res) => {
   db.prepare('UPDATE experts SET verify_status = ?, verify_note = ? WHERE id = ?')
     .run(status, req.body?.note || null, e.id)
   if (e.user_id) {
+    refreshInviterBonus(e.user_id)
     io.to(`user:${e.user_id}`).emit('notify', {
       type: 'verify',
       title: status === 'approved' ? 'تم توثيق حسابك ✅' : status === 'rejected' ? 'تم رفض التوثيق' : 'التوثيق قيد المراجعة',
@@ -1660,6 +1695,246 @@ app.patch('/api/admin/verifications/:id', adminRequired, (req, res) => {
 /* ---------- تقرير العمولات ---------- */
 
 /* إجمالي عمولة المنصة حسب الفترات */
+
+/* ================= المحفظة (الفني) ================= */
+app.get('/api/me/wallet', authRequired, (req, res) => {
+  const e = db.prepare('SELECT * FROM experts WHERE user_id = ?').get(req.userId)
+  if (!e) return res.status(404).json({ error: 'not_expert' })
+  try { releaseDue() } catch {}
+  ensureInviteCode(e.id)
+  const code = db.prepare('SELECT invite_code FROM experts WHERE id = ?').get(e.id)?.invite_code
+  const inv = invitesOf(e.id)
+  const qualified = inv.filter((i) => i.qualified).length
+  res.json({
+    ...walletSummary(e.id),
+    invite_code: code,
+    invite_link: `/register?ref=${encodeURIComponent(code || '')}`,
+    referrals: {
+      total: inv.length,
+      qualified,
+      target: REF_TARGET(),
+      bonus: REF_BONUS(),
+      bonus_paid: !!db.prepare("SELECT 1 FROM wallet_tx WHERE expert_id = ? AND ref = ?").get(e.id, `referral-${e.id}`),
+      list: inv.slice(0, 50).map((i) => ({
+        name: i.name, created_at: i.created_at, qualified: i.qualified,
+      })),
+    },
+    transactions: listTx(e.id, 60),
+    withdrawals: db.prepare('SELECT * FROM withdrawals WHERE expert_id = ? ORDER BY id DESC LIMIT 20').all(e.id),
+  })
+})
+
+app.post('/api/me/wallet/withdraw', authRequired, (req, res) => {
+  const e = db.prepare('SELECT * FROM experts WHERE user_id = ?').get(req.userId)
+  if (!e) return res.status(404).json({ error: 'not_expert' })
+  const amount = Number(req.body?.amount)
+  const iban = String(req.body?.iban || '').replace(/\s/g, '')
+  if (iban && !/^SA\d{22}$/i.test(iban)) return res.status(400).json({ error: 'invalid_iban' })
+  if (!iban) return res.status(400).json({ error: 'iban_required' })
+  const r = requestWithdrawal({
+    expertId: e.id, amount, iban,
+    accountName: String(req.body?.account_name || '').slice(0, 80),
+  })
+  if (r.error) return res.status(400).json({ error: r.error })
+  res.status(201).json({ ok: true, ...r, wallet: walletSummary(e.id) })
+})
+
+app.get('/api/me/referrals', authRequired, (req, res) => {
+  const e = db.prepare('SELECT * FROM experts WHERE user_id = ?').get(req.userId)
+  if (!e) return res.status(404).json({ error: 'not_expert' })
+  const code = ensureInviteCode(e.id)
+  const list = invitesOf(e.id)
+  res.json({
+    code, target: REF_TARGET(), bonus: REF_BONUS(),
+    qualified: list.filter((i) => i.qualified).length,
+    total: list.length,
+    list,
+  })
+})
+
+/* ================= المالية (الإدارة) ================= */
+function financeRows(from, to) {
+  const experts = db
+    .prepare("SELECT id, name, name_ar, job, city, user_id, phone FROM experts WHERE COALESCE(is_bot,0) = 0 ORDER BY id")
+    .all()
+  const earned = db
+    .prepare(
+      `SELECT expert_id,
+        COALESCE(SUM(CASE WHEN status IN ('hold','available') AND date(created_at,'+3 hours') BETWEEN ? AND ? THEN amount ELSE 0 END),0) AS earned,
+        COALESCE(SUM(CASE WHEN status = 'hold' THEN amount ELSE 0 END),0) AS held
+       FROM wallet_tx GROUP BY expert_id`,
+    )
+    .all(from, to)
+  const earnedMap = new Map(earned.map((r) => [r.expert_id, r]))
+  const paid = db
+    .prepare(
+      `SELECT expert_id, COALESCE(SUM(amount),0) AS paid
+       FROM withdrawals WHERE status = 'paid' AND date(paid_at,'+3 hours') BETWEEN ? AND ?
+       GROUP BY expert_id`,
+    )
+    .all(from, to)
+  const paidMap = new Map(paid.map((r) => [r.expert_id, r.paid]))
+  const outstanding = db
+    .prepare("SELECT expert_id, COALESCE(SUM(amount),0) AS requested FROM withdrawals WHERE status = 'requested' GROUP BY expert_id")
+    .all()
+  const reqMap = new Map(outstanding.map((r) => [r.expert_id, r.requested]))
+
+  return experts.map((e) => {
+    const w = walletSummary(e.id)
+    const em = earnedMap.get(e.id) || {}
+    return {
+      id: e.id,
+      name: e.name_ar || e.name,
+      job: e.job,
+      city: e.city,
+      phone: e.phone,
+      user_id: e.user_id,
+      week_earned: money(em.earned),
+      week_paid: money(paidMap.get(e.id) || 0),
+      requested: money(reqMap.get(e.id) || 0),
+      available: money(w.available),
+      pending: money(w.pending),
+      paid_total: money(w.paid),
+      due: money(w.available),
+    }
+  })
+}
+
+app.get('/api/admin/finance', adminRequired, (req, res) => {
+  const wr = weekRange()
+  const from = String(req.query.from || wr.from).slice(0, 10)
+  const to = String(req.query.to || wr.to).slice(0, 10)
+  try { releaseDue() } catch {}
+  const rows = financeRows(from, to)
+  const sum = (k) => money(rows.reduce((a, r) => a + Number(r[k] || 0), 0))
+  res.json({
+    period: { from, to },
+    totals: {
+      available: sum('available'),
+      pending: sum('pending'),
+      requested: sum('requested'),
+      week_earned: sum('week_earned'),
+      week_paid: sum('week_paid'),
+      paid_total: sum('paid_total'),
+    },
+    due_count: rows.filter((r) => r.available > 0.009).length,
+    rows: rows.filter((r) => r.available > 0.009 || r.pending > 0.009 || r.week_earned > 0 || r.requested > 0.009),
+    withdrawals: db
+      .prepare(
+        `SELECT w.*, e.name_ar, e.name FROM withdrawals w LEFT JOIN experts e ON e.id = w.expert_id
+         ORDER BY CASE w.status WHEN 'requested' THEN 0 ELSE 1 END, w.id DESC LIMIT 100`,
+      )
+      .all(),
+    settings: { hold_days: HOLD_DAYS(), referral_bonus: REF_BONUS(), referral_target: REF_TARGET() },
+  })
+})
+
+app.post('/api/admin/finance/pay/:expertId', adminRequired, (req, res) => {
+  const e = db.prepare('SELECT * FROM experts WHERE id = ?').get(req.params.expertId)
+  if (!e) return res.status(404).json({ error: 'not_found' })
+  const s = walletSummary(e.id)
+  const amount = money(req.body?.amount != null ? Number(req.body.amount) : s.available)
+  if (!(amount > 0)) return res.status(400).json({ error: 'nothing_due' })
+  const info = db
+    .prepare("INSERT INTO withdrawals (expert_id, amount, status, ref, account_name, paid_at) VALUES (?, ?, 'paid', ?, ?, datetime('now'))")
+    .run(e.id, amount, req.body?.ref || null, req.body?.account_name || null)
+  if (e.user_id) {
+    io.to(`user:${e.user_id}`).emit('notify', {
+      type: 'wallet',
+      title: '💸 تم تحويل مستحقاتك',
+      body: `تم تحويل ${amount} ر.س إلى حسابك البنكي`,
+    })
+  }
+  res.json({ ok: true, id: info.lastInsertRowid, amount, wallet: walletSummary(e.id) })
+})
+
+app.post('/api/admin/finance/withdrawals/:id', adminRequired, (req, res) => {
+  const w = db.prepare('SELECT * FROM withdrawals WHERE id = ?').get(req.params.id)
+  if (!w) return res.status(404).json({ error: 'not_found' })
+  const status = String(req.body?.status || '')
+  if (!['paid', 'rejected', 'requested'].includes(status)) return res.status(400).json({ error: 'invalid_status' })
+  db.prepare("UPDATE withdrawals SET status = ?, paid_at = CASE WHEN ? = 'paid' THEN datetime('now') ELSE paid_at END WHERE id = ?")
+    .run(status, status, w.id)
+  const e = db.prepare('SELECT user_id FROM experts WHERE id = ?').get(w.expert_id)
+  if (e?.user_id && status !== 'requested') {
+    io.to(`user:${e.user_id}`).emit('notify', {
+      type: 'wallet',
+      title: status === 'paid' ? '💸 تم تحويل مستحقاتك' : 'تم رفض طلب السحب',
+      body: `${w.amount} ر.س`,
+    })
+  }
+  res.json({ ok: true })
+})
+
+/* تقارير مالية قابلة للطباعة: يومي / أسبوعي / شهري / سنوي */
+app.get('/api/admin/finance/report', adminRequired, (req, res) => {
+  const kind = ['daily', 'weekly', 'monthly', 'yearly'].includes(String(req.query.type)) ? req.query.type : 'weekly'
+  const now = new Date()
+  const iso = (d) => d.toISOString().slice(0, 10)
+  let from, to
+  if (kind === 'daily') { from = to = iso(now) }
+  else if (kind === 'weekly') { const w = weekRange(now); from = w.from; to = w.to }
+  else if (kind === 'monthly') {
+    from = iso(new Date(now.getFullYear(), now.getMonth(), 1))
+    to = iso(new Date(now.getFullYear(), now.getMonth() + 1, 0))
+  } else {
+    from = `${now.getFullYear()}-01-01`
+    to = `${now.getFullYear()}-12-31`
+  }
+  const rows = financeRows(from, to)
+
+  // رقم التقرير
+  const prefix = { daily: 'D', weekly: 'W', monthly: 'M', yearly: 'Y' }[kind]
+  const existing = db
+    .prepare("SELECT * FROM finance_reports WHERE kind = ? AND from_date = ? AND to_date = ?")
+    .get(kind, from, to)
+  let report = existing
+  if (!report) {
+    const count = db.prepare('SELECT COUNT(*) c FROM finance_reports WHERE kind = ?').get(kind).c
+    const code = `FIN-${now.getFullYear()}-${prefix}${String(count + 1).padStart(3, '0')}`
+    const info = db
+      .prepare('INSERT INTO finance_reports (code, kind, from_date, to_date) VALUES (?, ?, ?, ?)')
+      .run(code, kind, from, to)
+    report = db.prepare('SELECT * FROM finance_reports WHERE id = ?').get(info.lastInsertRowid)
+  }
+
+  const earned = db
+    .prepare(
+      `SELECT COALESCE(SUM(amount),0) v FROM wallet_tx WHERE status IN ('hold','available') AND kind = 'earning'
+       AND date(created_at,'+3 hours') BETWEEN ? AND ?`,
+    )
+    .get(from, to).v
+  const bonuses = db
+    .prepare(
+      `SELECT COALESCE(SUM(amount),0) v FROM wallet_tx WHERE kind = 'referral' AND date(created_at,'+3 hours') BETWEEN ? AND ?`,
+    )
+    .get(from, to).v
+  const invoices = db
+    .prepare(
+      `SELECT COUNT(*) c, COALESCE(SUM(commission),0) commission, COALESCE(SUM(total_paid),0) paid
+       FROM invoices WHERE date(issued_at,'+3 hours') BETWEEN ? AND ?`,
+    )
+    .get(from, to)
+
+  res.json({
+    report_number: report.code,
+    kind,
+    period: { from, to },
+    generated_at: new Date().toISOString(),
+    site: { name: 'مهنتي', logo: '/logo.png', url: 'https://mihnati.onrender.com' },
+    summary: {
+      experts_paid: money(earned),
+      referral_bonus: money(bonuses),
+      commission: money(invoices.commission),
+      invoices_total: money(invoices.paid),
+      invoices_count: invoices.c,
+      due_now: money(rows.reduce((a, r) => a + r.available, 0)),
+      held_now: money(rows.reduce((a, r) => a + r.pending, 0)),
+    },
+    rows,
+  })
+})
+
 app.get('/api/admin/commission-sums', adminRequired, (_req, res) => {
   const one = (where = '', params = []) =>
     db
@@ -1783,7 +2058,7 @@ app.get('/api/requests/:id/invoices', authRequired, (req, res) => {
 
 /* ---------- نسخ احتياطي ---------- */
 
-const BACKUP_TABLES = ['users', 'experts', 'requests', 'bids', 'reviews', 'invoices', 'ads', 'city_requests', 'categories', 'payments', 'settings']
+const BACKUP_TABLES = ['users', 'experts', 'requests', 'bids', 'reviews', 'invoices', 'ads', 'city_requests', 'categories', 'payments', 'settings', 'wallet_tx', 'withdrawals', 'finance_reports']
 
 const collectUploads = () => {
   const refs = new Set()
@@ -1810,7 +2085,7 @@ app.get('/api/admin/backup', adminRequired, (_req, res) => {
 })
 
 function applyBackup(tables, files) {
-  const order = ['reviews', 'payments', 'bids', 'invoices', 'requests', 'city_requests', 'ads', 'experts', 'users', 'categories', 'settings'].filter(t => BACKUP_TABLES.includes(t))
+  const order = ['reviews', 'payments', 'bids', 'invoices', 'wallet_tx', 'withdrawals', 'finance_reports', 'requests', 'city_requests', 'ads', 'experts', 'users', 'categories', 'settings'].filter(t => BACKUP_TABLES.includes(t))
 
   db.pragma('foreign_keys = OFF')
   try {
@@ -1965,7 +2240,7 @@ async function autoRestoreOnBoot() {
     const tables = snap?.tables
     if (!tables || typeof tables !== 'object') return console.log('AUTORESTORE: bad snapshot')
 
-    const order = ['users', 'experts', 'categories', 'requests', 'bids', 'payments', 'invoices', 'reviews', 'ads', 'city_requests']
+    const order = ['users', 'experts', 'categories', 'requests', 'bids', 'payments', 'invoices', 'reviews', 'ads', 'city_requests', 'wallet_tx', 'withdrawals', 'finance_reports']
     db.pragma('foreign_keys = OFF')
     let restored = 0
     for (const t of order) {

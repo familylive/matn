@@ -1,4 +1,5 @@
 import { db } from './db.js'
+import { creditHold } from './wallet.js'
 
 export const getSetting = (k, d) =>
   db.prepare('SELECT value FROM settings WHERE key = ?').get(k)?.value ?? d
@@ -54,7 +55,19 @@ export function issueInvoice(requestId) {
   const markApplied = db.prepare('UPDATE commission_ledger SET applied_request_id = ? WHERE id = ?')
   for (const r of [...pendingCust, ...pendingExp]) markApplied.run(requestId, r.id)
 
-  return db.prepare('SELECT * FROM invoices WHERE number = ?').get(number)
+  const invoice = db.prepare('SELECT * FROM invoices WHERE number = ?').get(number)
+  // 💰 تحويل مستحق الفني إلى محفظته (محجوز عند الموقع لمدة أسبوع للفصل في أي نزاع)
+  try {
+    creditHold({
+      expertId: bid.expert_id,
+      amount: net,
+      ref: `inv-${invoice.id}`,
+      note: `مستحق الخدمة — طلب #${request.number || request.id}`,
+    })
+  } catch (e) {
+    console.error('WALLET_CREDIT_FAIL', e.message)
+  }
+  return invoice
 }
 
 // وضع العرض: قبول أقل سومة + دفع بالبطاقة + إكمال + إصدار الفواتير

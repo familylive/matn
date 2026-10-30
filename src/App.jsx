@@ -9,6 +9,7 @@ import ExpertDetail from './pages/ExpertDetail.jsx'
 import Requests from './pages/Requests.jsx'
 import RequestDetail from './pages/RequestDetail.jsx'
 import Admin from './pages/Admin.jsx'
+import FinanceReport from './pages/FinanceReport.jsx'
 import Register from './pages/Register.jsx'
 import Verify from './pages/Verify.jsx'
 import MyRequests from './pages/MyRequests.jsx'
@@ -52,6 +53,7 @@ export default function App() {
       <Route path="/invoice/:id/:type" element={<Invoice />} />
       <Route path="/terms" element={<Layout><Terms /></Layout>} />
       <Route path="/nearby" element={<Layout><Nearby /></Layout>} />
+      <Route path="/admin/finance/report" element={<FinanceReport />} />
       <Route path="/admin/*" element={<Admin />} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
