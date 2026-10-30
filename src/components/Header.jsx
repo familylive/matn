@@ -67,7 +67,7 @@ export default function Header() {
   const initial = name.trim().charAt(0) || '؟'
 
   return (
-    <header className="bg-white border-b border-[#ECE3CE]">
+    <header className="bg-white border-b border-[#ECE3CE] safe-top">
       {showAlert && (
         <Link
           to="/requests"

@@ -1,3 +1,4 @@
+import VerifiedBadge from '../components/VerifiedBadge.jsx'
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 
@@ -396,6 +397,7 @@ function SiteSettings() {
       </div>
       {msg && <p className="text-[11px] font-bold text-[#006C35]">{msg}</p>}
       <button onClick={save} className="btn-primary">حفظ إعدادات الموقع</button>
+      <div className="pt-2"><CommissionBox /></div>
     </div>
   )
 }
@@ -1326,7 +1328,62 @@ function AddExpert({ onAdded }) {
   )
 }
 
+function CustomersVerify() {
+  const [q, setQ] = useState('')
+  const [rows, setRows] = useState([])
+  const [msg, setMsg] = useState('')
+
+  const load = (search = '') => api(`/api/admin/users?role=customer${search ? `&q=${encodeURIComponent(search)}` : ''}`)
+    .then(setRows).catch(() => {})
+
+  useEffect(() => { load() }, [])
+
+  const toggle = async (u) => {
+    try {
+      const r = await api(`/api/admin/users/${u.id}/verify`, { method: 'PATCH', body: { verified: !u.verified } })
+      setMsg(r.verified ? `✅ تم توثيق ${u.name || u.phone}` : `تم سحب التوثيق من ${u.name || u.phone}`)
+      load(q)
+    } catch { setMsg('تعذّر التعديل') }
+  }
+
+  return (
+    <div className="space-y-3">
+      <div className="card-lux p-3">
+        <p className="text-[11px] font-bold text-gray-600 mb-1">بحث عن عميل (بالرقم ID أو الاسم أو الجوال)</p>
+        <div className="flex gap-2">
+          <input value={q} onChange={(e) => setQ(e.target.value)}
+            placeholder="ID / الاسم / 05xxxxxxxx"
+            className="flex-1 px-3 py-2 border border-[#E3D9BF] rounded-lg text-sm" />
+          <button onClick={() => load(q)} className="bg-[#006C35] text-white px-3 rounded-lg text-xs font-bold">بحث</button>
+        </div>
+      </div>
+
+      {msg && <p className="text-[11px] font-bold text-[#006C35]">{msg}</p>}
+
+      {rows.map((u) => (
+        <div key={u.id} className="card-lux p-3 flex items-center gap-2">
+          <div className="flex-1 min-w-0">
+            <p className="font-bold text-sm text-[#11221A] flex items-center gap-1.5">
+              {u.name || 'بدون اسم'}
+              {u.verified && <VerifiedBadge size={16} title="موثّق" />}
+            </p>
+            <p className="text-[10px] text-gray-500">
+              ID: {u.id} · <span dir="ltr">{u.phone}</span> · ⭐ {u.stars_total || 0} نجمة · {u.reviews_count || 0} تقييم
+            </p>
+          </div>
+          <button onClick={() => toggle(u)}
+            className={`text-[11px] font-bold px-2.5 py-1.5 rounded-lg whitespace-nowrap ${u.verified ? 'bg-red-50 text-red-500' : 'bg-[#006C35] text-white'}`}>
+            {u.verified ? 'سحب التوثيق' : '✓ منح توثيق'}
+          </button>
+        </div>
+      ))}
+      {rows.length === 0 && <p className="text-sm text-gray-500">ما فيه عملاء مطابقين.</p>}
+    </div>
+  )
+}
+
 function Verifications() {
+  const [kind, setKind] = useState('experts')
   const [rows, setRows] = useState([])
   const [tab, setTab] = useState('pending')
   const [editId, setEditId] = useState(null)
@@ -1341,8 +1398,28 @@ function Verifications() {
 
   const patchLocal = (e) => setRows((rs) => rs.map((r) => (r.id === e.id ? { ...r, ...e } : r)))
 
+  if (kind === 'customers') {
+    return (
+      <div className="space-y-3">
+        <div className="flex gap-2">
+          {[['experts', '🧰 الفنيون'], ['customers', '🧑‍💼 العملاء']].map(([k, l]) => (
+            <button key={k} onClick={() => setKind(k)}
+              className={`px-3 py-1.5 rounded-full text-[11px] font-bold ${kind === k ? 'bg-[#006C35] text-white' : 'bg-white border border-[#E3D9BF] text-gray-600'}`}>{l}</button>
+          ))}
+        </div>
+        <CustomersVerify />
+      </div>
+    )
+  }
+
   return (
     <div className="space-y-3">
+      <div className="flex gap-2">
+        {[['experts', '🧰 الفنيون'], ['customers', '🧑‍💼 العملاء']].map(([k, l]) => (
+          <button key={k} onClick={() => setKind(k)}
+            className={`px-3 py-1.5 rounded-full text-[11px] font-bold ${kind === k ? 'bg-[#006C35] text-white' : 'bg-white border border-[#E3D9BF] text-gray-600'}`}>{l}</button>
+        ))}
+      </div>
       <AddExpert onAdded={(e) => { setRows((rs) => [e, ...rs]); setTab('approved'); load('approved') }} />
 
       <div className="flex gap-2">
@@ -1847,6 +1924,50 @@ function Commissions() {
   )
 }
 
+
+function ActiveRequests() {
+  const [rows, setRows] = useState(null)
+  useEffect(() => {
+    const load = () => api('/api/admin/active-requests').then(setRows).catch(() => setRows([]))
+    load()
+    const id = setInterval(load, 15000)
+    return () => clearInterval(id)
+  }, [])
+  if (!rows) return <p className="text-gray-500 text-sm">جارٍ التحميل…</p>
+  const open = rows.filter((r) => r.status === 'open')
+  const mmss = (s) => {
+    if (s == null) return '—'
+    if (s <= 0) return 'انتهى'
+    const m = Math.floor(s / 60)
+    const sec = s % 60
+    return `${m}:${String(sec).padStart(2, '0')}`
+  }
+  return (
+    <div className="card-lux p-3">
+      <div className="flex items-center justify-between mb-2">
+        <p className="font-extrabold text-sm text-[#11221A]">🔴 الطلبات النشطة الآن</p>
+        <span className="text-[11px] font-bold text-[#006C35]">{open.length} مزاد مفتوح</span>
+      </div>
+      {rows.length === 0 && <p className="text-[12px] text-gray-500">ما فيه طلبات نشطة حالياً.</p>}
+      <ul className="space-y-1.5">
+        {rows.slice(0, 12).map((r) => (
+          <li key={r.id} className="flex items-center gap-2 bg-[#FBF9F2] border border-[#EADFC8] rounded-xl px-2.5 py-2">
+            <span className="text-[10px] font-mono text-gray-400">#{r.number || r.id}</span>
+            <div className="flex-1 min-w-0">
+              <p className="text-[12px] font-bold text-[#11221A] truncate">{r.title}</p>
+              <p className="text-[10px] text-gray-500">{r.category} · {r.city || '—'} · {r.bids_count} سومة</p>
+            </div>
+            <span className={`text-[10px] font-extrabold px-2 py-0.5 rounded-full whitespace-nowrap ${
+              r.status === 'open' ? 'bg-[#EAF4EE] text-[#006C35]' : 'bg-gray-100 text-gray-600'}`}>
+              {r.status === 'open' ? `⏱ ${mmss(r.seconds_left)}` : r.status === 'assigned' ? 'جارٍ التنفيذ' : 'بانتظار الدفع'}
+            </span>
+          </li>
+        ))}
+      </ul>
+    </div>
+  )
+}
+
 function CommissionBox() {
   const [c, setC] = useState('')
   const [e, setE] = useState('')
@@ -2078,7 +2199,7 @@ function Shell({ onLogout }) {
     if (section.startsWith('users:')) return <Users type={section.split(':')[1]} />
     if (section.startsWith('requests:')) return <Requests scope={section.split(':')[1]} />
     switch (section) {
-      case 'overview': return (<><Overview /><div className="mt-4"><CommissionBox /></div></>)
+      case 'overview': return (<><Overview /><div className="mt-4"><ActiveRequests /></div></>)
       case 'reports': return <Reports />
       case 'ads': return <Ads />
       case 'invoices': return <Invoices />

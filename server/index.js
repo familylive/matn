@@ -1267,6 +1267,21 @@ app.get('/api/admin/me', adminRequired, (req, res) => {
   res.json({ ...a, all_perms: ALL_PERMS, defaults: DEFAULT_PERMS })
 })
 
+app.get('/api/admin/active-requests', adminRequired, (_req, res) => {
+  const rows = db
+    .prepare(
+      `SELECT r.id, r.number, r.title, r.category, r.city, r.status, r.ends_at, r.created_at,
+        (SELECT COUNT(*) FROM bids b WHERE b.request_id = r.id) AS bids_count,
+        u.name AS owner_name,
+        CAST((julianday(r.ends_at) - julianday('now')) * 86400 AS INTEGER) AS seconds_left
+       FROM requests r LEFT JOIN users u ON u.id = r.user_id
+       WHERE r.status IN ('open','awaiting_payment','assigned')
+       ORDER BY CASE r.status WHEN 'open' THEN 0 ELSE 1 END, r.id DESC LIMIT 60`,
+    )
+    .all()
+  res.json(rows)
+})
+
 app.get('/api/admin/overview', adminRequired, (_req, res) => {
   const one = (sql, ...p) => db.prepare(sql).get(...p).c
   res.json({
@@ -1337,10 +1352,42 @@ const publicUser = (u) => ({
 
 app.get('/api/admin/users', adminRequired, (req, res) => {
   const role = req.query.role
-  const rows = role
+  const q = String(req.query.q || '').trim()
+  let rows = role
     ? db.prepare('SELECT * FROM users WHERE role = ? ORDER BY id DESC').all(role)
     : db.prepare('SELECT * FROM users ORDER BY id DESC').all()
-  res.json(rows.map(publicUser))
+  if (q) {
+    const t = q.toLowerCase()
+    rows = rows.filter((u) =>
+      String(u.id) === t ||
+      String(u.name || '').toLowerCase().includes(t) ||
+      String(u.phone || '').includes(t) ||
+      String(u.invite_code || '').toLowerCase().includes(t) ||
+      String(u.email || '').toLowerCase().includes(t),
+    )
+  }
+  const out = rows.map((u) => ({
+    ...publicUser(u),
+    verified: !!u.verified,
+    stars_total: u.stars_total || 0,
+    reviews_count: u.reviews_count || 0,
+  }))
+  if (q && /^\d+$/.test(q)) out.sort((a, b) => (String(a.id) === q ? -1 : String(b.id) === q ? 1 : 0))
+  res.json(out)
+})
+
+/* منح/سحب توثيق العميل من اللوحة */
+app.patch('/api/admin/users/:id/verify', adminRequired, adminCan('verifications'), (req, res) => {
+  const u = db.prepare('SELECT * FROM users WHERE id = ?').get(req.params.id)
+  if (!u) return res.status(404).json({ error: 'not_found' })
+  const v = req.body?.verified ? 1 : 0
+  db.prepare('UPDATE users SET verified = ? WHERE id = ?').run(v, u.id)
+  io.to(`user:${u.id}`).emit('notify', {
+    type: 'verify',
+    title: v ? '✅ تم توثيق حسابك' : 'تم سحب التوثيق من حسابك',
+    body: v ? 'أصبح حسابك موثّقاً في مهنتي' : '',
+  })
+  res.json({ ok: true, verified: !!v })
 })
 
 app.post('/api/admin/users', adminRequired, adminCan('users'), (req, res) => {
