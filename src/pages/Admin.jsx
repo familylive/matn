@@ -223,7 +223,7 @@ function PermPicker({ value = [], onChange, role }) {
 }
 
 const ADMIN_TYPES = ['admins', 'ceo', 'finance', 'support', 'admin']
-function UserRow({ u, type, onChanged }) {
+function UserRow({ u, type, onChanged, onOpen }) {
   const isAdminRow = ADMIN_TYPES.includes(type)
   const [edit, setEdit] = useState(false)
   const [form, setForm] = useState(u)
@@ -263,7 +263,8 @@ function UserRow({ u, type, onChanged }) {
         <>
           <div className="flex items-start justify-between gap-2">
             <div className="min-w-0">
-              <p className="font-bold text-sm text-[#11221A] truncate">
+              <p className="font-bold text-sm text-[#11221A] truncate cursor-pointer hover:text-[#006C35]"
+                 onClick={() => !isAdminRow && onOpen && onOpen(u.id)}>
                 {u.name || u.email || u.phone || 'بدون اسم'}
                 {u.online ? <span className="ms-2 text-green-500 text-xs">●</span> : null}
               </p>
@@ -532,11 +533,121 @@ function Blocked() {
   )
 }
 
+
+function CustomerDetail({ id, onClose, onChanged }) {
+  const [d, setD] = useState(null)
+  const [msg, setMsg] = useState('')
+  useEffect(() => { api(`/api/admin/users/${id}/full`).then(setD).catch(() => setMsg('تعذّر التحميل')) }, [id])
+  if (!d) return null
+  const money2 = (n) => Number(n || 0).toFixed(2)
+  const toggleVerify = async () => {
+    await api(`/api/admin/users/${d.id}/verify`, { method: 'PATCH', body: { verified: !d.verified } }).catch(() => {})
+    const nd = await api(`/api/admin/users/${d.id}/full`); setD(nd); onChanged && onChanged()
+  }
+  return (
+    <div className="fixed inset-0 z-[2000] bg-black/50 p-3 overflow-y-auto" onClick={onClose}>
+      <div onClick={(e) => e.stopPropagation()} className="bg-white rounded-2xl max-w-lg mx-auto mt-6 p-4 space-y-3">
+        <div className="flex items-start gap-3">
+          <span className="w-14 h-14 rounded-full bg-[#006C35] text-white grid place-items-center text-xl font-extrabold overflow-hidden shrink-0">
+            {d.avatar ? <img src={d.avatar} alt="" className="w-full h-full object-cover" /> : (d.name || '؟').slice(0, 1)}
+          </span>
+          <div className="flex-1 min-w-0">
+            <p className="font-extrabold text-[15px] text-[#11221A] flex items-center gap-1.5">
+              {d.name || 'بدون اسم'}
+              {d.verified && <VerifiedBadge size={20} title="موثّق" />}
+            </p>
+            <p className="text-[11px] text-gray-500">ID: {d.id} · <span dir="ltr">{d.phone}</span></p>
+            <p className="text-[11px] text-gray-500">{d.city || '—'} · {d.email || 'بدون إيميل'}</p>
+          </div>
+          <button onClick={onClose} className="text-gray-400 text-xl leading-none">✕</button>
+        </div>
+
+        <div className="grid grid-cols-3 gap-2">
+          {[['طلبات', d.totals.reqs], ['مكتملة', d.totals.done], ['مدفوع', money2(d.totals.paid_total)]].map(([l, v]) => (
+            <div key={l} className="border border-[#F0E9D8] rounded-xl p-2 text-center">
+              <p className="text-[10px] text-gray-500">{l}</p>
+              <p className="font-extrabold text-[#11221A]">{v}</p>
+            </div>
+          ))}
+          {[['نجوم', d.stars_total], ['تقييمات', d.reviews_count], ['رصيد الولاء', money2(d.credits)]].map(([l, v]) => (
+            <div key={l} className="border border-[#F0E9D8] rounded-xl p-2 text-center">
+              <p className="text-[10px] text-gray-500">{l}</p>
+              <p className="font-extrabold text-[#006C35]">{v}</p>
+            </div>
+          ))}
+        </div>
+
+        <div className="flex flex-wrap gap-2">
+          <button onClick={toggleVerify} className={`text-[11px] font-bold px-3 py-1.5 rounded-lg ${d.verified ? 'bg-red-50 text-red-500' : 'bg-[#006C35] text-white'}`}>
+            {d.verified ? 'سحب التوثيق' : '✓ منح توثيق'}
+          </button>
+          <button
+            onClick={async () => {
+              await api(`/api/admin/users/${d.id}`, { method: 'PATCH', body: { status: d.status === 'suspended' ? 'active' : 'suspended' } }).catch(() => {})
+              const nd = await api(`/api/admin/users/${d.id}/full`); setD(nd); onChanged && onChanged()
+            }}
+            className="text-[11px] font-bold px-3 py-1.5 rounded-lg bg-[#FBF5E3] text-[#8a6d13]"
+          >
+            {d.status === 'suspended' ? 'تفعيل الحساب' : 'إيقاف الحساب'}
+          </button>
+          <button
+            onClick={async () => {
+              const reason = prompt('سبب حجب الجوال؟ (اختياري)')
+              if (reason === null) return
+              await api('/api/admin/blocked-phones', { method: 'POST', body: { phone: d.phone, reason } }).catch(() => {})
+              const nd = await api(`/api/admin/users/${d.id}/full`); setD(nd); onChanged && onChanged()
+            }}
+            className="text-[11px] font-bold px-3 py-1.5 rounded-lg bg-[#11221A] text-white"
+          >
+            🚫 حجب الجوال
+          </button>
+          {d.invite_code && <span className="text-[10px] font-mono bg-gray-100 px-2 py-1.5 rounded-lg">{d.invite_code}</span>}
+        </div>
+
+        <div>
+          <p className="font-extrabold text-[12px] text-[#11221A] mb-1">📋 طلباته ({d.requests.length})</p>
+          <ul className="space-y-1 max-h-40 overflow-auto">
+            {d.requests.map((r) => (
+              <li key={r.id} className="flex items-center gap-2 text-[11px] bg-[#FBF9F2] border border-[#EADFC8] rounded-lg px-2 py-1.5">
+                <span className="text-gray-400 font-mono">#{r.number || r.id}</span>
+                <span className="flex-1 truncate font-bold text-[#11221A]">{r.title}</span>
+                <span className="text-gray-500">{r.status}</span>
+                {r.paid > 0 && <span className="text-[#006C35] font-bold">{money2(r.paid)}</span>}
+              </li>
+            ))}
+            {d.requests.length === 0 && <li className="text-[11px] text-gray-500">ما فيه طلبات.</li>}
+          </ul>
+        </div>
+
+        <div>
+          <p className="font-extrabold text-[12px] text-[#11221A] mb-1">⭐ تقييمات الفنيين له (للإدارة فقط)</p>
+          <ul className="space-y-1 max-h-40 overflow-auto">
+            {d.reviews.map((r) => (
+              <li key={r.id} className="text-[11px] bg-white border border-[#F0E9D8] rounded-lg px-2 py-1.5">
+                <div className="flex items-center justify-between">
+                  <span className="font-bold text-[#11221A]">{r.expert_name || 'فني'}</span>
+                  <span className="text-[#C9A227]">{'★'.repeat(r.rating)}{'☆'.repeat(5 - r.rating)}</span>
+                </div>
+                {r.tags?.length > 0 && <p className="text-[10px] text-[#006C35]">{r.tags.join(' · ')}</p>}
+                {r.comment && <p className="text-[10px] text-gray-600 mt-0.5">{r.comment}</p>}
+              </li>
+            ))}
+            {d.reviews.length === 0 && <li className="text-[11px] text-gray-500">ما فيه تقييمات.</li>}
+          </ul>
+        </div>
+
+        {msg && <p className="text-[11px] text-red-500">{msg}</p>}
+      </div>
+    </div>
+  )
+}
+
 function Users({ type }) {
   const [rows, setRows] = useState([])
   const [addOpen, setAddOpen] = useState(false)
   const [nf, setNf] = useState({ email: '', password: '', name: '', phone: '', city: '' })
   const [perms, setPerms] = useState([])
+  const [detail, setDetail] = useState(null)
   const [err, setErr] = useState('')
 
   const roleKey = type === 'customers' ? 'customer' : type === 'experts' ? 'expert' : type
@@ -636,7 +747,8 @@ function Users({ type }) {
         </div>
       )}
 
-      {rows.map((u) => <UserRow key={u.id} u={u} type={type} onChanged={load} />)}
+      {rows.map((u) => <UserRow key={u.id} u={u} type={type} onChanged={load} onOpen={(id) => setDetail(id)} />)}
+      {detail && <CustomerDetail id={detail} onClose={() => setDetail(null)} onChanged={load} />}
       {rows.length === 0 && <p className="text-sm text-gray-500">ما فيه بيانات.</p>}
     </div>
   )

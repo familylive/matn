@@ -1270,6 +1270,62 @@ app.get('/api/admin/me', adminRequired, (req, res) => {
   res.json({ ...a, all_perms: ALL_PERMS, defaults: DEFAULT_PERMS })
 })
 
+
+/* ملف العميل الكامل (للإدارة) */
+app.get('/api/admin/users/:id/full', adminRequired, (req, res) => {
+  const u = db.prepare('SELECT * FROM users WHERE id = ?').get(req.params.id)
+  if (!u) return res.status(404).json({ error: 'not_found' })
+
+  const requests = db
+    .prepare(
+      `SELECT r.id, r.number, r.title, r.category, r.city, r.status, r.created_at,
+        (SELECT COUNT(*) FROM bids b WHERE b.request_id = r.id) AS bids_count,
+        (SELECT COALESCE(SUM(amount),0) FROM payments p WHERE p.request_id = r.id AND p.status IN ('paid','pending_cash')) AS paid
+       FROM requests r WHERE r.user_id = ? ORDER BY r.id DESC LIMIT 12`,
+    )
+    .all(u.id)
+
+  const totals = db
+    .prepare(
+      `SELECT COUNT(*) reqs,
+        COALESCE(SUM(CASE WHEN status IN ('done','closed') THEN 1 ELSE 0 END),0) done,
+        COALESCE((SELECT SUM(amount) FROM payments p JOIN requests r2 ON r2.id = p.request_id
+                  WHERE r2.user_id = ? AND p.status IN ('paid','pending_cash')),0) paid_total
+       FROM requests WHERE user_id = ?`,
+    )
+    .get(u.id, u.id)
+
+  let credits = 0
+  try {
+    credits = db.prepare("SELECT COALESCE(SUM(remaining),0) v FROM credits WHERE user_id = ? AND remaining > 0 AND expires_at > datetime('now')").get(u.id).v
+  } catch {}
+
+  const reviews = db
+    .prepare(
+      `SELECT r.id, r.rating, r.comment, r.tags, r.created_at, e.name_ar AS expert_name, q.number AS request_number
+       FROM reviews r LEFT JOIN experts e ON e.id = r.expert_id LEFT JOIN requests q ON q.id = r.request_id
+       WHERE r.target = 'customer' AND r.customer_id = ? ORDER BY r.id DESC LIMIT 20`,
+    )
+    .all(u.id)
+
+  const invites = db.prepare('SELECT COUNT(*) c FROM users WHERE referred_by = ?').get(u.id).c
+  const blocked = !!db.prepare('SELECT 1 FROM blocked_phones WHERE phone = ?').get(u.phone)
+
+  res.json({
+    ...publicUser(u),
+    verified: !!u.verified,
+    stars_total: u.stars_total || 0,
+    reviews_count: u.reviews_count || 0,
+    invite_code: u.invite_code,
+    blocked,
+    credits: money(credits),
+    invites,
+    totals: { ...totals, paid_total: money(totals.paid_total) },
+    requests: requests.map((r) => ({ ...r, paid: money(r.paid) })),
+    reviews: reviews.map((r) => ({ ...r, tags: parseJson(r.tags, []) })),
+  })
+})
+
 app.get('/api/admin/active-requests', adminRequired, (_req, res) => {
   const rows = db
     .prepare(

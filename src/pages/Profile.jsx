@@ -107,7 +107,10 @@ export default function Profile() {
             </span>
           )}
         </div>
-        <h2 className="text-lg font-extrabold text-[#11221A] mt-4">{profile.name || profile.userName}</h2>
+        <h2 className="text-lg font-extrabold text-[#11221A] mt-4 flex items-center justify-center gap-1.5">
+          <span className="truncate">{profile.name || profile.userName}</span>
+          {!!profile.verified && <VerifiedBadge size={22} title="موثّق" />}
+        </h2>
         <div className="flex items-center justify-center gap-2 mt-1 flex-wrap">
           <span className={`text-[11px] px-2 py-0.5 rounded-full font-bold ${isExpert ? 'bg-[#FBF5E3] text-[#8a6d13]' : 'bg-[#E9F5EE] text-[#006C35]'}`}>
             {isExpert ? 'فني' : 'عميل'}
