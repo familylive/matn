@@ -312,6 +312,7 @@ app.post('/api/auth/signup', (req, res) => {
     return res.status(409).json({ error: 'phone_taken' })
   }
 
+  if (isBlockedPhone(phone)) return res.status(403).json({ error: 'phone_blocked' })
   const role = ['expert', 'support', 'customer'].includes(b.role) ? b.role : 'customer'
   const info = db
     .prepare(
@@ -349,6 +350,7 @@ app.post('/api/auth/login-local', (req, res) => {
     return res.status(401).json({ error: 'invalid_credentials' })
   }
   if (user.status === 'suspended') return res.status(403).json({ error: 'account_suspended' })
+  if (isBlockedPhone(user.phone)) return res.status(403).json({ error: 'phone_blocked' })
   db.prepare("UPDATE users SET last_seen = datetime('now') WHERE id = ?").run(user.id)
   res.json({ ...startSession(user.id), user: fullUser(user.id) })
 })
@@ -1107,6 +1109,9 @@ app.post('/api/requests/:id/extras/:extraId/pay', authRequired, (req, res) => {
 
   const method = String(req.body?.method || '')
   if (!['cash', 'card', 'urpay', 'stcpay'].includes(method)) return res.status(400).json({ error: 'invalid_method' })
+  const enabledKey = { cash: 'pay_cash', card: 'pay_card', stcpay: 'pay_stcpay', urpay: 'pay_urpay' }[method]
+  const gate = db.prepare('SELECT value FROM settings WHERE key = ?').get(enabledKey)?.value ?? '1'
+  if (gate !== '1' && !req.body?.use_credit) return res.status(409).json({ error: 'method_disabled' })
   const needsPhone = ['urpay', 'stcpay'].includes(method)
   const phone = needsPhone ? String(req.body?.phone || '').replace(/[^\d+]/g, '') : null
   if (needsPhone && phone.replace(/\D/g, '').length < 9) return res.status(400).json({ error: 'phone_required' })
@@ -1393,26 +1398,33 @@ app.delete('/api/admin/users/:id', adminRequired, (req, res) => {
   res.json({ ok: true })
 })
 
-app.get('/api/admin/admins', adminRequired, (_req, res) => {
-  res.json(db.prepare('SELECT id, email, name, status, id AS created_at FROM admins ORDER BY id').all())
+app.get('/api/admin/admins', adminRequired, (req, res) => {
+  const role = String(req.query.role || '')
+  const rows = role
+    ? db.prepare('SELECT id, email, name, status, role, id AS created_at FROM admins WHERE COALESCE(role,\'admin\') = ? ORDER BY id').all(role)
+    : db.prepare('SELECT id, email, name, status, role, id AS created_at FROM admins ORDER BY id').all()
+  res.json(rows)
 })
 
 app.post('/api/admin/admins', adminRequired, (req, res) => {
   const { email, password, name } = req.body || {}
+  const role = ['ceo', 'finance', 'support', 'admin'].includes(req.body?.role) ? req.body.role : 'admin'
   if (!email || !password) return res.status(400).json({ error: 'email_and_password_required' })
   const exists = db.prepare('SELECT id FROM admins WHERE email = ?').get(email.trim().toLowerCase())
   if (exists) return res.status(409).json({ error: 'email_exists' })
-  const info = db.prepare('INSERT INTO admins (email, password_hash, name) VALUES (?, ?, ?)').run(
-    email.trim().toLowerCase(), hashPassword(password), name || null,
+  const info = db.prepare('INSERT INTO admins (email, password_hash, name, role) VALUES (?, ?, ?, ?)').run(
+    email.trim().toLowerCase(), hashPassword(password), name || null, role,
   )
-  res.status(201).json({ id: info.lastInsertRowid, email, name, status: 'active' })
+  res.status(201).json({ id: info.lastInsertRowid, email, name, status: 'active', role })
 })
 
 app.patch('/api/admin/admins/:id', adminRequired, (req, res) => {
   const a = db.prepare('SELECT * FROM admins WHERE id = ?').get(req.params.id)
   if (!a) return res.status(404).json({ error: 'not_found' })
-  const { status, name, password } = req.body || {}
+  const { status, name, password, role } = req.body || {}
   if (status) db.prepare('UPDATE admins SET status = ? WHERE id = ?').run(status, a.id)
+  if (role && ['ceo', 'finance', 'support', 'admin'].includes(role))
+    db.prepare('UPDATE admins SET role = ? WHERE id = ?').run(role, a.id)
   if (name !== undefined) db.prepare('UPDATE admins SET name = ? WHERE id = ?').run(name, a.id)
   if (password) db.prepare('UPDATE admins SET password_hash = ? WHERE id = ?').run(hashPassword(String(password)), a.id)
   res.json(db.prepare('SELECT id, email, name, status FROM admins WHERE id = ?').get(a.id))
@@ -1714,6 +1726,9 @@ app.post('/api/requests/:id/pay', authRequired, (req, res) => {
 
   const method = String(req.body?.method || '')
   if (!['cash', 'card', 'urpay', 'stcpay'].includes(method)) return res.status(400).json({ error: 'invalid_method' })
+  const enabledKey = { cash: 'pay_cash', card: 'pay_card', stcpay: 'pay_stcpay', urpay: 'pay_urpay' }[method]
+  const gate = db.prepare('SELECT value FROM settings WHERE key = ?').get(enabledKey)?.value ?? '1'
+  if (gate !== '1' && !req.body?.use_credit) return res.status(409).json({ error: 'method_disabled' })
   const needsPhone = ['urpay', 'stcpay'].includes(method)
   const phone = needsPhone ? String(req.body?.phone || '').replace(/[^\d+]/g, '') : null
   if (needsPhone && phone.replace(/\D/g, '').length < 9) return res.status(400).json({ error: 'phone_required' })
@@ -1883,6 +1898,76 @@ app.get('/api/me/loyalty', authRequired, (req, res) => {
     expert_bonus: REF_BONUS(),
   })
 })
+
+
+/* ================= إعدادات الموقع (الإدارة) ================= */
+const SITE_KEYS = {
+  site_name: 'مهنتي',
+  site_email: '',
+  support_phone: '',
+  support_whatsapp: '',
+  site_url: 'https://mihnati.onrender.com',
+  maintenance: '0',
+  otp_enabled: '1',
+  signup_open: '1',
+  auction_seconds: '120',
+  grace_seconds: '120',
+  pay_cash: '1',
+  pay_card: '1',
+  pay_stcpay: '1',
+  pay_urpay: '1',
+  bank_name: '',
+  bank_iban: '',
+  bank_account_name: '',
+}
+
+app.get('/api/site-config', (_req, res) => {
+  const out = {}
+  for (const k of Object.keys(SITE_KEYS)) out[k] = db.prepare('SELECT value FROM settings WHERE key = ?').get(k)?.value ?? SITE_KEYS[k]
+  res.json({
+    site_name: out.site_name, site_email: out.site_email,
+    support_phone: out.support_phone, support_whatsapp: out.support_whatsapp,
+    maintenance: out.maintenance === '1',
+    methods: { cash: out.pay_cash === '1', card: out.pay_card === '1', stcpay: out.pay_stcpay === '1', urpay: out.pay_urpay === '1' },
+  })
+})
+
+app.get('/api/admin/site-settings', adminRequired, (_req, res) => {
+  const out = {}
+  for (const k of Object.keys(SITE_KEYS)) out[k] = db.prepare('SELECT value FROM settings WHERE key = ?').get(k)?.value ?? SITE_KEYS[k]
+  res.json(out)
+})
+
+app.patch('/api/admin/site-settings', adminRequired, (req, res) => {
+  const b = req.body || {}
+  const set = db.prepare('INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value')
+  for (const k of Object.keys(SITE_KEYS)) {
+    if (b[k] === undefined) continue
+    set.run(k, typeof b[k] === 'boolean' ? (b[k] ? '1' : '0') : String(b[k]))
+  }
+  res.json({ ok: true })
+})
+
+/* الأرقام المحجوبة (حجب الجوال) */
+app.get('/api/admin/blocked-phones', adminRequired, (_req, res) => {
+  res.json(db.prepare('SELECT * FROM blocked_phones ORDER BY created_at DESC').all())
+})
+
+app.post('/api/admin/blocked-phones', adminRequired, (req, res) => {
+  const phone = normalizePhone(req.body?.phone)
+  if (!phone) return res.status(400).json({ error: 'invalid_phone' })
+  db.prepare('INSERT OR REPLACE INTO blocked_phones (phone, reason, blocked_by) VALUES (?, ?, ?)')
+    .run(phone, String(req.body?.reason || '').slice(0, 200) || null, 'admin')
+  db.prepare("UPDATE users SET status = 'suspended' WHERE phone = ?").run(phone)
+  res.status(201).json({ ok: true, phone })
+})
+
+app.delete('/api/admin/blocked-phones/:phone', adminRequired, (req, res) => {
+  db.prepare('DELETE FROM blocked_phones WHERE phone = ?').run(decodeURIComponent(req.params.phone))
+  res.json({ ok: true })
+})
+
+const isBlockedPhone = (phone) => !!db.prepare('SELECT 1 FROM blocked_phones WHERE phone = ?').get(phone)
 
 /* ================= نادي الولاء (الإدارة) ================= */
 app.get('/api/admin/loyalty', adminRequired, (req, res) => {

@@ -184,6 +184,13 @@ CREATE TABLE IF NOT EXISTS settings (
   value TEXT
 );
 
+CREATE TABLE IF NOT EXISTS blocked_phones (
+  phone TEXT PRIMARY KEY,
+  reason TEXT,
+  blocked_by TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
 CREATE INDEX IF NOT EXISTS idx_bids_request ON bids(request_id);
 
 CREATE INDEX IF NOT EXISTS idx_requests_status ON requests(status);
@@ -270,5 +277,6 @@ addColumn('experts', 'bio', 'TEXT')
 addColumn('experts', 'invite_code', 'TEXT')
 addColumn('users', 'referred_by', 'INTEGER')
 addColumn('users', 'invite_code', 'TEXT')
+addColumn('admins', 'role', "TEXT DEFAULT 'admin'")
 
 export default db

@@ -62,21 +62,33 @@ function Login({ onDone }) {
 
 const NAV = [
   { key: 'overview', label: 'نظرة عامة', icon: '📊' },
-  { group: 'المستخدمون', items: [
-    { key: 'users:admins', label: 'الإدارة', icon: '🛡️' },
+  { group: 'إعدادات الموقع', icon: '⚙️', items: [
+    { key: 'site', label: 'الإعدادات الرئيسية', icon: '🏠' },
+    { key: 'tech', label: 'الإعدادات الفنية', icon: '🧩' },
+    { sub: 'القسم المالي', icon: '💰', items: [
+      { key: 'gateways', label: 'بوابات الدفع', icon: '💳' },
+      { key: 'bank', label: 'الدفع كاش / الحساب البنكي', icon: '🏦' },
+      { key: 'finance', label: 'المالية والمحافظ', icon: '📈' },
+      { key: 'finance_reports', label: 'التقارير المالية للمحاسب', icon: '🧮' },
+    ]},
+  ]},
+  { group: 'المستخدمون', icon: '👥', items: [
+    { key: 'users:ceo', label: 'المدير التنفيذي', icon: '👑' },
+    { key: 'users:finance', label: 'المشرف المالي', icon: '💰' },
+    { key: 'users:support', label: 'الدعم الفني', icon: '🎧' },
+    { key: 'users:admin', label: 'المشرفون', icon: '🛡️' },
     { key: 'users:experts', label: 'الفنيون', icon: '🧰' },
     { key: 'users:customers', label: 'العملاء', icon: '🧑‍💼' },
-    { key: 'users:support', label: 'الدعم الفني', icon: '🎧' },
+    { key: 'blocked', label: 'الأرقام المحجوبة', icon: '🚫' },
   ]},
-  { group: 'الطلبات', items: [
+  { group: 'الطلبات', icon: '📋', items: [
     { key: 'requests:active', label: 'النشطة', icon: '🟢' },
     { key: 'requests:closed', label: 'المغلقة', icon: '⚪' },
   ]},
   { key: 'verifications', label: 'طلبات التوثيق', icon: '🪪' },
-  { key: 'reports', label: 'التقارير', icon: '📈' },
-  { key: 'finance', label: 'المالية والمحافظ', icon: '💰' },
   { key: 'loyalty', label: 'نادي الولاء', icon: '👑' },
-  { key: 'commissions', label: 'تقرير العمولات', icon: '📈' },
+  { key: 'reports', label: 'التقارير', icon: '📈' },
+  { key: 'commissions', label: 'تقرير العمولات', icon: '💵' },
   { key: 'categories', label: 'التصنيفات', icon: '🗂️' },
   { key: 'ads', label: 'الإعلانات', icon: '📣' },
   { key: 'invoices', label: 'الفواتير', icon: '🧾' },
@@ -86,6 +98,10 @@ const NAV = [
 ]
 
 const TITLES = {
+  site: 'إعدادات الموقع الرئيسية', tech: 'الإعدادات الفنية', gateways: 'بوابات الدفع',
+  bank: 'الدفع كاش / الحساب البنكي', finance_reports: 'التقارير المالية للمحاسب', blocked: 'الأرقام المحجوبة',
+  'users:ceo': 'المدير التنفيذي', 'users:finance': 'المشرف المالي', 'users:support': 'الدعم الفني',
+  'users:admin': 'المشرفون',
   overview: 'نظرة عامة', reports: 'التقارير', ads: 'الإعلانات', invoices: 'الفواتير',
   categories: 'التصنيفات', payments: 'المدفوعات', commissions: 'تقرير العمولات', verifications: 'طلبات التوثيق', finance: 'المالية والمحافظ', loyalty: 'نادي الولاء',
   cities: 'طلبات المدن', backup: 'النسخ الاحتياطي',
@@ -168,13 +184,15 @@ function Overview() {
   )
 }
 
+const ADMIN_TYPES = ['admins', 'ceo', 'finance', 'support', 'admin']
 function UserRow({ u, type, onChanged }) {
+  const isAdminRow = ADMIN_TYPES.includes(type)
   const [edit, setEdit] = useState(false)
   const [form, setForm] = useState(u)
   const active = u.status !== 'suspended'
 
   const save = async () => {
-    if (type === 'admins') await api(`/api/admin/admins/${u.id}`, { method: 'PATCH', body: { name: form.name } })
+    if (isAdminRow) await api(`/api/admin/admins/${u.id}`, { method: 'PATCH', body: { name: form.name, role: form.role } })
     else await api(`/api/admin/users/${u.id}`, {
       method: 'PATCH',
       body: { name: form.name, phone: form.phone, city: form.city, role: form.role, email: form.email },
@@ -185,7 +203,7 @@ function UserRow({ u, type, onChanged }) {
 
   const toggle = async () => {
     const status = active ? 'suspended' : 'active'
-    if (type === 'admins') await api(`/api/admin/admins/${u.id}`, { method: 'PATCH', body: { status } })
+    if (isAdminRow) await api(`/api/admin/admins/${u.id}`, { method: 'PATCH', body: { status } })
     else await api(`/api/admin/users/${u.id}`, { method: 'PATCH', body: { status } })
     onChanged()
   }
@@ -193,7 +211,7 @@ function UserRow({ u, type, onChanged }) {
   const remove = async () => {
     if (!confirm(`حذف ${u.name || u.email}؟`)) return
     try {
-      if (type === 'admins') await api(`/api/admin/admins/${u.id}`, { method: 'DELETE' })
+      if (isAdminRow) await api(`/api/admin/admins/${u.id}`, { method: 'DELETE' })
       else await api(`/api/admin/users/${u.id}`, { method: 'DELETE' })
       onChanged()
     } catch (e) {
@@ -235,7 +253,7 @@ function UserRow({ u, type, onChanged }) {
                 if (!pw) return
                 if (pw.length < 6) return alert('قصيرة جداً')
                 try {
-                  if (type === 'admins') await api(`/api/admin/admins/${u.id}`, { method: 'PATCH', body: { password: pw } })
+                  if (isAdminRow) await api(`/api/admin/admins/${u.id}`, { method: 'PATCH', body: { password: pw } })
                   else await api(`/api/admin/users/${u.id}`, { method: 'PATCH', body: { password: pw } })
                   alert('تم تغيير كلمة المرور ✅')
                 } catch { alert('تعذّر التغيير') }
@@ -244,6 +262,22 @@ function UserRow({ u, type, onChanged }) {
             >
               كلمة المرور
             </button>
+            {!isAdminRow && u.phone && (
+              <button
+                onClick={async () => {
+                  const reason = prompt(`حجب الجوال ${u.phone}؟ اكتب السبب (اختياري):`)
+                  if (reason === null) return
+                  try {
+                    await api('/api/admin/blocked-phones', { method: 'POST', body: { phone: u.phone, reason } })
+                    alert('تم حجب الرقم وإيقاف الحساب 🚫')
+                    onChanged()
+                  } catch { alert('تعذّر الحجب') }
+                }}
+                className="text-[11px] bg-[#11221A] text-white px-2.5 py-1 rounded-lg font-bold"
+              >
+                🚫 حجب الجوال
+              </button>
+            )}
             <button onClick={remove} className="text-[11px] bg-red-50 text-red-500 px-2.5 py-1 rounded-lg font-bold">حذف</button>
           </div>
         </>
@@ -251,7 +285,11 @@ function UserRow({ u, type, onChanged }) {
         <div className="space-y-2">
           <input value={form.name || ''} onChange={(e) => setForm({ ...form, name: e.target.value })}
             placeholder="الاسم" className="w-full px-2 py-1.5 border border-[#E3D9BF] rounded-lg text-sm" />
-          {type !== 'admins' && (
+          {isAdminRow && (
+            <input value={form.role || 'admin'} onChange={(e) => setForm({ ...form, role: e.target.value })}
+              placeholder="الدور" className="w-full px-2 py-1.5 border border-[#E3D9BF] rounded-lg text-sm" />
+          )}
+          {!isAdminRow && (
             <>
               <input value={form.phone || ''} onChange={(e) => setForm({ ...form, phone: e.target.value })}
                 placeholder="الجوال" className="w-full px-2 py-1.5 border border-[#E3D9BF] rounded-lg text-sm" />
@@ -277,6 +315,181 @@ function UserRow({ u, type, onChanged }) {
   )
 }
 
+
+/* ---------- إعدادات الموقع ---------- */
+function useSiteSettings() {
+  const [d, setD] = useState(null)
+  const [msg, setMsg] = useState('')
+  const load = () => api('/api/admin/site-settings').then(setD).catch(() => {})
+  useEffect(() => { load() }, [])
+  const set = (k, v) => setD((x) => ({ ...x, [k]: v }))
+  const save = async () => {
+    try {
+      await api('/api/admin/site-settings', { method: 'PATCH', body: d })
+      setMsg('✅ تم الحفظ')
+      setTimeout(() => setMsg(''), 2500)
+    } catch { setMsg('تعذّر الحفظ') }
+  }
+  return { d, set, save, msg }
+}
+
+const Fld = ({ label, children, hint }) => (
+  <div>
+    <label className="text-[11px] font-bold text-gray-600">{label}</label>
+    {children}
+    {hint && <p className="text-[10px] text-gray-400 mt-0.5">{hint}</p>}
+  </div>
+)
+const inp = 'w-full mt-1 px-3 py-2 border border-[#E3D9BF] rounded-xl text-sm bg-white'
+
+function SiteSettings() {
+  const { d, set, save, msg } = useSiteSettings()
+  if (!d) return <p className="text-gray-500">جارٍ التحميل…</p>
+  return (
+    <div className="space-y-3">
+      <div className="card-lux p-4 space-y-3">
+        <Fld label="اسم الموقع"><input className={inp} value={d.site_name} onChange={(e) => set('site_name', e.target.value)} /></Fld>
+        <Fld label="إيميل الموقع"><input className={inp} dir="ltr" value={d.site_email} onChange={(e) => set('site_email', e.target.value)} /></Fld>
+        <Fld label="رقم الدعم الفني"><input className={inp} dir="ltr" value={d.support_phone} onChange={(e) => set('support_phone', e.target.value)} /></Fld>
+        <Fld label="واتساب الدعم"><input className={inp} dir="ltr" value={d.support_whatsapp} onChange={(e) => set('support_whatsapp', e.target.value)} /></Fld>
+        <Fld label="رابط الموقع"><input className={inp} dir="ltr" value={d.site_url} onChange={(e) => set('site_url', e.target.value)} /></Fld>
+      </div>
+      {msg && <p className="text-[11px] font-bold text-[#006C35]">{msg}</p>}
+      <button onClick={save} className="btn-primary">حفظ إعدادات الموقع</button>
+    </div>
+  )
+}
+
+function TechSettings() {
+  const { d, set, save, msg } = useSiteSettings()
+  if (!d) return <p className="text-gray-500">جارٍ التحميل…</p>
+  const Toggle = ({ k, label, hint }) => (
+    <button onClick={() => set(k, d[k] === '1' ? '0' : '1')} className="card-lux w-full p-3 flex items-center justify-between text-start">
+      <div>
+        <p className="font-bold text-[13px] text-[#11221A]">{label}</p>
+        {hint && <p className="text-[10px] text-gray-500">{hint}</p>}
+      </div>
+      <span className={`w-11 h-6 rounded-full flex items-center px-0.5 ${d[k] === '1' ? 'bg-[#006C35] justify-end' : 'bg-gray-300 justify-start'}`}>
+        <span className="block w-5 h-5 rounded-full bg-white shadow" />
+      </span>
+    </button>
+  )
+  return (
+    <div className="space-y-2">
+      <Toggle k="otp_enabled" label="دخول برمز الجوال (OTP)" hint="إيقافه يمنع الدخول بالرمز" />
+      <Toggle k="signup_open" label="فتح التسجيل الجديد" hint="إيقافه يمنع إنشاء حسابات جديدة" />
+      <Toggle k="maintenance" label="وضع الصيانة" hint="يظهر إشعار صيانة في التطبيق" />
+      <div className="card-lux p-4 space-y-3">
+        <Fld label="مدة المزاد (ثانية)"><input type="number" className={inp} value={d.auction_seconds} onChange={(e) => set('auction_seconds', e.target.value)} /></Fld>
+        <Fld label="مهلة اختيار الفني (ثانية)" hint="بعد انتهاء المزاد"><input type="number" className={inp} value={d.grace_seconds} onChange={(e) => set('grace_seconds', e.target.value)} /></Fld>
+      </div>
+      {msg && <p className="text-[11px] font-bold text-[#006C35]">{msg}</p>}
+      <button onClick={save} className="btn-primary">حفظ الإعدادات الفنية</button>
+    </div>
+  )
+}
+
+function Gateways() {
+  const { d, set, save, msg } = useSiteSettings()
+  if (!d) return <p className="text-gray-500">جارٍ التحميل…</p>
+  const rows = [
+    ['pay_cash', '💵 الدفع كاش عند الاستلام'],
+    ['pay_card', '💳 البطاقة (مدى / فيزا)'],
+    ['pay_stcpay', '📲 STC Pay'],
+    ['pay_urpay', '📱 urpay'],
+  ]
+  return (
+    <div className="space-y-2">
+      <p className="text-[11px] text-gray-500">فعّل أو أوقف كل وسيلة دفع — الموقوفة تختفي من صفحة الدفع.</p>
+      {rows.map(([k, label]) => (
+        <button key={k} onClick={() => set(k, d[k] === '1' ? '0' : '1')} className="card-lux w-full p-3 flex items-center justify-between">
+          <span className="font-bold text-[13px] text-[#11221A]">{label}</span>
+          <span className={`text-[10px] font-extrabold px-2 py-1 rounded-full ${d[k] === '1' ? 'bg-[#EAF4EE] text-[#006C35]' : 'bg-gray-100 text-gray-500'}`}>
+            {d[k] === '1' ? 'مفعّل' : 'موقوف'}
+          </span>
+        </button>
+      ))}
+      {msg && <p className="text-[11px] font-bold text-[#006C35]">{msg}</p>}
+      <button onClick={save} className="btn-primary">حفظ البوابات</button>
+    </div>
+  )
+}
+
+function BankSettings() {
+  const { d, set, save, msg } = useSiteSettings()
+  if (!d) return <p className="text-gray-500">جارٍ التحميل…</p>
+  return (
+    <div className="space-y-3">
+      <div className="card-lux p-4 space-y-3">
+        <p className="font-extrabold text-sm text-[#11221A]">🏦 حساب المنصة للتحويلات</p>
+        <Fld label="اسم البنك"><input className={inp} value={d.bank_name} onChange={(e) => set('bank_name', e.target.value)} placeholder="مثال: مصرف الراجحي" /></Fld>
+        <Fld label="رقم الآيبان"><input className={inp} dir="ltr" value={d.bank_iban} onChange={(e) => set('bank_iban', e.target.value.toUpperCase())} placeholder="SA0000000000000000000000" /></Fld>
+        <Fld label="اسم المستفيد"><input className={inp} value={d.bank_account_name} onChange={(e) => set('bank_account_name', e.target.value)} /></Fld>
+        <p className="text-[10px] text-gray-500">تظهر هذه البيانات للعميل عند اختيار الدفع كاش/تحويل.</p>
+      </div>
+      {msg && <p className="text-[11px] font-bold text-[#006C35]">{msg}</p>}
+      <button onClick={save} className="btn-primary">حفظ بيانات الحساب</button>
+    </div>
+  )
+}
+
+function FinanceReports() {
+  const open = (t) => window.open(`/admin/finance/report?type=${t}`, '_blank')
+  return (
+    <div className="space-y-3">
+      <div className="card-lux p-4 space-y-2">
+        <p className="font-extrabold text-sm text-[#11221A]">🧮 تقارير المحاسب المالي</p>
+        <p className="text-[11px] text-gray-500">كل تقرير يفتح صفحة قابلة للطباعة/PDF فيها شعار الموقع ورقم التقرير وأرقام الفنيين.</p>
+        <div className="grid grid-cols-2 gap-2 pt-1">
+          {[['daily', 'تقرير يومي'], ['weekly', 'تقرير أسبوعي'], ['monthly', 'تقرير شهري'], ['yearly', 'تقرير سنوي']].map(([k, l]) => (
+            <button key={k} onClick={() => open(k)} className="bg-[#006C35] text-white py-2.5 rounded-xl text-xs font-bold">🖨️ {l}</button>
+          ))}
+        </div>
+      </div>
+      <div className="card-lux p-4">
+        <p className="font-extrabold text-sm text-[#11221A]">🔁 تحويلات الفنيين (أسبوعية)</p>
+        <p className="text-[11px] text-gray-500 mt-1">جدول السبت → الجمعة مع زر تحويل لكل فني موجود في «المالية والمحافظ».</p>
+        <p className="text-[10px] text-[#8a6d13] mt-1">يبقى مستحق الفني محجوزاً 7 أيام بعد إكمال الطلب قبل أن يصبح قابلاً للتحويل.</p>
+      </div>
+    </div>
+  )
+}
+
+function Blocked() {
+  const [rows, setRows] = useState([])
+  const [phone, setPhone] = useState('')
+  const [reason, setReason] = useState('')
+  const load = () => api('/api/admin/blocked-phones').then(setRows).catch(() => {})
+  useEffect(load, [])
+  const add = async () => {
+    try {
+      await api('/api/admin/blocked-phones', { method: 'POST', body: { phone, reason } })
+      setPhone(''); setReason(''); load()
+    } catch { alert('رقم غير صحيح') }
+  }
+  return (
+    <div className="space-y-2">
+      <div className="card-lux p-3 space-y-2">
+        <p className="text-[11px] font-bold text-gray-600">حجب رقم جوال (يمنع التسجيل والدخول بهذا الرقم)</p>
+        <input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="05XXXXXXXX" dir="ltr" className={inp} />
+        <input value={reason} onChange={(e) => setReason(e.target.value)} placeholder="السبب (اختياري)" className={inp} />
+        <button onClick={add} className="btn-primary">🚫 حجب الرقم</button>
+      </div>
+      {rows.map((r) => (
+        <div key={r.phone} className="card-lux p-3 flex items-center justify-between gap-2">
+          <div>
+            <p className="font-bold text-sm" dir="ltr">{r.phone}</p>
+            <p className="text-[10px] text-gray-500">{r.reason || 'بدون سبب'} · {String(r.created_at).slice(0, 16)}</p>
+          </div>
+          <button onClick={async () => { await api(`/api/admin/blocked-phones/${encodeURIComponent(r.phone)}`, { method: 'DELETE' }); load() }}
+            className="text-[11px] font-bold text-red-500 bg-red-50 px-2.5 py-1 rounded-lg">رفع الحجب</button>
+        </div>
+      ))}
+      {rows.length === 0 && <p className="text-sm text-gray-500">ما فيه أرقام محجوبة.</p>}
+    </div>
+  )
+}
+
 function Users({ type }) {
   const [rows, setRows] = useState([])
   const [addOpen, setAddOpen] = useState(false)
@@ -284,8 +497,11 @@ function Users({ type }) {
   const [err, setErr] = useState('')
 
   const roleKey = type === 'customers' ? 'customer' : type === 'experts' ? 'expert' : type
+  const isAdminType = ['ceo', 'finance', 'support', 'admin', 'admins'].includes(type)
   const load = () => {
-    const path = type === 'admins' ? '/api/admin/admins' : `/api/admin/users?role=${roleKey}`
+    const path = isAdminType
+      ? `/api/admin/admins${type === 'admins' ? '' : `?role=${type}`}`
+      : `/api/admin/users?role=${roleKey}`
     api(path).then(setRows).catch(() => {})
   }
   useEffect(load, [type])
@@ -294,7 +510,11 @@ function Users({ type }) {
     e.preventDefault()
     setErr('')
     try {
-      await api('/api/admin/users', { method: 'POST', body: { ...nf, role: roleKey } })
+      if (isAdminType) {
+        await api('/api/admin/admins', { method: 'POST', body: { ...nf, role: type === 'admins' ? 'admin' : type } })
+      } else {
+        await api('/api/admin/users', { method: 'POST', body: { ...nf, role: roleKey } })
+      }
       setAddOpen(false)
       setNf({ email: '', password: '', name: '', phone: '', city: '' })
       load()
@@ -311,7 +531,7 @@ function Users({ type }) {
     e.preventDefault()
     setErr('')
     try {
-      await api('/api/admin/admins', { method: 'POST', body: nf })
+      await api('/api/admin/admins', { method: 'POST', body: { ...nf, role: isAdminType && type !== 'admins' ? type : 'admin' } })
       setAddOpen(false)
       setNf({ email: '', password: '', name: '' })
       load()
@@ -322,7 +542,7 @@ function Users({ type }) {
 
   return (
     <div className="space-y-2">
-      {type !== 'admins' && (
+      {!isAdminType && (
         <div className="mb-2">
           {!addOpen ? (
             <button onClick={() => setAddOpen(true)} className="btn-primary">
@@ -348,10 +568,12 @@ function Users({ type }) {
         </div>
       )}
 
-      {type === 'admins' && (
+      {isAdminType && (
         <div className="mb-2">
           {!addOpen ? (
-            <button onClick={() => setAddOpen(true)} className="btn-primary">+ إضافة مدير</button>
+            <button onClick={() => setAddOpen(true)} className="btn-primary">
+              + إضافة {{ ceo: 'مدير تنفيذي', finance: 'مشرف مالي', support: 'دعم فني', admin: 'مشرف' }[type] || 'مدير'}
+            </button>
           ) : (
             <form onSubmit={addAdmin} className="card-lux p-3 space-y-2">
               <input placeholder="الاسم" value={nf.name} onChange={(e) => setNf({ ...nf, name: e.target.value })}
@@ -1176,12 +1398,22 @@ function Loyalty() {
 
   return (
     <div className="space-y-3">
-      <div className="rounded-xl bg-gradient-to-l from-[#11221A] to-[#1d3a2a] text-white p-3">
-        <p className="text-xs opacity-70">نادي الولاء — برنامج ولاء العملاء</p>
-        <p className="text-[11px] opacity-90 mt-1">
-          كل {d.settings.target} عضو نشط = {d.settings.bonus} ر.س رصيد (يُستخدم في طلبات الفنيين فقط) · صلاحية {d.settings.valid_days} يوم
-          · مكافأة الفني {d.settings.expert_target} فني = {d.settings.expert_bonus} ر.س
-        </p>
+      <div className="rounded-2xl p-4 border-2 border-[#C9A227]/40" style={{ background: 'linear-gradient(135deg,#4A0A1E 0%,#7A1230 55%,#3A0817 100%)' }}>
+        <p className="text-white font-extrabold text-base tracking-wide">👑 نادي الولاء</p>
+        <div className="mt-2 space-y-1.5">
+          <p className="text-white font-bold text-[13px] leading-6 border-b border-white/20 pb-1.5">
+            • كل {d.settings.target} عضو نشط = {d.settings.bonus} نقطة
+          </p>
+          <p className="text-white font-bold text-[13px] leading-6 border-b border-white/20 pb-1.5">
+            • كل نقطة = 1 ريال تُستخدم في طلبات الفنيين فقط
+          </p>
+          <p className="text-white font-bold text-[13px] leading-6 border-b border-white/20 pb-1.5">
+            • صلاحية النقاط {d.settings.valid_days} يوم (الأقدم ينتهي أولاً)
+          </p>
+          <p className="text-white font-bold text-[13px] leading-6">
+            • مكافأة الفني: {d.settings.expert_target} فني = {d.settings.expert_bonus} نقطة
+          </p>
+        </div>
       </div>
 
       <div className="grid grid-cols-2 gap-2">
@@ -1647,6 +1879,8 @@ function Backup() {
 function Shell({ onLogout }) {
   const [open, setOpen] = useState(false)
   const [section, setSection] = useState('overview')
+  const [collapsed, setCollapsed] = useState({})
+  const [menuOpen, setMenuOpen] = useState(false)
   const navigate = useNavigate()
 
   const renderSection = () => {
@@ -1658,6 +1892,12 @@ function Shell({ onLogout }) {
       case 'ads': return <Ads />
       case 'invoices': return <Invoices />
       case 'categories': return <Categories />
+      case 'site': return <SiteSettings />
+      case 'tech': return <TechSettings />
+      case 'gateways': return <Gateways />
+      case 'bank': return <BankSettings />
+      case 'finance_reports': return <FinanceReports />
+      case 'blocked': return <Blocked />
       case 'loyalty': return <Loyalty />
       case 'finance': return <Finance />
       case 'commissions': return <Commissions />
@@ -1693,14 +1933,42 @@ function Shell({ onLogout }) {
             <nav className="space-y-1 flex-1">
               {NAV.map((item) =>
                 item.group ? (
-                  <div key={item.group} className="pt-2">
-                    <p className="px-3 py-1 text-[11px] font-bold text-gray-400">{item.group}</p>
-                    {item.items.map((s) => (
-                      <button key={s.key} onClick={() => { setSection(s.key); setOpen(false) }}
-                        className={`w-full text-start px-6 py-2 rounded-xl text-sm font-semibold ${section === s.key ? 'bg-[#E9F5EE] text-[#006C35]' : 'text-gray-600 hover:bg-gray-50'}`}>
-                        <span className="me-2">{s.icon}</span>{s.label}
-                      </button>
-                    ))}
+                  <div key={item.group} className="pt-1">
+                    <button
+                      onClick={() => setCollapsed((c) => ({ ...c, [item.group]: !c[item.group] }))}
+                      className="w-full flex items-center justify-between px-3 py-2 rounded-xl text-[13px] font-extrabold text-[#11221A] bg-[#FBF9F2] border border-[#F0E9D8]"
+                    >
+                      <span><span className="me-2">{item.icon}</span>{item.group}</span>
+                      <span className={`text-[10px] transition ${collapsed[item.group] ? '' : 'rotate-180'}`}>▾</span>
+                    </button>
+                    {!collapsed[item.group] && (
+                      <div className="mt-1 space-y-0.5">
+                        {item.items.map((s) =>
+                          s.items ? (
+                            <div key={s.sub}>
+                              <button
+                                onClick={() => setCollapsed((c) => ({ ...c, [s.sub]: !c[s.sub] }))}
+                                className="w-full flex items-center justify-between px-6 py-1.5 rounded-lg text-[12px] font-bold text-gray-600"
+                              >
+                                <span><span className="me-1.5">{s.icon}</span>{s.sub}</span>
+                                <span className={`text-[9px] ${collapsed[s.sub] ? '' : 'rotate-180'}`}>▾</span>
+                              </button>
+                              {!collapsed[s.sub] && s.items.map((x) => (
+                                <button key={x.key} onClick={() => { setSection(x.key); setOpen(false) }}
+                                  className={`w-full text-start px-9 py-1.5 rounded-lg text-[12px] font-semibold ${section === x.key ? 'bg-[#E9F5EE] text-[#006C35]' : 'text-gray-500 hover:bg-gray-50'}`}>
+                                  <span className="me-1.5">{x.icon}</span>{x.label}
+                                </button>
+                              ))}
+                            </div>
+                          ) : (
+                            <button key={s.key} onClick={() => { setSection(s.key); setOpen(false) }}
+                              className={`w-full text-start px-6 py-1.5 rounded-lg text-[12.5px] font-semibold ${section === s.key ? 'bg-[#E9F5EE] text-[#006C35]' : 'text-gray-600 hover:bg-gray-50'}`}>
+                              <span className="me-1.5">{s.icon}</span>{s.label}
+                            </button>
+                          ),
+                        )}
+                      </div>
+                    )}
                   </div>
                 ) : (
                   <button key={item.key} onClick={() => { setSection(item.key); setOpen(false) }}

@@ -14,6 +14,10 @@ const titleKeys = {
 }
 
 export default function Header() {
+  const [siteName, setSiteName] = useState('')
+  useEffect(() => {
+    fetch('/api/site-config').then((r) => r.json()).then((d) => { if (d?.site_name) setSiteName(d.site_name) }).catch(() => {})
+  }, [])
 
   const { pathname } = useLocation()
   const { t, lang, toggleLang } = useLang()
@@ -71,7 +75,7 @@ export default function Header() {
       <div className="px-3 py-2.5 flex items-center gap-2">
         <Link to="/" className="flex items-center gap-1.5 shrink-0">
           <img src="/logo-mark.png" alt="مهنتي" className="h-11 w-auto object-contain" />
-          <span className="font-extrabold text-[15px] text-[#11221A]">{t('app.name')}</span>
+          <span className="font-extrabold text-[15px] text-[#11221A]">{siteName || t('app.name')}</span>
         </Link>
 
         <nav className="hidden md:flex items-center gap-1 flex-1 justify-center">

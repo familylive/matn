@@ -34,14 +34,18 @@ export default function LoyaltyCard() {
           <span className="text-[10px] text-gray-500">صلاحية الرصيد {d.valid_days} يوم</span>
         </div>
 
-        <div className="mt-3 rounded-xl bg-gradient-to-l from-[#11221A] to-[#1d3a2a] text-white p-3 flex items-center justify-between">
+        <div
+          className="mt-3 rounded-2xl p-4 border-2 border-[#C9A227]/40 flex items-center justify-between"
+          style={{ background: 'linear-gradient(135deg,#4A0A1E 0%,#7A1230 55%,#3A0817 100%)' }}
+        >
           <div>
-            <p className="text-[10px] opacity-70">رصيدك في نادي الولاء</p>
-            <p className="text-2xl font-extrabold">{money(d.balance)} <span className="text-xs font-normal">ر.س</span></p>
+            <p className="text-[11px] text-white/80 font-bold">رصيدك في نادي الولاء</p>
+            <p className="text-3xl font-extrabold text-white leading-tight">{money(d.balance)}</p>
+            <p className="text-[10px] text-white/80 font-bold">نقطة</p>
           </div>
-          <div className="text-[10px] text-end opacity-80 leading-4">
-            <p>يُستخدم في طلبات</p>
-            <p>الفنيين فقط</p>
+          <div className="text-[11px] text-white font-bold text-end leading-6 border-s border-white/25 ps-3">
+            <p>1 نقطة = 1 ريال</p>
+            <p>لطلبات الفنيين فقط</p>
           </div>
         </div>
         {d.expiring_soon?.length > 0 && (
@@ -62,9 +66,17 @@ export default function LoyaltyCard() {
         )}
 
         <div className="mt-3 pt-3 border-t border-[#F0E9D8]">
-          <p className="text-[11px] text-gray-600 leading-5">
-            كل ما دعوت <b>{d.target} شخص</b> وسجّلوا بكودك وكانوا نشطين → <b>{d.bonus} ر.س</b> رصيد في حسابك.
-          </p>
+          <div className="rounded-xl p-3" style={{ background: 'linear-gradient(135deg,#4A0A1E 0%,#7A1230 60%,#3A0817 100%)' }}>
+            <p className="text-white font-bold text-[12px] leading-6 border-b border-white/20 pb-1">
+              • كل {d.target} عضو نشط = {d.bonus} نقطة
+            </p>
+            <p className="text-white font-bold text-[12px] leading-6 border-b border-white/20 py-1">
+              • كل نقطة = 1 ريال في طلبات الفنيين
+            </p>
+            <p className="text-white font-bold text-[12px] leading-6 pt-1">
+              • صلاحية النقاط {d.valid_days} يوم — الأقدم ينتهي أولاً
+            </p>
+          </div>
           <div className="mt-2 flex items-center gap-2">
             <div className="flex-1 bg-[#11221A] text-white rounded-xl px-3 py-2.5 text-center font-extrabold tracking-widest text-sm" dir="ltr">
               {d.code}
