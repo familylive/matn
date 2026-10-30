@@ -2121,6 +2121,7 @@ function applyBackup(tables, files) {
     backfillNumbers()
     normalizePhones()
     seedBots()
+    try { backfillInviteCodes() } catch (e) { console.error('INVITE_BACKFILL_FAIL', e.message) }
     if (files && typeof files === 'object') {
       for (const [name, b64] of Object.entries(files)) {
         if (typeof b64 !== 'string') continue
@@ -2263,6 +2264,7 @@ async function autoRestoreOnBoot() {
     backfillNumbers()
     normalizePhones()
     seedBots()
+    try { backfillInviteCodes() } catch (e) { console.error('INVITE_BACKFILL_FAIL', e.message) }
     console.log(`AUTORESTORE_OK rows=${restored} snapshot=${snap.taken_at || ''}`)
   } catch (e) {
     console.error('AUTORESTORE_FAIL', e.message)
