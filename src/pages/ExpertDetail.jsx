@@ -46,7 +46,43 @@ export default function ExpertDetail() {
   useEffect(() => {
     fetch(`/api/experts/${id}/reviews`).then((r) => r.json()).then(setReviews).catch(() => {})
   }, [id])
-  const expert = state?.expert || experts.find((e) => String(e.id) === String(id))
+  const [apiExpert, setApiExpert] = useState(null)
+  const [loadingExpert, setLoadingExpert] = useState(true)
+
+  useEffect(() => {
+    let alive = true
+    fetch(`/api/experts/${id}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((row) => {
+        if (!alive || !row) return
+        setApiExpert({
+          id: row.id,
+          personName: row.name_ar || row.name,
+          jobName: row.job,
+          location: row.city,
+          hourlyRate: row.rate,
+          rating: row.rating,
+          reviews: row.reviews_count,
+          image: row.image,
+          hasCar: !!row.has_car,
+          experience: row.experience,
+          skills: Array.isArray(row.skills) ? row.skills : [],
+          city: row.city,
+          name: row.name_ar || row.name,
+          name_ar: row.name_ar,
+          job: row.job,
+        })
+      })
+      .catch(() => {})
+      .finally(() => { if (alive) setLoadingExpert(false) })
+    return () => { alive = false }
+  }, [id])
+
+  const expert = state?.expert || apiExpert || experts.find((e) => String(e.id) === String(id))
+
+  if (!expert && loadingExpert) {
+    return <div className="min-h-screen grid place-items-center text-gray-500">جارٍ التحميل…</div>
+  }
 
   if (!expert) {
     return (
