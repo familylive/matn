@@ -184,6 +184,42 @@ function Overview() {
   )
 }
 
+
+const PERM_LABELS = {
+  site: 'إعدادات الموقع', finance: 'المالية والمحافظ', loyalty: 'نادي الولاء', users: 'المستخدمون',
+  requests: 'الطلبات', verifications: 'التوثيق', categories: 'التصنيفات', ads: 'الإعلانات',
+  invoices: 'الفواتير', payments: 'المدفوعات', backup: 'النسخ الاحتياطي', reports: 'التقارير',
+}
+const ROLE_DEFAULTS = {
+  ceo: Object.keys(PERM_LABELS),
+  finance: ['finance', 'reports', 'loyalty', 'invoices', 'payments'],
+  support: ['users', 'requests', 'verifications', 'categories'],
+  admin: Object.keys(PERM_LABELS),
+}
+
+function PermPicker({ value = [], onChange, role }) {
+  const applyRole = (r) => onChange(ROLE_DEFAULTS[r] || [])
+  return (
+    <div className="rounded-xl border border-[#E3D9BF] bg-[#FBF9F2] p-2.5">
+      <div className="flex items-center justify-between">
+        <p className="text-[11px] font-extrabold text-[#11221A]">🔐 الصلاحيات المسندة</p>
+        <button type="button" onClick={() => applyRole(role)} className="text-[10px] font-bold text-[#006C35]">صلاحيات الدور الافتراضية</button>
+      </div>
+      <div className="grid grid-cols-2 gap-1 mt-1.5">
+        {Object.entries(PERM_LABELS).map(([k, l]) => {
+          const on = value.includes(k)
+          return (
+            <label key={k} className={`flex items-center gap-1.5 text-[11px] px-2 py-1 rounded-lg border cursor-pointer ${on ? 'bg-[#EAF4EE] border-[#CFE6D8] text-[#006C35] font-bold' : 'bg-white border-[#EADFC8] text-gray-600'}`}>
+              <input type="checkbox" checked={on} onChange={() => onChange(on ? value.filter((x) => x !== k) : [...value, k])} className="w-3.5 h-3.5 accent-[#006C35]" />
+              {l}
+            </label>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
 const ADMIN_TYPES = ['admins', 'ceo', 'finance', 'support', 'admin']
 function UserRow({ u, type, onChanged }) {
   const isAdminRow = ADMIN_TYPES.includes(type)
@@ -192,7 +228,7 @@ function UserRow({ u, type, onChanged }) {
   const active = u.status !== 'suspended'
 
   const save = async () => {
-    if (isAdminRow) await api(`/api/admin/admins/${u.id}`, { method: 'PATCH', body: { name: form.name, role: form.role } })
+    if (isAdminRow) await api(`/api/admin/admins/${u.id}`, { method: 'PATCH', body: { name: form.name, role: form.role, perms: form.perms } })
     else await api(`/api/admin/users/${u.id}`, {
       method: 'PATCH',
       body: { name: form.name, phone: form.phone, city: form.city, role: form.role, email: form.email },
@@ -285,6 +321,9 @@ function UserRow({ u, type, onChanged }) {
         <div className="space-y-2">
           <input value={form.name || ''} onChange={(e) => setForm({ ...form, name: e.target.value })}
             placeholder="الاسم" className="w-full px-2 py-1.5 border border-[#E3D9BF] rounded-lg text-sm" />
+          {isAdminRow && (
+            <PermPicker value={form.perms || []} onChange={(v) => setForm({ ...form, perms: v })} role={form.role || 'admin'} />
+          )}
           {isAdminRow && (
             <input value={form.role || 'admin'} onChange={(e) => setForm({ ...form, role: e.target.value })}
               placeholder="الدور" className="w-full px-2 py-1.5 border border-[#E3D9BF] rounded-lg text-sm" />
@@ -494,6 +533,7 @@ function Users({ type }) {
   const [rows, setRows] = useState([])
   const [addOpen, setAddOpen] = useState(false)
   const [nf, setNf] = useState({ email: '', password: '', name: '', phone: '', city: '' })
+  const [perms, setPerms] = useState([])
   const [err, setErr] = useState('')
 
   const roleKey = type === 'customers' ? 'customer' : type === 'experts' ? 'expert' : type
@@ -531,7 +571,7 @@ function Users({ type }) {
     e.preventDefault()
     setErr('')
     try {
-      await api('/api/admin/admins', { method: 'POST', body: { ...nf, role: isAdminType && type !== 'admins' ? type : 'admin' } })
+      await api('/api/admin/admins', { method: 'POST', body: { ...nf, role: isAdminType && type !== 'admins' ? type : 'admin', perms } })
       setAddOpen(false)
       setNf({ email: '', password: '', name: '' })
       load()
@@ -571,7 +611,7 @@ function Users({ type }) {
       {isAdminType && (
         <div className="mb-2">
           {!addOpen ? (
-            <button onClick={() => setAddOpen(true)} className="btn-primary">
+            <button onClick={() => { setPerms(ROLE_DEFAULTS[type === 'admins' ? 'admin' : type] || []); setAddOpen(true) }} className="btn-primary">
               + إضافة {{ ceo: 'مدير تنفيذي', finance: 'مشرف مالي', support: 'دعم فني', admin: 'مشرف' }[type] || 'مدير'}
             </button>
           ) : (
@@ -582,6 +622,7 @@ function Users({ type }) {
                 className="w-full px-2 py-1.5 border border-[#E3D9BF] rounded-lg text-sm" />
               <input placeholder="كلمة المرور" type="text" required value={nf.password} onChange={(e) => setNf({ ...nf, password: e.target.value })}
                 className="w-full px-2 py-1.5 border border-[#E3D9BF] rounded-lg text-sm" />
+              <PermPicker value={perms} onChange={setPerms} role={type === 'admins' ? 'admin' : type} />
               {err && <p className="text-xs text-red-500">{err}</p>}
               <div className="flex gap-2">
                 <button className="flex-1 bg-[#006C35] text-white py-1.5 rounded-lg text-sm font-bold">حفظ</button>
@@ -1373,6 +1414,85 @@ function Verifications() {
 
 
 
+
+function LoyaltySettings({ onSaved }) {
+  const [open, setOpen] = useState(false)
+  const [f, setF] = useState(null)
+  const [msg, setMsg] = useState('')
+  useEffect(() => {
+    if (open && !f) api('/api/admin/loyalty/settings').then(setF).catch(() => {})
+  }, [open])
+  const set = (k, v) => setF((x) => ({ ...x, [k]: v }))
+  const save = async () => {
+    try {
+      await api('/api/admin/loyalty/settings', { method: 'PATCH', body: f })
+      setMsg('✅ تم الحفظ')
+      setTimeout(() => setMsg(''), 2500)
+      onSaved && onSaved()
+    } catch { setMsg('تعذّر الحفظ') }
+  }
+  const num = 'w-full mt-1 px-3 py-2 border border-[#E3D9BF] rounded-xl text-sm bg-white text-center'
+
+  return (
+    <div className="card-lux p-3">
+      <button onClick={() => setOpen((v) => !v)} className="w-full flex items-center justify-between">
+        <span className="font-extrabold text-sm text-[#11221A]">⚙️ إعدادات نادي الولاء</span>
+        <span className="text-[11px] text-[#006C35] font-bold">{open ? 'إخفاء' : 'تعديل'}</span>
+      </button>
+      {open && f && (
+        <div className="mt-3 space-y-3">
+          <div>
+            <p className="text-[11px] font-bold text-gray-600">💰 سعر النقطة (ريال)</p>
+            <input type="number" step="0.01" value={f.point_value} onChange={(e) => set('point_value', e.target.value)} className={num} />
+          </div>
+
+          <div className="rounded-xl border border-[#CFE6D8] bg-[#EAF4EE] p-3 space-y-2">
+            <p className="text-[12px] font-extrabold text-[#006C35]">🧑‍💼 قسم العميل</p>
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <p className="text-[10px] text-gray-600">عدد الأشخاص المطلوب</p>
+                <input type="number" value={f.customer_target} onChange={(e) => set('customer_target', e.target.value)} className={num} />
+              </div>
+              <div>
+                <p className="text-[10px] text-gray-600">عدد النقاط الممنوحة</p>
+                <input type="number" value={f.customer_points} onChange={(e) => set('customer_points', e.target.value)} className={num} />
+              </div>
+            </div>
+            <p className="text-[10px] text-[#006C35] font-bold">
+              = {(Number(f.customer_points || 0) * Number(f.point_value || 0)).toFixed(2)} ريال رصيد للعميل
+            </p>
+          </div>
+
+          <div className="rounded-xl border border-[#F0E9D8] bg-[#FBF9F2] p-3 space-y-2">
+            <p className="text-[12px] font-extrabold text-[#8a6d13]">🧰 قسم الفني</p>
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <p className="text-[10px] text-gray-600">عدد الفنيين المطلوب</p>
+                <input type="number" value={f.expert_target} onChange={(e) => set('expert_target', e.target.value)} className={num} />
+              </div>
+              <div>
+                <p className="text-[10px] text-gray-600">عدد النقاط الممنوحة</p>
+                <input type="number" value={f.expert_points} onChange={(e) => set('expert_points', e.target.value)} className={num} />
+              </div>
+            </div>
+            <p className="text-[10px] text-[#8a6d13] font-bold">
+              = {(Number(f.expert_points || 0) * Number(f.point_value || 0)).toFixed(2)} ريال في محفظة الفني
+            </p>
+          </div>
+
+          <div>
+            <p className="text-[11px] font-bold text-gray-600">⏳ صلاحية النقاط (أيام)</p>
+            <input type="number" value={f.valid_days} onChange={(e) => set('valid_days', e.target.value)} className={num} />
+          </div>
+
+          {msg && <p className="text-[11px] font-bold text-[#006C35]">{msg}</p>}
+          <button onClick={save} className="btn-primary">حفظ إعدادات النادي</button>
+        </div>
+      )}
+    </div>
+  )
+}
+
 function Loyalty() {
   const [d, setD] = useState(null)
   const [q, setQ] = useState('')
@@ -1415,6 +1535,8 @@ function Loyalty() {
           </p>
         </div>
       </div>
+
+      <LoyaltySettings onSaved={() => load(q)} />
 
       <div className="grid grid-cols-2 gap-2">
         <div className="card-lux p-3 text-center"><p className="text-[10px] text-gray-500">رصيد قائم</p><p className="text-xl font-extrabold text-[#8a6d13]">{money(d.totals.balance)}</p></div>
@@ -1881,6 +2003,29 @@ function Shell({ onLogout }) {
   const [section, setSection] = useState('overview')
   const [collapsed, setCollapsed] = useState({})
   const [menuOpen, setMenuOpen] = useState(false)
+  const [perms, setPerms] = useState(null)
+  useEffect(() => {
+    api('/api/admin/me').then((r) => setPerms(Array.isArray(r.perms) ? r.perms : null)).catch(() => setPerms(null))
+  }, [])
+
+  const permOf = (key) => {
+    if (key.startsWith('users:') || key === 'blocked') return 'users'
+    if (key.startsWith('requests:')) return 'requests'
+    if (key === 'finance' || key === 'finance_reports') return 'finance'
+    if (key === 'site' || key === 'tech' || key === 'gateways' || key === 'bank') return 'site'
+    if (key === 'reports' || key === 'commissions') return 'reports'
+    return key
+  }
+  const can = (key) => !perms || perms.includes(permOf(key))
+  const navItems = NAV
+    .map((item) => {
+      if (!item.group) return can(item.key) ? item : null
+      const items = (item.items || [])
+        .map((s) => (s.items ? { ...s, items: s.items.filter((x) => can(x.key)) } : (can(s.key) ? s : null)))
+        .filter(Boolean)
+      return items.length ? { ...item, items } : null
+    })
+    .filter(Boolean)
   const navigate = useNavigate()
 
   const renderSection = () => {
@@ -1931,7 +2076,7 @@ function Shell({ onLogout }) {
             </div>
 
             <nav className="space-y-1 flex-1">
-              {NAV.map((item) =>
+              {navItems.map((item) =>
                 item.group ? (
                   <div key={item.group} className="pt-1">
                     <button

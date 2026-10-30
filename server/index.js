@@ -10,7 +10,7 @@ import multer from 'multer'
 import { db } from './db.js'
 import { signToken, verifyToken, authRequired } from './auth.js'
 import { cities } from './cities.js'
-import { seedAdmin, checkAdmin, adminToken, adminRequired, hashPassword } from './admin.js'
+import { seedAdmin, checkAdmin, adminToken, adminRequired, adminCan, adminRecord, ALL_PERMS, DEFAULT_PERMS, hashPassword } from './admin.js'
 import { seedBots, onNewRequest, resumeBots } from './bots.js'
 import { hashPassword as hashUserPassword, verifyPassword, findByIdentifier, normalizePhone } from './accounts.js'
 import { issueInvoice, autoSettle, getSetting as getSet } from './flow.js'
@@ -22,6 +22,7 @@ import {
   ensureUserCode, backfillUserCodes, inviterUserOf, creditBalance, listCredits,
   spendCredit, clientInvites, checkLoyaltyBonus, expireCredits,
   LOYALTY_TARGET, LOYALTY_BONUS, CREDIT_DAYS, fixSettings,
+  POINT_VALUE, CUSTOMER_POINTS, EXPERT_POINTS,
 } from './wallet.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
@@ -1270,7 +1271,16 @@ app.get('/api/ads', (_req, res) => res.json(activeAds()))
 app.post('/api/admin/login', (req, res) => {
   const admin = checkAdmin(req.body?.email, req.body?.password)
   if (!admin) return res.status(401).json({ error: 'invalid_credentials' })
-  res.json({ token: adminToken(admin), admin: { id: admin.id, email: admin.email } })
+  const rec = adminRecord(admin.id)
+  res.json({
+    token: adminToken(admin),
+    admin: { id: admin.id, email: admin.email, name: rec?.name || null, role: rec?.role || 'admin', perms: rec?.perms || ALL_PERMS },
+  })
+})
+
+app.get('/api/admin/me', adminRequired, (req, res) => {
+  const a = adminRecord(req.adminId)
+  res.json({ ...a, all_perms: ALL_PERMS, defaults: DEFAULT_PERMS })
 })
 
 app.get('/api/admin/overview', adminRequired, (_req, res) => {
@@ -1349,7 +1359,7 @@ app.get('/api/admin/users', adminRequired, (req, res) => {
   res.json(rows.map(publicUser))
 })
 
-app.post('/api/admin/users', adminRequired, (req, res) => {
+app.post('/api/admin/users', adminRequired, adminCan('users'), (req, res) => {
   const b = req.body || {}
   const name = String(b.name || '').trim()
   const phone = normalizePhone(b.phone)
@@ -1378,7 +1388,7 @@ app.post('/api/admin/users', adminRequired, (req, res) => {
   res.status(201).json(publicUser(db.prepare('SELECT * FROM users WHERE id = ?').get(userId)))
 })
 
-app.patch('/api/admin/users/:id', adminRequired, (req, res) => {
+app.patch('/api/admin/users/:id', adminRequired, adminCan('users'), (req, res) => {
   const u = db.prepare('SELECT * FROM users WHERE id = ?').get(req.params.id)
   if (!u) return res.status(404).json({ error: 'not_found' })
   const b = req.body || {}
@@ -1391,7 +1401,7 @@ app.patch('/api/admin/users/:id', adminRequired, (req, res) => {
   res.json(publicUser(db.prepare('SELECT * FROM users WHERE id = ?').get(u.id)))
 })
 
-app.delete('/api/admin/users/:id', adminRequired, (req, res) => {
+app.delete('/api/admin/users/:id', adminRequired, adminCan('users'), (req, res) => {
   const u = db.prepare('SELECT * FROM users WHERE id = ?').get(req.params.id)
   if (!u) return res.status(404).json({ error: 'not_found' })
   db.prepare('DELETE FROM bids WHERE expert_id IN (SELECT id FROM experts WHERE user_id = ?)').run(u.id)
@@ -1404,9 +1414,13 @@ app.delete('/api/admin/users/:id', adminRequired, (req, res) => {
 app.get('/api/admin/admins', adminRequired, (req, res) => {
   const role = String(req.query.role || '')
   const rows = role
-    ? db.prepare('SELECT id, email, name, status, role, id AS created_at FROM admins WHERE COALESCE(role,\'admin\') = ? ORDER BY id').all(role)
-    : db.prepare('SELECT id, email, name, status, role, id AS created_at FROM admins ORDER BY id').all()
-  res.json(rows)
+    ? db.prepare('SELECT id, email, name, status, role, perms, id AS created_at FROM admins WHERE COALESCE(role,\'admin\') = ? ORDER BY id').all(role)
+    : db.prepare('SELECT id, email, name, status, role, perms, id AS created_at FROM admins ORDER BY id').all()
+  res.json(rows.map((r) => {
+    let perms = null
+    try { perms = r.perms ? JSON.parse(r.perms) : null } catch {}
+    return { ...r, perms: Array.isArray(perms) ? perms : (DEFAULT_PERMS[r.role || 'admin'] || ALL_PERMS) }
+  }))
 })
 
 app.post('/api/admin/admins', adminRequired, (req, res) => {
@@ -1415,10 +1429,12 @@ app.post('/api/admin/admins', adminRequired, (req, res) => {
   if (!email || !password) return res.status(400).json({ error: 'email_and_password_required' })
   const exists = db.prepare('SELECT id FROM admins WHERE email = ?').get(email.trim().toLowerCase())
   if (exists) return res.status(409).json({ error: 'email_exists' })
-  const info = db.prepare('INSERT INTO admins (email, password_hash, name, role) VALUES (?, ?, ?, ?)').run(
-    email.trim().toLowerCase(), hashPassword(password), name || null, role,
+  const permsIn = Array.isArray(req.body?.perms) ? req.body.perms.filter((p) => ALL_PERMS.includes(p)) : null
+  const perms = permsIn && permsIn.length ? permsIn : (DEFAULT_PERMS[role] || ALL_PERMS)
+  const info = db.prepare('INSERT INTO admins (email, password_hash, name, role, perms) VALUES (?, ?, ?, ?, ?)').run(
+    email.trim().toLowerCase(), hashPassword(password), name || null, role, JSON.stringify(perms),
   )
-  res.status(201).json({ id: info.lastInsertRowid, email, name, status: 'active', role })
+  res.status(201).json({ id: info.lastInsertRowid, email, name, status: 'active', role, perms })
 })
 
 app.patch('/api/admin/admins/:id', adminRequired, (req, res) => {
@@ -1428,6 +1444,10 @@ app.patch('/api/admin/admins/:id', adminRequired, (req, res) => {
   if (status) db.prepare('UPDATE admins SET status = ? WHERE id = ?').run(status, a.id)
   if (role && ['ceo', 'finance', 'support', 'admin'].includes(role))
     db.prepare('UPDATE admins SET role = ? WHERE id = ?').run(role, a.id)
+  if (Array.isArray(req.body?.perms)) {
+    const perms = req.body.perms.filter((p) => ALL_PERMS.includes(p))
+    db.prepare('UPDATE admins SET perms = ? WHERE id = ?').run(JSON.stringify(perms), a.id)
+  }
   if (name !== undefined) db.prepare('UPDATE admins SET name = ? WHERE id = ?').run(name, a.id)
   if (password) db.prepare('UPDATE admins SET password_hash = ? WHERE id = ?').run(hashPassword(String(password)), a.id)
   res.json(db.prepare('SELECT id, email, name, status FROM admins WHERE id = ?').get(a.id))
@@ -1892,6 +1912,8 @@ app.get('/api/me/loyalty', authRequired, (req, res) => {
     valid_days: CREDIT_DAYS(),
     target: LOYALTY_TARGET(),
     bonus: LOYALTY_BONUS(),
+    point_value: POINT_VALUE(),
+    points: CUSTOMER_POINTS(),
     qualified,
     total: list.length,
     bonus_paid: !!db.prepare('SELECT 1 FROM credits WHERE user_id = ? AND ref = ?').get(req.userId, `loyalty-${req.userId}`),
@@ -1941,7 +1963,7 @@ app.get('/api/admin/site-settings', adminRequired, (_req, res) => {
   res.json(out)
 })
 
-app.patch('/api/admin/site-settings', adminRequired, (req, res) => {
+app.patch('/api/admin/site-settings', adminRequired, adminCan('site'), (req, res) => {
   const b = req.body || {}
   const set = db.prepare('INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value')
   for (const k of Object.keys(SITE_KEYS)) {
@@ -1956,7 +1978,7 @@ app.get('/api/admin/blocked-phones', adminRequired, (_req, res) => {
   res.json(db.prepare('SELECT * FROM blocked_phones ORDER BY created_at DESC').all())
 })
 
-app.post('/api/admin/blocked-phones', adminRequired, (req, res) => {
+app.post('/api/admin/blocked-phones', adminRequired, adminCan('users'), (req, res) => {
   const phone = normalizePhone(req.body?.phone)
   if (!phone) return res.status(400).json({ error: 'invalid_phone' })
   db.prepare('INSERT OR REPLACE INTO blocked_phones (phone, reason, blocked_by) VALUES (?, ?, ?)')
@@ -1965,7 +1987,7 @@ app.post('/api/admin/blocked-phones', adminRequired, (req, res) => {
   res.status(201).json({ ok: true, phone })
 })
 
-app.delete('/api/admin/blocked-phones/:phone', adminRequired, (req, res) => {
+app.delete('/api/admin/blocked-phones/:phone', adminRequired, adminCan('users'), (req, res) => {
   db.prepare('DELETE FROM blocked_phones WHERE phone = ?').run(decodeURIComponent(req.params.phone))
   res.json({ ok: true })
 })
@@ -1973,7 +1995,38 @@ app.delete('/api/admin/blocked-phones/:phone', adminRequired, (req, res) => {
 const isBlockedPhone = (phone) => !!db.prepare('SELECT 1 FROM blocked_phones WHERE phone = ?').get(phone)
 
 /* ================= نادي الولاء (الإدارة) ================= */
-app.get('/api/admin/loyalty', adminRequired, (req, res) => {
+app.get('/api/admin/loyalty/settings', adminRequired, adminCan('loyalty'), (req, res) => {
+  res.json({
+    point_value: POINT_VALUE(),
+    customer_target: LOYALTY_TARGET(),
+    customer_points: CUSTOMER_POINTS(),
+    expert_target: REF_TARGET(),
+    expert_points: EXPERT_POINTS(),
+    valid_days: CREDIT_DAYS(),
+  })
+})
+
+app.patch('/api/admin/loyalty/settings', adminRequired, adminCan('loyalty'), (req, res) => {
+  const b = req.body || {}
+  const set = db.prepare('INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value')
+  const map = {
+    point_value: 'loyalty_point_value',
+    customer_target: 'loyalty_customer_target',
+    customer_points: 'loyalty_customer_points',
+    expert_target: 'loyalty_expert_target',
+    expert_points: 'loyalty_expert_points',
+    valid_days: 'credit_valid_days',
+  }
+  for (const [k, key] of Object.entries(map)) {
+    if (b[k] === undefined) continue
+    const n = Number(b[k])
+    if (!Number.isFinite(n) || n < 0) continue
+    set.run(key, String(n))
+  }
+  res.json({ ok: true })
+})
+
+app.get('/api/admin/loyalty', adminRequired, adminCan('loyalty'), (req, res) => {
   try { expireCredits() } catch {}
   const q = String(req.query.q || '').trim()
   let users = db
@@ -2027,7 +2080,11 @@ app.get('/api/admin/loyalty', adminRequired, (req, res) => {
 
   const tot = (k) => money(rows.reduce((a, r) => a + Number(r[k] || 0), 0))
   res.json({
-    settings: { target: LOYALTY_TARGET(), bonus: LOYALTY_BONUS(), valid_days: CREDIT_DAYS(), expert_target: REF_TARGET(), expert_bonus: REF_BONUS() },
+    settings: {
+      target: LOYALTY_TARGET(), bonus: LOYALTY_BONUS(), valid_days: CREDIT_DAYS(),
+      expert_target: REF_TARGET(), expert_bonus: REF_BONUS(),
+      point_value: POINT_VALUE(), customer_points: CUSTOMER_POINTS(), expert_points: EXPERT_POINTS(),
+    },
     totals: {
       members: rows.length,
       with_balance: rows.filter((r) => r.balance > 0.009).length,
@@ -2042,7 +2099,7 @@ app.get('/api/admin/loyalty', adminRequired, (req, res) => {
   })
 })
 
-app.post('/api/admin/loyalty/grant', adminRequired, (req, res) => {
+app.post('/api/admin/loyalty/grant', adminRequired, adminCan('loyalty'), (req, res) => {
   const userId = Number(req.body?.user_id)
   const amount = Number(req.body?.amount)
   const note = String(req.body?.note || 'منحة من الإدارة').slice(0, 120)
@@ -2109,7 +2166,7 @@ function financeRows(from, to) {
   })
 }
 
-app.get('/api/admin/finance', adminRequired, (req, res) => {
+app.get('/api/admin/finance', adminRequired, adminCan('finance'), (req, res) => {
   const wr = weekRange()
   const from = String(req.query.from || wr.from).slice(0, 10)
   const to = String(req.query.to || wr.to).slice(0, 10)
@@ -2147,7 +2204,7 @@ app.get('/api/admin/finance', adminRequired, (req, res) => {
   })
 })
 
-app.post('/api/admin/finance/pay/:expertId', adminRequired, (req, res) => {
+app.post('/api/admin/finance/pay/:expertId', adminRequired, adminCan('finance'), (req, res) => {
   const e = db.prepare('SELECT * FROM experts WHERE id = ?').get(req.params.expertId)
   if (!e) return res.status(404).json({ error: 'not_found' })
   const s = walletSummary(e.id)
@@ -2166,7 +2223,7 @@ app.post('/api/admin/finance/pay/:expertId', adminRequired, (req, res) => {
   res.json({ ok: true, id: info.lastInsertRowid, amount, wallet: walletSummary(e.id) })
 })
 
-app.post('/api/admin/finance/withdrawals/:id', adminRequired, (req, res) => {
+app.post('/api/admin/finance/withdrawals/:id', adminRequired, adminCan('finance'), (req, res) => {
   const w = db.prepare('SELECT * FROM withdrawals WHERE id = ?').get(req.params.id)
   if (!w) return res.status(404).json({ error: 'not_found' })
   const status = String(req.body?.status || '')
@@ -2185,7 +2242,7 @@ app.post('/api/admin/finance/withdrawals/:id', adminRequired, (req, res) => {
 })
 
 /* تقارير مالية قابلة للطباعة: يومي / أسبوعي / شهري / سنوي */
-app.get('/api/admin/finance/report', adminRequired, (req, res) => {
+app.get('/api/admin/finance/report', adminRequired, adminCan('finance'), (req, res) => {
   const kind = ['daily', 'weekly', 'monthly', 'yearly'].includes(String(req.query.type)) ? req.query.type : 'weekly'
   const now = new Date()
   const iso = (d) => d.toISOString().slice(0, 10)
@@ -2462,7 +2519,7 @@ function applyBackup(tables, files) {
   }
 }
 
-app.post('/api/admin/restore', adminRequired, (req, res) => {
+app.post('/api/admin/restore', adminRequired, adminCan('backup'), (req, res) => {
   const tables = req.body?.tables
   if (!tables || typeof tables !== 'object') return res.status(400).json({ error: 'invalid_backup' })
   const r = applyBackup(tables, req.body?.files)
@@ -2477,7 +2534,7 @@ const cfCfg = () => ({
   ns: process.env.CF_KV_NS,
 })
 
-app.get('/api/admin/snapshots', adminRequired, async (_req, res) => {
+app.get('/api/admin/snapshots', adminRequired, adminCan('backup'), async (_req, res) => {
   const { token, acc, ns } = cfCfg()
   if (!token || !acc || !ns) return res.json({ enabled: false, items: [] })
   try {

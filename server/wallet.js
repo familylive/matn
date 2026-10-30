@@ -59,8 +59,15 @@ const setSetting = (k, v) =>
   db.prepare('INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value').run(k, String(v))
 
 export const HOLD_DAYS = () => Number(setting('wallet_hold_days', 7))
-export const REF_BONUS = () => Number(setting('referral_bonus', 50))
-export const REF_TARGET = () => Math.max(20, Number(setting('referral_target', 20)) || 20)
+/* سعر النقطة + نقاط كل طرف (قابلة للتعديل من اللوحة) */
+export const POINT_VALUE = () => {
+  const v = Number(setting('loyalty_point_value', 1))
+  return v > 0 ? v : 1
+}
+export const CUSTOMER_POINTS = () => Number(setting('loyalty_customer_points', setting('loyalty_bonus', 50)))
+export const EXPERT_POINTS = () => Number(setting('loyalty_expert_points', setting('referral_bonus', 50)))
+export const REF_BONUS = () => money(EXPERT_POINTS() * POINT_VALUE())
+export const REF_TARGET = () => Math.max(1, Number(setting('loyalty_expert_target', setting('referral_target', 20))) || 20)
 
 for (const [k, v] of [
   ['wallet_hold_days', 7],
@@ -75,15 +82,19 @@ for (const [k, v] of [
 // ترقية هدف الفنيين من 10 إلى 20 (طلب عبدالله 2026-10-30)
 export function fixSettings() {
   if (Number(setting('referral_target', 20)) === 10) setSetting('referral_target', 20)
-  for (const [k, v] of [['loyalty_target', 30], ['loyalty_bonus', 50], ['credit_valid_days', 365]]) {
+  for (const [k, v] of [
+    ['loyalty_target', 30], ['loyalty_bonus', 50], ['credit_valid_days', 365],
+    ['loyalty_point_value', 1], ['loyalty_customer_target', 30], ['loyalty_customer_points', 50],
+    ['loyalty_expert_target', 20], ['loyalty_expert_points', 50],
+  ]) {
     if (setting(k, null) == null) setSetting(k, v)
   }
 }
 fixSettings()
 
-export const LOYALTY_TARGET = () => Number(setting('loyalty_target', 30))
+export const LOYALTY_TARGET = () => Math.max(1, Number(setting('loyalty_customer_target', setting('loyalty_target', 30))) || 30)
 export const REQUIRE_REAL_ORDER = () => setting('loyalty_require_order', '1') === '1'
-export const LOYALTY_BONUS = () => Number(setting('loyalty_bonus', 50))
+export const LOYALTY_BONUS = () => money(CUSTOMER_POINTS() * POINT_VALUE())
 export const CREDIT_DAYS = () => Number(setting('credit_valid_days', 365))
 
 /* ---------------- أكواد الدعوة ---------------- */
