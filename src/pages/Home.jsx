@@ -98,7 +98,7 @@ export default function Home() {
           <span className="text-3xl">🗺️</span>
           <span className="flex-1">
             <span className="block font-extrabold text-[15px] text-[#0B0A08]">فنيون قريبون منك الآن</span>
-            <span className="block text-[11px] text-[#8a6d13] font-bold">خلال ٥ كم · اطلب مباشرة بدون مزاد</span>
+            <span className="block text-[11px] text-[#8a6d13] font-bold">خلال ١٠ كم · اطلب مباشرة بدون مزاد</span>
           </span>
           <span className="text-[#006C35] font-extrabold">←</span>
         </button>

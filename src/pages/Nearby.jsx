@@ -52,7 +52,7 @@ export default function Nearby() {
     if (!pos) return
     setStatus('loading')
     const load = () =>
-      fetch(`/api/experts/nearby?lat=${pos.lat}&lng=${pos.lng}&km=5`)
+      fetch(`/api/experts/nearby?lat=${pos.lat}&lng=${pos.lng}&km=10`)
         .then((r) => r.json())
         .then((d) => {
           setList(Array.isArray(d) ? d : [])
@@ -67,11 +67,11 @@ export default function Nearby() {
   // الخريطة
   useEffect(() => {
     if (!pos || !el.current || mapRef.current) return
-    const map = L.map(el.current, { zoomControl: true, attributionControl: false }).setView([pos.lat, pos.lng], 14)
+    const map = L.map(el.current, { zoomControl: true, attributionControl: false }).setView([pos.lat, pos.lng], 13)
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 }).addTo(map)
     mapRef.current = map
 
-    L.circle([pos.lat, pos.lng], { radius: 5000, color: '#006C35', weight: 1, fillColor: '#006C35', fillOpacity: 0.06 }).addTo(map)
+    L.circle([pos.lat, pos.lng], { radius: 10000, color: '#006C35', weight: 1, fillColor: '#006C35', fillOpacity: 0.06 }).addTo(map)
     L.marker([pos.lat, pos.lng], { icon: meIcon }).addTo(map).bindPopup('موقعك')
     layerRef.current = L.layerGroup().addTo(map)
     setTimeout(() => map.invalidateSize(), 250)
@@ -114,7 +114,7 @@ export default function Nearby() {
   return (
     <div className="px-4 py-4 mx-auto w-full max-w-3xl lg:max-w-5xl">
       <h2 className="text-xl font-extrabold text-[#11221A]">🗺️ الفنيون القريبون الآن</h2>
-      <p className="text-gray-500 text-xs mt-1">خلال ٥ كم من موقعك · اطلب أحدهم مباشرة بدون مزاد</p>
+      <p className="text-gray-500 text-xs mt-1">خلال ١٠ كم من موقعك · اطلب أحدهم مباشرة بدون مزاد</p>
 
       <div ref={el} className="mt-3 rounded-2xl overflow-hidden border border-[#EADFC8]" style={{ height: 300 }} />
 
@@ -123,7 +123,7 @@ export default function Nearby() {
         {status === 'denied' && '⛔ اسمح بالوصول للموقع عشان نعرض الفنيين القريبين.'}
         {status === 'unsupported' && 'جهازك ما يدعم تحديد الموقع.'}
         {status === 'loading' && '🔍 نبحث عن فنيين متصلين قريبين…'}
-        {status === 'ok' && `${list.length} فني متصل داخل ٥ كم`}
+        {status === 'ok' && `${list.length} فني متصل داخل ١٠ كم`}
       </div>
 
       <div className="grid gap-3 md:grid-cols-2 mt-4">
@@ -150,7 +150,7 @@ export default function Nearby() {
 
       {status === 'ok' && list.length === 0 && (
         <div className="card-lux p-5 text-center mt-3">
-          <p className="text-sm text-gray-600">ما فيه فني متصل داخل ٥ كم حالياً.</p>
+          <p className="text-sm text-gray-600">ما فيه فني متصل داخل ١٠ كم حالياً.</p>
           <button onClick={() => navigate('/requests')} className="mt-3 text-sm font-bold text-[#006C35] underline">
             انشر طلب مزاد عام ←
           </button>

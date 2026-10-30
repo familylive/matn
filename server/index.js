@@ -447,7 +447,7 @@ app.patch('/api/me/expert', authRequired, (req, res) => {
 app.get('/api/experts/nearby', (req, res) => {
   const lat = Number(req.query.lat)
   const lng = Number(req.query.lng)
-  const km = Math.min(Number(req.query.km) || 5, 20)
+  const km = Math.min(Number(req.query.km) || 10, 30)
   if (!lat || !lng) return res.status(400).json({ error: 'location_required' })
 
   const rows = db
