@@ -68,7 +68,9 @@ seedServices(db)
 backfillInviteCodes()
 backfillUserCodes()
 releaseDue()
+setTimeout(() => { try { notifyExpiringCredits() } catch (e) { console.error('CREDIT_NOTICE_FAIL', e.message) } }, 5000)
 setInterval(() => { try { releaseDue() } catch (e) { console.error('RELEASE_FAIL', e.message) } }, 30 * 60 * 1000)
+setInterval(() => { try { notifyExpiringCredits() } catch (e) { console.error('CREDIT_NOTICE_FAIL', e.message) } }, 6 * 60 * 60 * 1000)
 
 function backfillNumbers() {
   const rows = db.prepare('SELECT id FROM requests WHERE number IS NULL ORDER BY id').all()
@@ -671,6 +673,47 @@ function sanitizeTrades(input, fallbackJob) {
 
 
 /* ---------- المحفظة والدعوات ---------- */
+/** إشعار العميل قبل انتهاء رصيد نادي الولاء بأسبوع */
+function notifyExpiringCredits() {
+  try {
+    expireCredits()
+    const rows = db
+      .prepare(
+        `SELECT c.id, c.user_id, c.remaining, c.expires_at, u.name
+         FROM credits c JOIN users u ON u.id = c.user_id
+         WHERE c.remaining > 0
+           AND COALESCE(c.expiry_notified,0) = 0
+           AND c.expires_at > datetime('now')
+           AND c.expires_at <= datetime('now', '+7 days')`,
+      )
+      .all()
+    if (!rows.length) return 0
+    const mark = db.prepare('UPDATE credits SET expiry_notified = 1 WHERE id = ?')
+    for (const r of rows) {
+      const days = Math.max(1, Math.ceil((new Date(String(r.expires_at).replace(' ', 'T') + 'Z').getTime() - Date.now()) / 864e5))
+      const body = `${Number(r.remaining).toFixed(2)} ر.س تنتهي بعد ${days} يوم (${String(r.expires_at).slice(0, 10)}) — استخدمها في طلب فني`
+      io.to(`user:${r.user_id}`).emit('notify', {
+        type: 'credit',
+        title: '⏳ رصيدك في نادي الولاء قرب ينتهي',
+        body,
+        url: '/profile',
+      })
+      pushToUsers([r.user_id], {
+        title: '⏳ رصيد نادي الولاء قرب ينتهي',
+        body,
+        url: '/profile',
+        tag: 'credit-' + r.id,
+      }).catch(() => {})
+      mark.run(r.id)
+    }
+    console.log('credit expiry notices:', rows.length)
+    return rows.length
+  } catch (e) {
+    console.error('CREDIT_NOTICE_FAIL', e.message)
+    return 0
+  }
+}
+
 function refreshLoyaltyBonus(inviterUserId) {
   try {
     if (!inviterUserId) return
@@ -1808,6 +1851,16 @@ app.get('/api/me/referrals', authRequired, (req, res) => {
 })
 
 /* ================= نادي الولاء (العملاء) ================= */
+function listExpiring(userId) {
+  return db
+    .prepare(
+      `SELECT id, remaining, expires_at FROM credits
+       WHERE user_id = ? AND remaining > 0 AND expires_at > datetime('now')
+         AND expires_at <= datetime('now','+7 days') ORDER BY expires_at ASC`,
+    )
+    .all(userId)
+}
+
 app.get('/api/me/loyalty', authRequired, (req, res) => {
   const code = ensureUserCode(req.userId)
   const list = clientInvites(req.userId)
@@ -1824,6 +1877,7 @@ app.get('/api/me/loyalty', authRequired, (req, res) => {
     total: list.length,
     bonus_paid: !!db.prepare('SELECT 1 FROM credits WHERE user_id = ? AND ref = ?').get(req.userId, `loyalty-${req.userId}`),
     invited: list.slice(0, 50).map((i) => ({ name: i.name, qualified: i.qualified, created_at: i.created_at })),
+    expiring_soon: listExpiring(req.userId),
     expert_target: REF_TARGET(),
     expert_bonus: REF_BONUS(),
   })

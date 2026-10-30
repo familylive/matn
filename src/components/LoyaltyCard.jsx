@@ -44,6 +44,17 @@ export default function LoyaltyCard() {
             <p>الفنيين فقط</p>
           </div>
         </div>
+        {d.expiring_soon?.length > 0 && (
+          <div className="mt-2 rounded-xl border border-[#E9D9A6] bg-[#FBF5E3] px-3 py-2">
+            <p className="text-[11px] font-extrabold text-[#8a6d13]">⏳ رصيدك قرب ينتهي</p>
+            {d.expiring_soon.map((c) => (
+              <p key={c.id} className="text-[10px] text-[#8a6d13]/90">
+                {Number(c.remaining).toFixed(2)} ر.س تنتهي في {String(c.expires_at).slice(0, 10)} — استخدمها في طلب فني قبل تفوتك.
+              </p>
+            ))}
+          </div>
+        )}
+
         {nextExpiry && (
           <p className="text-[10px] text-gray-500 mt-1">
             ⏳ أقرب رصيد ينتهي: {String(nextExpiry.expires_at).slice(0, 10)} — المنتهي يُصفّر تلقائياً (الأقدم أولاً).

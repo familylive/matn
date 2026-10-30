@@ -48,6 +48,12 @@ CREATE TABLE IF NOT EXISTS finance_reports (
 );
 `)
 
+// عمود إشعار انتهاء الرصيد (بعد إنشاء الجداول مباشرة)
+try {
+  const cols = db.prepare('PRAGMA table_info(credits)').all().map((c) => c.name)
+  if (!cols.includes('expiry_notified')) db.exec('ALTER TABLE credits ADD COLUMN expiry_notified INTEGER DEFAULT 0')
+} catch (e) { console.error('CREDITS_ALTER_FAIL', e.message) }
+
 const setting = (k, d) => db.prepare('SELECT value FROM settings WHERE key = ?').get(k)?.value ?? d
 const setSetting = (k, v) =>
   db.prepare('INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value').run(k, String(v))
