@@ -1,3 +1,4 @@
+import VerifiedBadge from '../components/VerifiedBadge.jsx'
 import { useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { api } from '../lib/api.js'
@@ -257,8 +258,14 @@ export default function Requests() {
                 {statusAr[r.status] || r.status}
               </span>
             </div>
-            <p className="text-sm text-gray-600 mt-1">
-              {t(`cat.${r.category}`, r.category)}{r.city ? ` · ${r.city}` : ''}
+            <p className="text-sm text-gray-600 mt-1 flex items-center gap-1.5 flex-wrap">
+              <span>{t(`cat.${r.category}`, r.category)}{r.city ? ` · ${r.city}` : ''}</span>
+              {!!r.owner_name && (
+                <span className="inline-flex items-center gap-1 text-[11px] text-[#11221A] bg-[#FBF9F2] border border-[#EADFC8] px-1.5 py-0.5 rounded-full">
+                  {r.owner_name}
+                  {!!r.owner_verified && <VerifiedBadge size={13} title="عميل موثوق" />}
+                </span>
+              )}
             </p>
             <div className="flex items-center gap-3 mt-2 text-xs">
               <span className="text-gray-500">{r.bids_count} {t('req.bids')}</span>

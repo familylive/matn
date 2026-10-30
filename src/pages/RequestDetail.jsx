@@ -1,3 +1,4 @@
+import VerifiedBadge from '../components/VerifiedBadge.jsx'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { io } from 'socket.io-client'
@@ -391,16 +392,32 @@ export default function RequestDetail() {
           <span className="text-xs bg-gray-100 text-gray-600 px-2 py-1 rounded-full">{t(`req.status.${data.status}`, data.status)}</span>
           {data.city && <span className="text-sm text-gray-500">📍 {data.city}</span>}
           {data.lat && data.lng && (
-            <a
-              href={`https://maps.google.com/?q=${data.lat},${data.lng}`}
-              target="_blank"
-              rel="noreferrer"
-              className="text-xs text-[#006C35] font-bold underline"
-            >
-              عرض الموقع على الخريطة
-            </a>
+            <a href={`https://maps.google.com/?q=${data.lat},${data.lng}`} target="_blank" rel="noreferrer"
+              className="text-xs text-[#006C35] font-bold underline">الخريطة</a>
           )}
         </div>
+
+        {!!data.owner_name && (
+          <div className="flex items-center gap-2 mb-3 bg-[#FBF9F2] border border-[#EADFC8] rounded-xl px-3 py-2">
+            <span className="w-9 h-9 rounded-full bg-[#006C35] text-white grid place-items-center text-[13px] font-extrabold overflow-hidden">
+              {data.owner_avatar
+                ? <img src={data.owner_avatar} alt="" className="w-full h-full object-cover" />
+                : (data.owner_name || '؟').slice(0, 1)}
+            </span>
+            <div className="min-w-0 flex-1">
+              <p className="text-[12px] font-bold text-[#11221A] flex items-center gap-1.5">
+                <span className="truncate">{data.owner_name}</span>
+                {!!data.owner_verified && <VerifiedBadge size={18} title="عميل موثوق" />}
+                {!!data.owner_verified && (
+                  <span className="text-[9px] font-extrabold text-[#006C35] bg-[#EAF4EE] border border-[#CFE6D8] px-1.5 py-0.5 rounded-full">عميل موثوق</span>
+                )}
+              </p>
+              <p className="text-[10px] text-gray-500">
+                صاحب الطلب{Number(data.owner_stars) > 0 ? ` · ⭐ ${data.owner_stars} نجمة من ${data.owner_reviews || 0} تقييم` : ''}
+              </p>
+            </div>
+          </div>
+        )}
 
         {data.description && <p className="text-gray-700 mb-3">{data.description}</p>}
 

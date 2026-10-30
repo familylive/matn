@@ -98,6 +98,11 @@ export default function Profile() {
             className={`absolute bottom-1 end-1 w-5 h-5 rounded-full border-2 border-white ${profile.online ? 'bg-green-500' : 'bg-gray-300'}`}
             title={profile.online ? 'متصل الآن' : 'غير متصل'}
           />
+          {!!profile.verified && (
+            <span className="absolute -bottom-1 -start-1 bg-white rounded-full p-0.5 shadow-md ring-1 ring-[#C9A227]/50">
+              <VerifiedBadge size={26} title="عميل موثّق" />
+            </span>
+          )}
         </div>
         <h2 className="text-lg font-extrabold text-[#11221A] mt-2">{profile.name || profile.userName}</h2>
         <div className="flex items-center justify-center gap-2 mt-1">

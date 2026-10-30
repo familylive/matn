@@ -386,6 +386,7 @@ const fullUser = (id) =>
     .prepare(
       `SELECT id, phone, name, city, role, email, nationality, specialty, lat, lng, avatar,
         sound_on, last_seen, created_at, COALESCE(violations,0) AS violations, status,
+        COALESCE(verified,0) AS verified, COALESCE(stars_total,0) AS stars_total, COALESCE(reviews_count,0) AS reviews_count,
         CASE WHEN last_seen IS NOT NULL AND last_seen >= datetime('now', '-2 minutes') THEN 1 ELSE 0 END AS online
        FROM users WHERE id = ?`,
     )
@@ -798,7 +799,9 @@ function haversineKm(aLat, aLng, bLat, bLng) {
 const requestWithBids = (id) => {
   const request = db
     .prepare(
-      `SELECT r.*, u.name AS owner_name FROM requests r JOIN users u ON u.id = r.user_id WHERE r.id = ?`,
+      `SELECT r.*, u.name AS owner_name, u.phone AS owner_phone, u.verified AS owner_verified,
+              u.stars_total AS owner_stars, u.reviews_count AS owner_reviews, u.avatar AS owner_avatar
+       FROM requests r JOIN users u ON u.id = r.user_id WHERE r.id = ?`,
     )
     .get(id)
   if (!request) return null
@@ -852,7 +855,7 @@ app.get('/api/requests', authRequired, (req, res) => {
     const catPh = myCats.map(() => '?').join(',') || "''"
     rows = db
       .prepare(
-        `SELECT r.*, u.name AS owner_name,
+        `SELECT r.*, u.name AS owner_name, u.verified AS owner_verified, u.stars_total AS owner_stars,
           (SELECT COUNT(*) FROM bids b WHERE b.request_id = r.id AND COALESCE(b.status,'active')='active') AS bids_count,
           (SELECT MIN(b.amount) FROM bids b WHERE b.request_id = r.id AND b.expert_id = ?) AS lowest_bid,
           (SELECT amount FROM bids b WHERE b.request_id = r.id AND b.expert_id = ? ORDER BY b.id DESC LIMIT 1) AS my_bid
