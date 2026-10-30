@@ -6,6 +6,7 @@ import { api } from '../lib/api.js'
 import { useAuth } from '../context/AuthContext.jsx'
 import { expertName } from '../i18n/display.js'
 import { useLang } from '../i18n/LanguageContext.jsx'
+import { SAUDI_CITIES, cityByName } from '../data/cities.js'
 
 const meIcon = L.divIcon({
   className: '',
@@ -36,6 +37,7 @@ export default function Nearby() {
   const [form, setForm] = useState({ title: '', description: '' })
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState('')
+  const [city, setCity] = useState('')
 
   // تحديد موقعي
   useEffect(() => {
@@ -120,11 +122,44 @@ export default function Nearby() {
 
       <div className="mt-3 text-xs text-gray-600">
         {status === 'locating' && '📍 جارٍ تحديد موقعك…'}
-        {status === 'denied' && '⛔ اسمح بالوصول للموقع عشان نعرض الفنيين القريبين.'}
+        {status === 'denied' && '⛔ الموقع مقفول — اختر مدينتك بالأسفل أو اسمح بالموقع من إعدادات المتصفح.'}
         {status === 'unsupported' && 'جهازك ما يدعم تحديد الموقع.'}
         {status === 'loading' && '🔍 نبحث عن فنيين متصلين قريبين…'}
         {status === 'ok' && `${list.length} فني متصل داخل ١٠ كم`}
       </div>
+
+      {(status === 'denied' || status === 'unsupported') && (
+        <div className="card-lux p-4 mt-3 space-y-2">
+          <p className="text-xs font-bold text-[#11221A]">📍 اختر مدينتك يدوياً</p>
+          <select
+            value={city}
+            onChange={(e) => {
+              const c = e.target.value
+              setCity(c)
+              const cc = cityByName(c)
+              if (cc) setPos({ lat: cc.lat, lng: cc.lng })
+            }}
+            className="w-full px-3 py-2.5 border border-[#E3D9BF] rounded-xl text-sm bg-white"
+          >
+            <option value="">— اختر مدينة —</option>
+            {SAUDI_CITIES.map((c) => <option key={c.name} value={c.name}>{c.name}</option>)}
+          </select>
+          <button
+            onClick={() => {
+              if (!navigator.geolocation) return
+              setStatus('locating')
+              navigator.geolocation.getCurrentPosition(
+                (p) => setPos({ lat: p.coords.latitude, lng: p.coords.longitude }),
+                () => setStatus('denied'),
+                { enableHighAccuracy: true, timeout: 15000 },
+              )
+            }}
+            className="w-full bg-[#006C35] text-white py-2.5 rounded-xl text-sm font-bold"
+          >
+            جرّب تحديد موقعي مرة ثانية
+          </button>
+        </div>
+      )}
 
       <div className="grid gap-3 md:grid-cols-2 mt-4">
         {list.map((e) => (
