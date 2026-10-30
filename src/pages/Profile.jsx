@@ -7,6 +7,7 @@ import { api, getToken } from '../lib/api.js'
 import { enablePush, testPush, pushSupported } from '../lib/push.js'
 import ExpertWorkspace from '../components/ExpertWorkspace.jsx'
 import WalletCard from '../components/WalletCard.jsx'
+import LoyaltyCard from '../components/LoyaltyCard.jsx'
 
 export default function Profile() {
   const { user, logout, login } = useAuth()
@@ -137,6 +138,8 @@ export default function Profile() {
       )}
 
       {isExpert && <WalletCard />}
+
+      <LoyaltyCard />
 
       {isExpert && myExpert && <ExpertWorkspace expert={myExpert} onChange={setMyExpert} />}
 

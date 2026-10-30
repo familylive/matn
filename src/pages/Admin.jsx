@@ -1205,6 +1205,19 @@ function Finance() {
         <div className="card-lux p-3 text-center"><p className="text-[10px] text-gray-500">طُلب سحبه</p><p className="text-lg font-extrabold text-[#11221A]">{money(t.requested)}</p></div>
       </div>
 
+      <div className="card-lux p-3 space-y-1">
+        <p className="text-sm font-extrabold text-[#11221A]">👑 نادي الولاء (العملاء)</p>
+        <div className="grid grid-cols-3 gap-2 pt-1">
+          <div className="text-center"><p className="text-[10px] text-gray-500">رصيد مستخدم</p><p className="font-extrabold text-[#11221A]">{money(d.credits?.used)}</p></div>
+          <div className="text-center"><p className="text-[10px] text-gray-500">رصيد قائم</p><p className="font-extrabold text-[#8a6d13]">{money(d.credits?.outstanding)}</p></div>
+          <div className="text-center"><p className="text-[10px] text-gray-500">عدد العملاء</p><p className="font-extrabold text-[#006C35]">{d.credits?.users ?? 0}</p></div>
+        </div>
+        <p className="text-[10px] text-gray-500 pt-1">
+          كل {d.settings?.loyalty_target} عضو نشط = {d.settings?.loyalty_bonus} ر.س رصيد · صلاحية {d.settings?.credit_days} يوم ·
+          مكافأة الفني: {d.settings?.referral_target} فني = {d.settings?.referral_bonus} ر.س
+        </p>
+      </div>
+
       <div className="card-lux p-3 space-y-2">
         <p className="text-sm font-extrabold text-[#11221A]">📅 الفترة (السبت → الجمعة)</p>
         <div className="flex gap-2 items-center">

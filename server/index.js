@@ -19,6 +19,9 @@ import {
   ensureInviteCode, backfillInviteCodes, expertByCode, walletSummary, listTx, releaseDue,
   requestWithdrawal, invitesOf, checkReferralBonus, weekRange, money,
   HOLD_DAYS, REF_BONUS, REF_TARGET,
+  ensureUserCode, backfillUserCodes, inviterUserOf, creditBalance, listCredits,
+  spendCredit, clientInvites, checkLoyaltyBonus, expireCredits,
+  LOYALTY_TARGET, LOYALTY_BONUS, CREDIT_DAYS,
 } from './wallet.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
@@ -63,6 +66,7 @@ seedAdmin()
 seedBots()
 seedServices(db)
 backfillInviteCodes()
+backfillUserCodes()
 releaseDue()
 setInterval(() => { try { releaseDue() } catch (e) { console.error('RELEASE_FAIL', e.message) } }, 30 * 60 * 1000)
 
@@ -314,7 +318,7 @@ app.post('/api/auth/signup', (req, res) => {
     )
     .run(phone, name, b.city || null, role, b.email || null, b.nationality || null, b.specialty || null,
       b.lat != null ? Number(b.lat) : null, b.lng != null ? Number(b.lng) : null,
-      username, hashUserPassword(password), expertByCode(b.ref)?.id || null)
+      username, hashUserPassword(password), inviterUserOf(b.ref)?.id || null)
 
   const userId = info.lastInsertRowid
   if (role === 'expert') {
@@ -332,6 +336,8 @@ app.post('/api/auth/signup', (req, res) => {
     if (created) ensureInviteCode(created.id)
   }
 
+  ensureUserCode(userId)
+  if (b.ref) refreshLoyaltyBonus(inviterUserOf(b.ref)?.id)
   res.status(201).json({ ...startSession(userId), user: fullUser(userId) })
 })
 
@@ -665,6 +671,39 @@ function sanitizeTrades(input, fallbackJob) {
 
 
 /* ---------- المحفظة والدعوات ---------- */
+function refreshLoyaltyBonus(inviterUserId) {
+  try {
+    if (!inviterUserId) return
+    const r = checkLoyaltyBonus(inviterUserId)
+    if (r.credited) {
+      io.to(`user:${inviterUserId}`).emit('notify', {
+        type: 'wallet',
+        title: '🎁 مكافأة نادي الولاء',
+        body: `أضفنا ${r.credited} ر.س لرصيدك — ${r.qualified} عضو نشط سجّل بكودك`,
+      })
+    }
+  } catch (e) { console.error('LOYALTY_FAIL', e.message) }
+}
+
+function refreshInviterAll(userId) {
+  try {
+    const u = db.prepare('SELECT referred_by FROM users WHERE id = ?').get(userId)
+    if (!u?.referred_by) return
+    refreshLoyaltyBonus(u.referred_by)
+    const ex = db.prepare('SELECT id FROM experts WHERE user_id = ?').get(u.referred_by)
+    if (ex) {
+      const r = checkReferralBonus(ex.id)
+      if (r.credited) {
+        io.to(`user:${u.referred_by}`).emit('notify', {
+          type: 'wallet',
+          title: '🎁 مكافأة دعوة',
+          body: `وصل ${r.credited} ر.س لمحفظتك — ${r.qualified} فني نشط سجّل بكودك`,
+        })
+      }
+    }
+  } catch (e) { console.error('INVITE_REFRESH_FAIL', e.message) }
+}
+
 function refreshInviterBonus(userId) {
   try {
     const u = db.prepare('SELECT referred_by FROM users WHERE id = ?').get(userId)
@@ -862,6 +901,7 @@ app.post('/api/requests', authRequired, (req, res) => {
       nextNumber,
     )
   const request = requestWithBids(info.lastInsertRowid)
+  refreshInviterAll(req.userId)
   io.emit('request:new', request)
   // 🔔 لافتة «طلب جديد» تروح لفنيّي نفس التخصص فقط (مو للعملاء ولا لباقي الفنيين)
   const notice = {
@@ -910,7 +950,7 @@ app.post('/api/requests/:id/bids', authRequired, (req, res) => {
   const info = db
     .prepare('INSERT INTO bids (request_id, expert_id, amount, note) VALUES (?, ?, ?, ?)')
     .run(request.id, expertId, amount, req.body?.note || null)
-  refreshInviterBonus(req.userId)
+  refreshInviterAll(req.userId)
 
   const bid = db
     .prepare(
@@ -1636,13 +1676,23 @@ app.post('/api/requests/:id/pay', authRequired, (req, res) => {
 
   const bid = db.prepare('SELECT * FROM bids WHERE id = ?').get(request.accepted_bid_id)
   const amount = customerTotal(bid?.amount || 0)
-  const status = method === 'cash' ? 'pending_cash' : 'paid'
+
+  // 🎁 رصيد نادي الولاء — يُستخدم في طلبات الفنيين فقط
+  let creditUsed = 0
+  if (req.body?.use_credit) {
+    const r = spendCredit(req.userId, amount)
+    creditUsed = r.used
+  }
+  const due = money(Math.max(0, amount - creditUsed))
+  const status = due <= 0 ? 'paid' : method === 'cash' ? 'pending_cash' : 'paid'
 
   const info = db
     .prepare('INSERT INTO payments (request_id, method, amount, phone, status, ref) VALUES (?, ?, ?, ?, ?, ?)')
-    .run(request.id, method, amount, phone, status, method === 'card' ? `CARD-${Date.now()}` : null)
+    .run(request.id, creditUsed > 0 && due <= 0 ? 'credit' : method, money(due + 0), phone, status,
+      creditUsed > 0 ? `CREDIT-${creditUsed}-${Date.now()}` : method === 'card' ? `CARD-${Date.now()}` : null)
 
   db.prepare("UPDATE requests SET status = 'assigned' WHERE id = ?").run(request.id)
+  refreshInviterAll(req.userId)
   const updated = requestWithBids(request.id)
   io.to(`request:${request.id}`).emit('request:accepted', updated)
   io.to(`user:${request.user_id}`).emit('notify', {
@@ -1651,7 +1701,12 @@ app.post('/api/requests/:id/pay', authRequired, (req, res) => {
     body: `${amount} ريال`,
     requestId: request.id,
   })
-  res.status(201).json({ ok: true, payment: db.prepare('SELECT * FROM payments WHERE id = ?').get(info.lastInsertRowid), request: updated })
+  res.status(201).json({
+    ok: true,
+    credit_used: creditUsed,
+    payment: db.prepare('SELECT * FROM payments WHERE id = ?').get(info.lastInsertRowid),
+    request: updated,
+  })
 })
 
 app.get('/api/admin/payments', adminRequired, (_req, res) => {
@@ -1752,6 +1807,28 @@ app.get('/api/me/referrals', authRequired, (req, res) => {
   })
 })
 
+/* ================= نادي الولاء (العملاء) ================= */
+app.get('/api/me/loyalty', authRequired, (req, res) => {
+  const code = ensureUserCode(req.userId)
+  const list = clientInvites(req.userId)
+  const qualified = list.filter((i) => i.qualified).length
+  res.json({
+    code,
+    invite_link: `/register?ref=${encodeURIComponent(code || '')}`,
+    balance: creditBalance(req.userId),
+    credits: listCredits(req.userId),
+    valid_days: CREDIT_DAYS(),
+    target: LOYALTY_TARGET(),
+    bonus: LOYALTY_BONUS(),
+    qualified,
+    total: list.length,
+    bonus_paid: !!db.prepare('SELECT 1 FROM credits WHERE user_id = ? AND ref = ?').get(req.userId, `loyalty-${req.userId}`),
+    invited: list.slice(0, 50).map((i) => ({ name: i.name, qualified: i.qualified, created_at: i.created_at })),
+    expert_target: REF_TARGET(),
+    expert_bonus: REF_BONUS(),
+  })
+})
+
 /* ================= المالية (الإدارة) ================= */
 function financeRows(from, to) {
   const experts = db
@@ -1825,7 +1902,16 @@ app.get('/api/admin/finance', adminRequired, (req, res) => {
          ORDER BY CASE w.status WHEN 'requested' THEN 0 ELSE 1 END, w.id DESC LIMIT 100`,
       )
       .all(),
-    settings: { hold_days: HOLD_DAYS(), referral_bonus: REF_BONUS(), referral_target: REF_TARGET() },
+    credits: (() => {
+      expireCredits()
+      const row = db.prepare("SELECT COALESCE(SUM(remaining),0) v, COUNT(DISTINCT user_id) c FROM credits WHERE remaining > 0 AND expires_at > datetime('now')").get()
+      const used = db.prepare("SELECT COALESCE(SUM(amount - remaining),0) v FROM credits").get()
+      return { outstanding: money(row.v), users: row.c, used: money(used.v) }
+    })(),
+    settings: {
+      hold_days: HOLD_DAYS(), referral_bonus: REF_BONUS(), referral_target: REF_TARGET(),
+      loyalty_target: LOYALTY_TARGET(), loyalty_bonus: LOYALTY_BONUS(), credit_days: CREDIT_DAYS(),
+    },
   })
 })
 
@@ -1930,6 +2016,12 @@ app.get('/api/admin/finance/report', adminRequired, (req, res) => {
       invoices_count: invoices.c,
       due_now: money(rows.reduce((a, r) => a + r.available, 0)),
       held_now: money(rows.reduce((a, r) => a + r.pending, 0)),
+      credits_used: money(
+        db.prepare("SELECT COALESCE(SUM(amount - remaining),0) v FROM credits WHERE date(created_at,'+3 hours') BETWEEN ? AND ?").get(from, to).v,
+      ),
+      credits_outstanding: money(
+        db.prepare("SELECT COALESCE(SUM(remaining),0) v FROM credits WHERE remaining > 0 AND expires_at > datetime('now')").get().v,
+      ),
     },
     rows,
   })
@@ -2058,7 +2150,7 @@ app.get('/api/requests/:id/invoices', authRequired, (req, res) => {
 
 /* ---------- نسخ احتياطي ---------- */
 
-const BACKUP_TABLES = ['users', 'experts', 'requests', 'bids', 'reviews', 'invoices', 'ads', 'city_requests', 'categories', 'payments', 'settings', 'wallet_tx', 'withdrawals', 'finance_reports']
+const BACKUP_TABLES = ['users', 'experts', 'requests', 'bids', 'reviews', 'invoices', 'ads', 'city_requests', 'categories', 'payments', 'settings', 'wallet_tx', 'withdrawals', 'credits', 'finance_reports']
 
 const collectUploads = () => {
   const refs = new Set()
@@ -2085,7 +2177,7 @@ app.get('/api/admin/backup', adminRequired, (_req, res) => {
 })
 
 function applyBackup(tables, files) {
-  const order = ['reviews', 'payments', 'bids', 'invoices', 'wallet_tx', 'withdrawals', 'finance_reports', 'requests', 'city_requests', 'ads', 'experts', 'users', 'categories', 'settings'].filter(t => BACKUP_TABLES.includes(t))
+  const order = ['reviews', 'payments', 'bids', 'invoices', 'wallet_tx', 'withdrawals', 'credits', 'finance_reports', 'requests', 'city_requests', 'ads', 'experts', 'users', 'categories', 'settings'].filter(t => BACKUP_TABLES.includes(t))
 
   db.pragma('foreign_keys = OFF')
   try {
@@ -2121,7 +2213,7 @@ function applyBackup(tables, files) {
     backfillNumbers()
     normalizePhones()
     seedBots()
-    try { backfillInviteCodes() } catch (e) { console.error('INVITE_BACKFILL_FAIL', e.message) }
+    try { backfillInviteCodes(); backfillUserCodes() } catch (e) { console.error('INVITE_BACKFILL_FAIL', e.message) }
     if (files && typeof files === 'object') {
       for (const [name, b64] of Object.entries(files)) {
         if (typeof b64 !== 'string') continue
@@ -2241,7 +2333,7 @@ async function autoRestoreOnBoot() {
     const tables = snap?.tables
     if (!tables || typeof tables !== 'object') return console.log('AUTORESTORE: bad snapshot')
 
-    const order = ['users', 'experts', 'categories', 'requests', 'bids', 'payments', 'invoices', 'reviews', 'ads', 'city_requests', 'wallet_tx', 'withdrawals', 'finance_reports']
+    const order = ['users', 'experts', 'categories', 'requests', 'bids', 'payments', 'invoices', 'reviews', 'ads', 'city_requests', 'wallet_tx', 'withdrawals', 'credits', 'finance_reports']
     db.pragma('foreign_keys = OFF')
     let restored = 0
     for (const t of order) {
@@ -2264,7 +2356,7 @@ async function autoRestoreOnBoot() {
     backfillNumbers()
     normalizePhones()
     seedBots()
-    try { backfillInviteCodes() } catch (e) { console.error('INVITE_BACKFILL_FAIL', e.message) }
+    try { backfillInviteCodes(); backfillUserCodes() } catch (e) { console.error('INVITE_BACKFILL_FAIL', e.message) }
     console.log(`AUTORESTORE_OK rows=${restored} snapshot=${snap.taken_at || ''}`)
   } catch (e) {
     console.error('AUTORESTORE_FAIL', e.message)

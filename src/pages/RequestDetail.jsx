@@ -295,10 +295,17 @@ export default function RequestDetail() {
     }
   }
 
+  const [credit, setCredit] = useState(0)
+  useEffect(() => {
+    if (!isOwner) return
+    api.get('/api/me/loyalty').then((l) => setCredit(Number(l.balance) || 0)).catch(() => {})
+  }, [isOwner])
+
   const submitPayment = async () => {
     setPay((p) => ({ ...p, busy: true }))
     try {
-      const r = await api.payRequest(id, { method: pay.method, phone: pay.phone })
+      const r = await api.payRequest(id, { method: pay.method, phone: pay.phone, use_credit: !!pay.useCredit })
+      if (r.credit_used) setPay((p) => ({ ...p, creditUsed: r.credit_used }))
       setData(r.request)
       setPay((p) => ({ ...p, busy: false, done: true }))
     } catch (err) {
@@ -625,6 +632,20 @@ export default function RequestDetail() {
                 <span>الإجمالي المطلوب</span><span>{total} ر.س</span>
               </div>
             </div>
+            {credit > 0 && (
+              <label className="flex items-center gap-2 rounded-xl border border-[#C9A227] bg-[#FBF5E3] px-3 py-2.5 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={!!pay.useCredit}
+                  onChange={(e) => setPay({ ...pay, useCredit: e.target.checked })}
+                  className="w-4 h-4 accent-[#006C35]"
+                />
+                <span className="text-xs font-bold text-[#8a6d13]">
+                  👑 استخدم رصيد نادي الولاء ({Math.min(credit, Number(total) || 0).toFixed(2)} ر.س من {credit.toFixed(2)})
+                </span>
+              </label>
+            )}
+
             <div className="space-y-2">
               {[
                 { k: 'cash', label: '💵 كاش عند الاستلام', desc: 'تدفع للمعلم بعد تنفيذ العمل' },
@@ -653,7 +674,8 @@ export default function RequestDetail() {
             )}
 
             <button onClick={submitPayment} disabled={pay.busy} className="btn-primary">
-              {pay.busy ? 'جارٍ التنفيذ…' : pay.method === 'cash' ? 'تأكيد الطلب (كاش)' : `ادفع ${lowest ?? 0} ريال`}
+              {pay.busy ? 'جارٍ التنفيذ…'
+                : `ادفع ${Math.max(0, Number(total || 0) - (pay.useCredit ? Math.min(credit, Number(total || 0)) : 0)).toFixed(2)} ر.س`}
             </button>
             <div className="rounded-lg bg-[#FBF9F2] border border-[#EADFC8] p-2 text-[11px] text-[#8a6d13] leading-relaxed">
               للفني: {base} − عمولة {fees.expert}% ({expertFee}) = <b>{Math.round((base - expertFee) * 100) / 100} ر.س</b>

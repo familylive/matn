@@ -26,6 +26,18 @@ CREATE TABLE IF NOT EXISTS withdrawals (
   paid_at TEXT
 );
 
+CREATE TABLE IF NOT EXISTS credits (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id INTEGER NOT NULL,
+  amount REAL NOT NULL,
+  remaining REAL NOT NULL,
+  source TEXT,
+  note TEXT,
+  ref TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  expires_at TEXT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS finance_reports (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   code TEXT UNIQUE NOT NULL,
@@ -44,9 +56,22 @@ export const HOLD_DAYS = () => Number(setting('wallet_hold_days', 7))
 export const REF_BONUS = () => Number(setting('referral_bonus', 50))
 export const REF_TARGET = () => Number(setting('referral_target', 10))
 
-for (const [k, v] of [['wallet_hold_days', 7], ['referral_bonus', 50], ['referral_target', 10]]) {
+for (const [k, v] of [
+  ['wallet_hold_days', 7],
+  ['referral_bonus', 50],
+  ['referral_target', 20],
+  ['loyalty_target', 30],
+  ['loyalty_bonus', 50],
+  ['credit_valid_days', 365],
+]) {
   if (setting(k, null) == null) setSetting(k, v)
 }
+// ترقية هدف الفنيين من 10 إلى 20 (طلب عبدالله 2026-10-30)
+if (Number(setting('referral_target', 20)) === 10) setSetting('referral_target', 20)
+
+export const LOYALTY_TARGET = () => Number(setting('loyalty_target', 30))
+export const LOYALTY_BONUS = () => Number(setting('loyalty_bonus', 50))
+export const CREDIT_DAYS = () => Number(setting('credit_valid_days', 365))
 
 /* ---------------- أكواد الدعوة ---------------- */
 const CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
@@ -203,3 +228,124 @@ export function weekRange(date = new Date()) {
 }
 
 export const money = (n) => Math.round(Number(n || 0) * 100) / 100
+
+/* ================= نادي الولاء (رصيد العملاء) ================= */
+export function ensureUserCode(userId) {
+  const u = db.prepare('SELECT id, invite_code FROM users WHERE id = ?').get(userId)
+  if (!u) return null
+  if (u.invite_code) return u.invite_code
+  let code = null
+  for (let i = 0; i < 20; i++) {
+    const c = `CL-${String(userId).padStart(4, '0')}${rand(4)}`
+    if (!db.prepare('SELECT 1 FROM users WHERE invite_code = ?').get(c)) { code = c; break }
+  }
+  if (!code) code = `CL-${userId}-${Date.now().toString(36).toUpperCase()}`
+  db.prepare('UPDATE users SET invite_code = ? WHERE id = ?').run(code, userId)
+  return code
+}
+
+export function backfillUserCodes() {
+  const rows = db.prepare('SELECT id FROM users WHERE invite_code IS NULL').all()
+  for (const r of rows) ensureUserCode(r.id)
+  if (rows.length) console.log('user codes backfilled:', rows.length)
+}
+
+export const userByCode = (code) =>
+  code ? db.prepare('SELECT * FROM users WHERE invite_code = ?').get(String(code).trim().toUpperCase()) : null
+
+export const inviterUserOf = (code) => {
+  const e = expertByCode(code)
+  if (e?.user_id) return db.prepare('SELECT * FROM users WHERE id = ?').get(e.user_id)
+  return userByCode(code)
+}
+
+/** يُصفّر أرصدة نادي الولاء المنتهية (سنة من تاريخ الكسب) */
+export function expireCredits() {
+  const r = db
+    .prepare("UPDATE credits SET remaining = 0 WHERE remaining > 0 AND expires_at <= datetime('now')")
+    .run()
+  if (r.changes) console.log('credits expired:', r.changes)
+  return r.changes
+}
+
+export function creditBalance(userId) {
+  expireCredits()
+  const row = db
+    .prepare('SELECT COALESCE(SUM(remaining),0) v FROM credits WHERE user_id = ? AND remaining > 0 AND expires_at > datetime(\'now\')')
+    .get(userId)
+  return money(row.v)
+}
+
+export function listCredits(userId) {
+  expireCredits()
+  return db
+    .prepare('SELECT id, amount, remaining, source, note, created_at, expires_at FROM credits WHERE user_id = ? ORDER BY expires_at ASC, id ASC LIMIT 40')
+    .all(userId)
+}
+
+export function grantCredit({ userId, amount, source, note, ref }) {
+  const amt = money(amount)
+  if (!userId || !(amt > 0)) return null
+  if (ref && db.prepare('SELECT 1 FROM credits WHERE user_id = ? AND ref = ?').get(userId, ref)) return null
+  const days = CREDIT_DAYS()
+  return db
+    .prepare(
+      `INSERT INTO credits (user_id, amount, remaining, source, note, ref, expires_at)
+       VALUES (?, ?, ?, ?, ?, ?, datetime('now', '+' || ? || ' days'))`,
+    )
+    .run(userId, amt, amt, source || 'loyalty', note || null, ref || null, days)
+}
+
+/** خصم رصيد الولاء عند دفع طلب — الأقدم انتهاءً أولاً (FIFO) */
+export function spendCredit(userId, maxAmount) {
+  expireCredits()
+  let need = money(maxAmount)
+  if (!(need > 0)) return { used: 0 }
+  const rows = db
+    .prepare("SELECT * FROM credits WHERE user_id = ? AND remaining > 0 AND expires_at > datetime('now') ORDER BY expires_at ASC, id ASC")
+    .all(userId)
+  let used = 0
+  const upd = db.prepare('UPDATE credits SET remaining = ? WHERE id = ?')
+  for (const r of rows) {
+    if (need <= 0) break
+    const take = Math.min(Number(r.remaining), need)
+    upd.run(money(Number(r.remaining) - take), r.id)
+    used = money(used + take)
+    need = money(need - take)
+  }
+  return { used }
+}
+
+/** من دعاهم العميل + هل هم مؤهلون (نشِطون فعلاً) */
+export function clientInvites(inviterUserId) {
+  const rows = db
+    .prepare(
+      `SELECT u.id, u.name, u.phone, u.created_at, u.last_seen, u.role,
+              (SELECT COUNT(*) FROM requests r WHERE r.user_id = u.id) AS orders,
+              (SELECT COUNT(*) FROM bids b JOIN experts e2 ON e2.id = b.expert_id WHERE e2.user_id = u.id) AS bids
+       FROM users u WHERE u.referred_by = ? ORDER BY u.id DESC`,
+    )
+    .all(inviterUserId)
+  const active = (last) =>
+    !!last && new Date(String(last).replace(' ', 'T') + 'Z').getTime() > Date.now() - 7 * 864e5
+  return rows.map((r) => ({
+    ...r,
+    qualified: (r.orders > 0 || r.bids > 0) && active(r.last_seen),
+  }))
+}
+
+/** يصرف مكافأة نادي الولاء عند وصول العدد المطلوب (مرة واحدة) */
+export function checkLoyaltyBonus(inviterUserId) {
+  const list = clientInvites(inviterUserId)
+  const qualified = list.filter((i) => i.qualified).length
+  const target = LOYALTY_TARGET()
+  if (qualified < target) return { qualified, target, credited: 0 }
+  const tx = grantCredit({
+    userId: inviterUserId,
+    amount: LOYALTY_BONUS(),
+    source: 'loyalty',
+    ref: `loyalty-${inviterUserId}`,
+    note: `مكافأة نادي الولاء: ${qualified} عضو نشط سجّل بكودك`,
+  })
+  return { qualified, target, credited: tx ? LOYALTY_BONUS() : 0 }
+}

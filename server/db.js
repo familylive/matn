@@ -269,5 +269,6 @@ addColumn('experts', 'company_name', 'TEXT')
 addColumn('experts', 'bio', 'TEXT')
 addColumn('experts', 'invite_code', 'TEXT')
 addColumn('users', 'referred_by', 'INTEGER')
+addColumn('users', 'invite_code', 'TEXT')
 
 export default db
