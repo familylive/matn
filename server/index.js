@@ -475,6 +475,19 @@ app.get('/api/me/expert', authRequired, (req, res) => {
   res.json({ ...e, skills: e.skills ? JSON.parse(e.skills) : [] })
 })
 
+app.patch('/api/admin/experts/:id', adminRequired, (req, res) => {
+  const e = db.prepare('SELECT * FROM experts WHERE id = ?').get(req.params.id)
+  if (!e) return res.status(404).json({ error: 'not_found' })
+  const b = req.body || {}
+  const sets = []
+  const params = []
+  for (const f of ['lat', 'lng', 'city', 'job', 'name', 'name_ar', 'rate']) {
+    if (b[f] !== undefined) { sets.push(`${f} = ?`); params.push(b[f]) }
+  }
+  if (sets.length) db.prepare(`UPDATE experts SET ${sets.join(', ')} WHERE id = ?`).run(...params, e.id)
+  res.json(db.prepare('SELECT * FROM experts WHERE id = ?').get(e.id))
+})
+
 app.get('/api/experts/:id/contact', authRequired, (req, res) => {
   const expert = db.prepare('SELECT * FROM experts WHERE id = ?').get(req.params.id)
   if (!expert) return res.status(404).json({ error: 'not_found' })
