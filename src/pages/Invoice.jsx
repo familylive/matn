@@ -39,7 +39,7 @@ export default function Invoice() {
         <div className="sheet bg-white rounded-2xl shadow p-6" style={{ direction: 'rtl' }}>
           <div className="flex items-start justify-between border-b border-gray-200 pb-4">
             <div className="flex items-center gap-2">
-              <span className="w-10 h-10 rounded-xl bg-[#006C35] text-white grid place-items-center font-extrabold">م</span>
+              <img src="/logo.png" alt="مهنتي" className="w-10 h-10 object-contain" />
               <div>
                 <p className="font-extrabold text-[#11221A]">مهنتي</p>
                 <p className="text-[10px] text-gray-500">منصة الخدمات والمزاد اللحظي</p>

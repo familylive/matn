@@ -57,7 +57,7 @@ export default function Login() {
   return (
     <div className="px-4 py-8 mx-auto w-full max-w-md">
       <div className="text-center mb-6">
-        <div className="w-16 h-16 rounded-2xl bg-[#006C35] text-white grid place-items-center text-3xl font-extrabold mx-auto ring-4 ring-[#C9A227]/30">
+        <div className="w-20 h-20 rounded-2xl bg-white grid place-items-center mx-auto ring-4 ring-[#C9A227]/30 shadow-sm">
           م
         </div>
         <h1 className="text-2xl font-extrabold text-[#11221A] mt-3">تسجيل الدخول</h1>

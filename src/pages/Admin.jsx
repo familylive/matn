@@ -40,7 +40,7 @@ function Login({ onDone }) {
     <div className="min-h-screen grid place-items-center bg-[#0b2b19] px-4">
       <div className="w-full max-w-sm">
         <div className="text-center mb-6">
-          <div className="w-16 h-16 rounded-2xl bg-[#006C35] text-white grid place-items-center text-3xl font-extrabold mx-auto ring-4 ring-[#C9A227]/40">م</div>
+          <img src="/logo.png" alt="مهنتي" className="w-20 h-20 object-contain mx-auto" />
           <h1 className="text-white text-xl font-extrabold mt-3">لوحة تحكم مهنتي</h1>
           <p className="text-white/60 text-sm">الدخول للإدارة فقط</p>
         </div>
@@ -1166,7 +1166,7 @@ function Shell({ onLogout }) {
           <div className="absolute inset-0 bg-black/40" />
           <aside onClick={(e) => e.stopPropagation()} className="absolute inset-y-0 start-0 w-72 bg-white shadow-2xl p-4 flex flex-col overflow-y-auto">
             <div className="flex items-center gap-2 mb-6">
-              <span className="w-10 h-10 rounded-xl bg-[#006C35] text-white grid place-items-center font-extrabold">م</span>
+              <img src="/logo.png" alt="مهنتي" className="w-9 h-9 object-contain" />
               <div>
                 <p className="font-extrabold text-[#11221A]">مهنتي</p>
                 <p className="text-[11px] text-gray-500">الإدارة</p>

@@ -70,7 +70,7 @@ export default function Header() {
       )}
       <div className="px-3 py-2.5 flex items-center gap-2">
         <Link to="/" className="flex items-center gap-1.5 shrink-0">
-          <span className="w-8 h-8 rounded-lg bg-[#006C35] text-white grid place-items-center font-extrabold">م</span>
+          <img src="/logo-mark.png" alt="مهنتي" className="h-9 w-auto object-contain" />
           <span className="font-extrabold text-[#11221A] hidden sm:inline">{t('app.name')}</span>
         </Link>
 
