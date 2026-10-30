@@ -1,5 +1,6 @@
+import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import experts from '../data/experts.json'
+import expertsFallback from '../data/experts.json'
 import ExpertCard from '../components/ExpertCard.jsx'
 import { useFavorites } from '../hooks/useFavorites.js'
 import { useLang } from '../i18n/LanguageContext.jsx'
@@ -7,7 +8,32 @@ import { useLang } from '../i18n/LanguageContext.jsx'
 export default function Favorites() {
   const { favorites } = useFavorites()
   const { t } = useLang()
-  const list = experts.filter((e) => favorites.includes(e.id))
+  const [experts, setExperts] = useState([])
+
+  useEffect(() => {
+    fetch('/api/experts')
+      .then((r) => r.json())
+      .then((rows) =>
+        setExperts(
+          Array.isArray(rows)
+            ? rows.map((r) => ({
+                id: r.id,
+                personName: r.name_ar || r.name,
+                jobName: r.job,
+                location: r.city,
+                hourlyRate: r.rate,
+                rating: r.rating,
+                reviews: r.reviews_count,
+                image: r.image,
+                hasCar: !!r.has_car,
+              }))
+            : [],
+        ),
+      )
+      .catch(() => setExperts(expertsFallback))
+  }, [])
+
+  const list = experts.filter((e) => favorites.map(String).includes(String(e.id)))
 
   return (
     <div className="px-4 py-6">
