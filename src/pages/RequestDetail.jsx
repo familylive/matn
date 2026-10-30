@@ -242,6 +242,24 @@ export default function RequestDetail() {
     [data, user],
   )
 
+  const isTargetExpert = !!(myExpert && data?.direct_expert_id && data.direct_expert_id === myExpert.id)
+  const [dprice, setDprice] = useState('')
+
+  const directAction = async (action, body) => {
+    try {
+      const r = await api.post(`/api/requests/${id}/direct/${action}`, body || {})
+      setData(r)
+    } catch (e) {
+      alert('تعذّر تنفيذ الطلب')
+    }
+  }
+
+  const sendDirectPrice = async (e) => {
+    e.preventDefault()
+    await directAction('price', { amount: Number(dprice) })
+    setDprice('')
+  }
+
   const budget = Number(data?.budget) || 0
   const minBid = budget > 0 ? Math.round(budget * 0.9) : 0
 
@@ -389,6 +407,65 @@ export default function RequestDetail() {
           </div>
         </div>
 
+
+        {data.direct_expert_id ? (
+          <div className="card-lux p-4 mb-4">
+            <div className="gold-bar absolute inset-x-0 top-0" />
+            <p className="font-extrabold text-sm text-[#11221A] pt-1">📩 طلب مباشر</p>
+
+            {data.direct_state === 'pending_expert' && isTargetExpert && (
+              <div className="mt-3 space-y-2">
+                <p className="text-xs text-gray-600">وصلك طلب مباشر من العميل — تقبله أو ترفضه.</p>
+                <div className="flex gap-2">
+                  <button onClick={() => directAction('accept')} className="flex-1 bg-[#006C35] text-white py-2.5 rounded-xl text-sm font-bold">قبول الطلب</button>
+                  <button onClick={() => directAction('reject')} className="flex-1 bg-red-50 text-red-600 border border-red-200 py-2.5 rounded-xl text-sm font-bold">رفض</button>
+                </div>
+              </div>
+            )}
+
+            {data.direct_state === 'pending_expert' && isOwner && (
+              <p className="text-xs text-gray-500 mt-2">⏳ بانتظار رد الفني…</p>
+            )}
+
+            {data.direct_state === 'awaiting_price' && isTargetExpert && (
+              <form onSubmit={sendDirectPrice} className="mt-3 space-y-2">
+                <p className="text-xs text-gray-600">حدد سعرك للعميل</p>
+                <input required type="number" min="1" placeholder="السعر (ريال)" value={dprice}
+                  onChange={(e) => setDprice(e.target.value)}
+                  className="w-full px-3 py-2.5 border border-[#E3D9BF] rounded-xl text-sm" />
+                <button className="btn-primary">إرسال السعر للعميل</button>
+              </form>
+            )}
+
+            {data.direct_state === 'awaiting_price' && isOwner && (
+              <p className="text-xs text-gray-500 mt-2">✅ قبل الفني الطلب — يجهّز السعر الآن…</p>
+            )}
+
+            {data.direct_state === 'price_sent' && isOwner && (
+              <div className="mt-3">
+                <p className="text-xs text-gray-600">السعر المطلوب</p>
+                <p className="text-3xl font-extrabold text-[#006C35] my-1">{data.bids?.[0]?.amount} ر.س</p>
+                <div className="flex gap-2 mt-2">
+                  <button onClick={() => directAction('accept-price')} className="flex-1 bg-[#006C35] text-white py-2.5 rounded-xl text-sm font-bold">قبول السعر</button>
+                  <button onClick={() => directAction('reject')} className="flex-1 bg-red-50 text-red-600 border border-red-200 py-2.5 rounded-xl text-sm font-bold">رفض</button>
+                </div>
+              </div>
+            )}
+
+            {data.direct_state === 'price_sent' && isTargetExpert && (
+              <p className="text-xs text-gray-500 mt-2">💰 أرسلت السعر — بانتظار رد العميل…</p>
+            )}
+
+            {data.direct_state === 'accepted' && (
+              <p className="text-xs text-gray-600 mt-2">✅ تم قبول السعر — أكمل الدفع.</p>
+            )}
+
+            {data.direct_state === 'rejected' && (
+              <p className="text-xs text-red-500 mt-2">❌ تم رفض/إلغاء الطلب.</p>
+            )}
+          </div>
+        ) : null}
+
         {isOwner && inGrace && (
           <div className="mb-3 rounded-xl bg-red-50 border border-red-200 p-3 text-center">
             <p className="text-xs font-extrabold text-red-600">⏱ انتهى المزاد — اختر الفني الآن</p>
@@ -477,7 +554,7 @@ export default function RequestDetail() {
           {data.bids.length === 0 && <p className="text-sm text-gray-500">{t('rd.none')}</p>}
         </div>
 
-        {data.status === 'open' && !ended && myExpert && (
+        {data.status === 'open' && !ended && myExpert && !data.direct_expert_id && (
           <form onSubmit={placeBid} className="bg-white rounded-xl p-4 border border-gray-100 mt-5 space-y-3">
             <h3 className="font-semibold text-gray-900 text-sm">قدّم سومتك</h3>
             <input

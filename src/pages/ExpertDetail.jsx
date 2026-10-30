@@ -14,6 +14,29 @@ export default function ExpertDetail() {
   const { t, lang } = useLang()
   const [reviews, setReviews] = useState([])
   const [contact, setContact] = useState(null)
+  const [directOpen, setDirectOpen] = useState(false)
+  const [df, setDf] = useState({ title: '', city: '', description: '' })
+  const [dbusy, setDbusy] = useState(false)
+  const [derr, setDerr] = useState('')
+
+  const sendDirect = async (e) => {
+    e.preventDefault()
+    setDerr('')
+    setDbusy(true)
+    try {
+      const r = await api.post('/api/requests/direct', {
+        expertId: expert.id,
+        title: df.title,
+        city: df.city || expert.city,
+        description: df.description,
+      })
+      navigate(`/requests/${r.id}`)
+    } catch (err2) {
+      setDerr(err2.message === 'title_required' ? 'اكتب وصف المشكلة' : 'تعذّر الإرسال')
+    } finally {
+      setDbusy(false)
+    }
+  }
   const { isAuthenticated } = useAuth()
 
   useEffect(() => {
@@ -122,6 +145,35 @@ export default function ExpertDetail() {
                 </div>
               ))}
             </div>
+          </div>
+        )}
+
+        {isAuthenticated && (
+          <button
+            onClick={() => setDirectOpen(true)}
+            className="w-full mt-6 bg-[#11221A] text-white py-3.5 rounded-xl font-extrabold flex items-center justify-center gap-2"
+          >
+            📩 طلب مباشر لهذا الفني
+          </button>
+        )}
+
+        {directOpen && (
+          <div className="fixed inset-0 z-50 bg-black/50 grid place-items-center p-4" onClick={() => setDirectOpen(false)}>
+            <form onSubmit={sendDirect} onClick={(e) => e.stopPropagation()} className="bg-white rounded-2xl p-5 w-full max-w-sm space-y-3">
+              <p className="font-extrabold text-[#11221A]">طلب مباشر إلى {expertName(expert, lang)}</p>
+              <p className="text-[11px] text-gray-500">يوصل له هو فقط — ما ينزل بالمزاد</p>
+              <input required placeholder="وش المشكلة؟ مثال: تسريب في الحمام"
+                value={df.title} onChange={(e) => setDf({ ...df, title: e.target.value })}
+                className="w-full px-3 py-2.5 border border-[#E3D9BF] rounded-xl text-sm" />
+              <input placeholder="المدينة" value={df.city} onChange={(e) => setDf({ ...df, city: e.target.value })}
+                className="w-full px-3 py-2.5 border border-[#E3D9BF] rounded-xl text-sm" />
+              <textarea rows={3} placeholder="تفاصيل إضافية (اختياري)" value={df.description}
+                onChange={(e) => setDf({ ...df, description: e.target.value })}
+                className="w-full px-3 py-2.5 border border-[#E3D9BF] rounded-xl text-sm" />
+              {derr && <p className="text-xs text-red-500">{derr}</p>}
+              <button disabled={dbusy} className="btn-primary">{dbusy ? 'جارٍ الإرسال…' : 'أرسل الطلب'}</button>
+              <button type="button" onClick={() => setDirectOpen(false)} className="w-full text-xs text-gray-400 py-1">إلغاء</button>
+            </form>
           </div>
         )}
 

@@ -74,6 +74,107 @@ function normalizePhones() {
 normalizePhones()
 
 
+
+/* ---------- الطلبات المباشرة (لفني معيّن) ---------- */
+app.post('/api/requests/direct', authRequired, (req, res) => {
+  const { expertId, title, description, city, subcategory } = req.body || {}
+  const expert = db.prepare('SELECT * FROM experts WHERE id = ?').get(expertId)
+  if (!expert) return res.status(404).json({ error: 'expert_not_found' })
+  if (!title) return res.status(400).json({ error: 'title_required' })
+
+  const nextNumber = db.prepare('SELECT COALESCE(MAX(number), 1054) + 1 n FROM requests').get().n
+  const info = db.prepare(
+    `INSERT INTO requests (user_id, title, category, description, city, subcategory, lat, lng,
+       ends_at, warranty_days, number, direct_expert_id, direct_state)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL, 3, ?, ?, 'pending_expert')`,
+  ).run(
+    req.userId, title, expert.job, description || null, city || expert.city || null,
+    subcategory || null, req.body?.lat ?? null, req.body?.lng ?? null, nextNumber, expert.id,
+  )
+
+  const request = requestWithBids(info.lastInsertRowid)
+  const notice = {
+    type: 'request',
+    title: '📩 طلب مباشر لك',
+    body: `${title} — ${city || expert.city || ''}`,
+    requestId: request.id,
+    category: expert.job,
+  }
+  if (expert.user_id) {
+    io.to(`user:${expert.user_id}`).emit('notify', notice)
+    pushToUsers([expert.user_id], { ...notice, url: `/requests/${request.id}`, tag: 'direct-' + request.id }).catch(() => {})
+  }
+  res.status(201).json(request)
+})
+
+const directGuard = (req) => {
+  const request = db.prepare('SELECT * FROM requests WHERE id = ?').get(req.params.id)
+  if (!request) return { error: 'not_found', code: 404 }
+  const mine = db.prepare('SELECT * FROM experts WHERE user_id = ?').get(req.userId)
+  const isTarget = !!(mine && request.direct_expert_id === mine.id)
+  const isOwner = request.user_id === req.userId
+  return { request, mine, isTarget, isOwner }
+}
+
+app.post('/api/requests/:id/direct/accept', authRequired, (req, res) => {
+  const g = directGuard(req)
+  if (g.error) return res.status(g.code).json({ error: g.error })
+  if (!g.isTarget) return res.status(403).json({ error: 'forbidden' })
+  if (g.request.direct_state !== 'pending_expert') return res.status(409).json({ error: 'wrong_state' })
+  db.prepare("UPDATE requests SET direct_state = 'awaiting_price' WHERE id = ?").run(g.request.id)
+  io.to(`user:${g.request.user_id}`).emit('request:status', { id: g.request.id, direct_state: 'awaiting_price' })
+  res.json(requestWithBids(g.request.id))
+})
+
+app.post('/api/requests/:id/direct/reject', authRequired, (req, res) => {
+  const g = directGuard(req)
+  if (g.error) return res.status(g.code).json({ error: g.error })
+  if (!g.isTarget && !g.isOwner) return res.status(403).json({ error: 'forbidden' })
+  db.prepare(
+    `UPDATE requests SET status = 'canceled', direct_state = 'rejected',
+      closed_at = datetime('now'), closed_by = 'user', close_reason = ? WHERE id = ?`,
+  ).run(g.isTarget ? 'رفض الفني الطلب' : 'ألغى العميل الطلب', g.request.id)
+  io.to(`user:${g.request.user_id}`).emit('request:status', { id: g.request.id, status: 'canceled' })
+  if (g.request.direct_expert_id) {
+    const ex = db.prepare('SELECT user_id FROM experts WHERE id = ?').get(g.request.direct_expert_id)
+    if (ex?.user_id) io.to(`user:${ex.user_id}`).emit('request:status', { id: g.request.id, status: 'canceled' })
+  }
+  res.json(requestWithBids(g.request.id))
+})
+
+app.post('/api/requests/:id/direct/price', authRequired, (req, res) => {
+  const g = directGuard(req)
+  if (g.error) return res.status(g.code).json({ error: g.error })
+  if (!g.isTarget) return res.status(403).json({ error: 'forbidden' })
+  if (g.request.direct_state !== 'awaiting_price') return res.status(409).json({ error: 'wrong_state' })
+  const amount = Number(req.body?.amount)
+  if (!amount || amount <= 0) return res.status(400).json({ error: 'invalid_amount' })
+
+  const info = db.prepare('INSERT INTO bids (request_id, expert_id, amount, note) VALUES (?, ?, ?, ?)')
+    .run(g.request.id, g.mine.id, amount, req.body?.note || null)
+  db.prepare("UPDATE requests SET direct_state = 'price_sent', accepted_bid_id = ? WHERE id = ?")
+    .run(info.lastInsertRowid, g.request.id)
+
+  io.to(`user:${g.request.user_id}`).emit('notify', {
+    type: 'bid',
+    title: '💰 وصل سعر الطلب المباشر',
+    body: `${customerTotal(amount)} ر.س — اضغط للقبول أو الرفض`,
+    requestId: g.request.id,
+  })
+  io.to(`user:${g.request.user_id}`).emit('request:status', { id: g.request.id, direct_state: 'price_sent' })
+  res.json(requestWithBids(g.request.id))
+})
+
+app.post('/api/requests/:id/direct/accept-price', authRequired, (req, res) => {
+  const g = directGuard(req)
+  if (g.error) return res.status(g.code).json({ error: g.error })
+  if (!g.isOwner) return res.status(403).json({ error: 'forbidden' })
+  if (g.request.direct_state !== 'price_sent') return res.status(409).json({ error: 'wrong_state' })
+  db.prepare("UPDATE requests SET status = 'awaiting_payment', direct_state = 'accepted' WHERE id = ?").run(g.request.id)
+  io.to(`user:${req.userId}`).emit('request:status', { id: g.request.id, status: 'awaiting_payment' })
+  res.json(requestWithBids(g.request.id))
+})
+
 /* ---------- إشعارات الويب (Web Push) ---------- */
 const VAPID_PUBLIC = process.env.VAPID_PUBLIC || 'BKE0kJxB5-FqnKA0SMw8J2Qa0IvDNHbHvWpyUCzyyzLGTn76L96ZRhDFXj_iwTMgj2lfrNroYVs56KcbR10VK1w'
 const VAPID_PRIVATE = process.env.VAPID_PRIVATE || '5fvKkpYYxBCQqH8w5Gfz5h9AvJYir7sDo7hIXzw3pms'
@@ -462,12 +563,13 @@ app.get('/api/requests', authRequired, (req, res) => {
           (SELECT MIN(b.amount) FROM bids b WHERE b.request_id = r.id AND b.expert_id = ?) AS lowest_bid,
           (SELECT amount FROM bids b WHERE b.request_id = r.id AND b.expert_id = ? ORDER BY b.id DESC LIMIT 1) AS my_bid
          FROM requests r JOIN users u ON u.id = r.user_id
-         WHERE (r.category = ? AND r.status = 'open'
+         WHERE (r.category = ? AND r.status = 'open' AND r.direct_expert_id IS NULL
                 AND (r.ends_at IS NULL OR datetime(r.ends_at) > datetime('now','-5 minutes')))
             OR r.user_id = ?
+            OR r.direct_expert_id = ?
          ORDER BY r.id DESC LIMIT 100`,
       )
-      .all(mine.id, mine.id, mine.job, req.userId)
+      .all(mine.id, mine.id, mine.job, req.userId, mine.id)
   } else {
     // العميل: طلباته فقط
     rows = db
@@ -505,8 +607,9 @@ app.get('/api/requests/:id', (req, res) => {
     const mine = db.prepare('SELECT * FROM experts WHERE user_id = ?').get(uid)
     const accepted = data.bids.find((b) => b.id === data.accepted_bid_id)
     const isAssigned = !!(mine && accepted && accepted.expert_id === mine.id)
-    const sameSpecialty = !!(mine && mine.job === data.category && data.status === 'open')
-    if (!isOwner && !isAssigned && !sameSpecialty) {
+    const sameSpecialty = !!(mine && mine.job === data.category && data.status === 'open' && !data.direct_expert_id)
+    const isDirectTarget = !!(mine && data.direct_expert_id === mine.id)
+    if (!isOwner && !isAssigned && !sameSpecialty && !isDirectTarget) {
       return res.status(403).json({ error: 'forbidden' })
     }
     // 🔒 السرية: الفني يشوف سوماته فقط — ما يشوف سومات منافسيه
