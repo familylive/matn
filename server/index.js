@@ -2680,10 +2680,22 @@ async function lastLiveCommit() {
 
 async function managedDeploy(notify) {
   if (!RH()) return 'ما فيه مفتاح Render مربوط — أضف RENDER_API_KEY.'
+  // 1) نسخة احتياطية سحابية قبل النشر (النسخة الجديدة تسترجع نفسها عند الإقلاع)
   const tables = {}
-  for (const t of BACKUP_TABLES) tables[t] = db.prepare(`SELECT * FROM ${t}`).all()
+  for (const t of BACKUP_TABLES) { try { tables[t] = db.prepare(`SELECT * FROM ${t}`).all() } catch {} }
   const files = collectUploads()
-  notify && tgNotify('🚀 بدأت نشر نسخة جديدة…')
+  const snap = { at: new Date().toISOString(), version: 2, tables, files }
+  try {
+    const { token, acc, ns } = cfCfg()
+    if (token && acc && ns) {
+      await fetch(`https://api.cloudflare.com/client/v4/accounts/${acc}/storage/kv/namespaces/${ns}/values/bk:latest`, {
+        method: 'PUT',
+        headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
+        body: JSON.stringify(snap),
+      })
+    }
+  } catch (e) { console.error('PREDEPLOY_SNAP_FAIL', e.message) }
+  notify && tgNotify('🚀 بدأت نشر نسخة جديدة… (أخذت نسخة احتياطية أول)')
 
   const dep = await renderDeploy()
   const res = await waitDeploy(dep.id)
@@ -2692,19 +2704,14 @@ async function managedDeploy(notify) {
     if (prev) {
       const rb = await renderDeploy(prev).catch(() => null)
       tgNotify(`⚠️ النشر فشل (${res.status}) — رجّعت آخر نسخة ناجحة تلقائياً ${rb ? '✅' : '❌'}`)
-      return `فشل النشر — تم التراجع ${rb ? 'بنجاح' : 'لكنه تعذّر'}`
+      return `فشل النشر (${res.status}) — تم التراجع ${rb ? 'بنجاح' : 'لكنه تعذّر'}`
     }
     tgNotify(`⚠️ النشر فشل (${res.status}) وما لقيت نسخة سابقة`)
     return 'فشل النشر وما قدرت أتراجع'
   }
 
-  // استرجاع البيانات بعد النشر
-  try {
-    applyBackup(tables, files)
-  } catch (e) { tgNotify('⚠️ النشر نجح لكن الاسترجاع فشل: ' + e.message) }
-
-  tgNotify('✅ تم النشر واسترجاع البيانات بنجاح')
-  return 'تم النشر واسترجعت البيانات ✅'
+  tgNotify('✅ النشر نجح — النسخة الجديدة تسترجع البيانات تلقائياً عند الإقلاع')
+  return 'تم النشر ✅ والبيانات تسترجع تلقائياً'
 }
 
 app.post('/api/admin/deploy', adminRequired, adminCan('backup'), async (req, res) => {
@@ -2933,8 +2940,12 @@ async function agentReply(msg) {
 
   // نشر / تحديث
   if (has('انشر', 'نشر', 'حدث الموقع', 'حدّث الموقع', 'رفع نسخه', 'رفع نسخة')) {
-    const msg = await managedDeploy(true)
-    return { reply: msg }
+    if (global.__deploying) return { reply: 'فيه نشر شغّال الحين يا طويل العمر ⏳ لحظة وأبلغك.' }
+    global.__deploying = true
+    managedDeploy(true)
+      .catch((e) => tgNotify('⚠️ تعذّر النشر: ' + e.message))
+      .finally(() => { global.__deploying = false })
+    return { reply: 'أبشر 🚀 بدأت النشر وأخذت نسخة احتياطية قبله.\nياخذ حوالي دقيقتين، وبوصلك على تليجرام أول ما يخلص.' }
   }
 
   // فحص تشغيل الموقع
