@@ -520,7 +520,7 @@ const fullUser = (id) =>
     .prepare(
       `SELECT id, phone, name, city, role, email, nationality, specialty, lat, lng, avatar,
         sound_on, last_seen, created_at, COALESCE(violations,0) AS violations, status,
-        COALESCE(verified,0) AS verified, COALESCE(stars_total,0) AS stars_total, COALESCE(reviews_count,0) AS reviews_count,
+        COALESCE(verified,0) AS verified, COALESCE(email_verified,0) AS email_verified, COALESCE(stars_total,0) AS stars_total, COALESCE(reviews_count,0) AS reviews_count,
         CASE WHEN last_seen IS NOT NULL AND last_seen >= datetime('now', '-2 minutes') THEN 1 ELSE 0 END AS online
        FROM users WHERE id = ?`,
     )
@@ -2451,6 +2451,74 @@ app.post('/api/me/delete', authRequired, (req, res) => {
   res.json({ ok: true })
 })
 
+
+
+/* ================= توثيق الإيميل (رمز بالبريد) ================= */
+async function sendEmail(to, subject, html) {
+  const key = process.env.RESEND_API_KEY
+  const from = process.env.MAIL_FROM || 'Mihnati <onboarding@resend.dev>'
+  if (!key) return { ok: false, error: 'email_not_configured' }
+  try {
+    const r = await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: { authorization: `Bearer ${key}`, 'content-type': 'application/json' },
+      body: JSON.stringify({ from, to: [to], subject, html }),
+    })
+    const d = await r.json().catch(() => ({}))
+    if (!r.ok) return { ok: false, error: d.message || 'send_failed' }
+    return { ok: true, id: d.id }
+  } catch (e) {
+    return { ok: false, error: e.message }
+  }
+}
+
+const emailCode = () => String(Math.floor(100000 + Math.random() * 900000))
+
+app.post('/api/me/email/send', authRequired, async (req, res) => {
+  const email = String(req.body?.email || '').trim().toLowerCase()
+  if (!/^[^@\s]+@[^@\s]+\.[a-z]{2,}$/i.test(email)) return res.status(400).json({ error: 'invalid_email' })
+  const code = emailCode()
+  db.prepare(
+    `INSERT INTO email_otps (email, code, expires_at, attempts) VALUES (?, ?, ?, 0)
+     ON CONFLICT(email) DO UPDATE SET code = excluded.code, expires_at = excluded.expires_at, attempts = 0`,
+  ).run(email, code, Date.now() + 10 * 60 * 1000)
+
+  const html = `
+    <div style="font-family:Tahoma,Arial,sans-serif;direction:rtl;background:#FBF9F2;padding:24px">
+      <div style="max-width:480px;margin:auto;background:#fff;border:1px solid #EADFC8;border-radius:16px;padding:24px;text-align:center">
+        <h2 style="color:#006C35;margin:0 0 8px">مهنتي</h2>
+        <p style="color:#444;margin:0 0 16px">رمز توثيق بريدك الإلكتروني</p>
+        <div style="font-size:34px;font-weight:bold;letter-spacing:8px;color:#11221A;background:#FBF5E3;border:1px dashed #C9A227;border-radius:12px;padding:14px">${code}</div>
+        <p style="color:#888;font-size:12px;margin-top:16px">الرمز صالح ١٠ دقائق. إذا ما طلبت هذا الرمز تجاهل الرسالة.</p>
+      </div>
+    </div>`
+
+  const sent = await sendEmail(email, `رمز توثيق مهنتي: ${code}`, html)
+
+  if (!sent.ok && String(process.env.DEV_OTP || '0') === '1') {
+    return res.json({ ok: true, dev_code: code, note: 'email_not_configured' })
+  }
+  if (!sent.ok) {
+    return res.status(503).json({ error: sent.error === 'email_not_configured' ? 'email_not_configured' : 'send_failed' })
+  }
+  res.json({ ok: true })
+})
+
+app.post('/api/me/email/verify', authRequired, (req, res) => {
+  const email = String(req.body?.email || '').trim().toLowerCase()
+  const code = String(req.body?.code || '').trim()
+  const row = db.prepare('SELECT * FROM email_otps WHERE email = ?').get(email)
+  if (!row) return res.status(400).json({ error: 'not_requested' })
+  if (Date.now() > row.expires_at) return res.status(400).json({ error: 'expired' })
+  if (row.attempts >= 6) return res.status(429).json({ error: 'too_many' })
+  if (row.code !== code) {
+    db.prepare('UPDATE email_otps SET attempts = attempts + 1 WHERE email = ?').run(email)
+    return res.status(400).json({ error: 'wrong_code' })
+  }
+  db.prepare('DELETE FROM email_otps WHERE email = ?').run(email)
+  db.prepare('UPDATE users SET email = ?, email_verified = 1 WHERE id = ?').run(email, req.userId)
+  res.json({ ok: true, email })
+})
 
 /* ================= المساعد الخاص (سعودي) ================= */
 const SA = {

@@ -184,6 +184,14 @@ CREATE TABLE IF NOT EXISTS settings (
   value TEXT
 );
 
+CREATE TABLE IF NOT EXISTS email_otps (
+  email TEXT PRIMARY KEY,
+  code TEXT NOT NULL,
+  expires_at INTEGER NOT NULL,
+  attempts INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
 CREATE TABLE IF NOT EXISTS disputes (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   request_id INTEGER NOT NULL,
@@ -317,6 +325,7 @@ addColumn('users', 'referred_by', 'INTEGER')
 addColumn('users', 'invite_code', 'TEXT')
 addColumn('users', 'phone_verified', 'INTEGER DEFAULT 0')
 addColumn('users', 'verified', 'INTEGER DEFAULT 0')
+addColumn('users', 'email_verified', 'INTEGER DEFAULT 0')
 addColumn('users', 'stars_total', 'INTEGER DEFAULT 0')
 addColumn('users', 'reviews_count', 'INTEGER DEFAULT 0')
 addColumn('requests', 'images', 'TEXT')

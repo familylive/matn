@@ -10,6 +10,76 @@ import WalletCard from '../components/WalletCard.jsx'
 import LoyaltyCard from '../components/LoyaltyCard.jsx'
 import VerifiedBadge from '../components/VerifiedBadge.jsx'
 
+
+function EmailVerify({ profile, onDone }) {
+  const [email, setEmail] = useState(profile.email || '')
+  const [stage, setStage] = useState('idle')
+  const [code, setCode] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [msg, setMsg] = useState('')
+
+  if (profile.email_verified) {
+    return (
+      <div className="card-lux p-4 mt-4">
+        <p className="font-extrabold text-sm text-[#11221A]">✉️ بريدك موثّق</p>
+        <p className="text-[11px] text-[#006C35] font-bold mt-1">{profile.email} ✅</p>
+      </div>
+    )
+  }
+
+  const send = async () => {
+    setBusy(true); setMsg('')
+    try {
+      const r = await api.post('/api/me/email/send', { email })
+      if (r.dev_code) { setMsg(`رمز التجربة: ${r.dev_code}`); setCode(String(r.dev_code)) }
+      else setMsg('أرسلنا لك رمز على بريدك 📩')
+      setStage('code')
+    } catch (e) {
+      setMsg(e.message === 'email_not_configured' ? 'إرسال البريد غير مفعّل بعد — كلّم الإدارة' : 'تعذّر إرسال الرمز')
+    } finally { setBusy(false) }
+  }
+
+  const verify = async () => {
+    setBusy(true); setMsg('')
+    try {
+      await api.post('/api/me/email/verify', { email, code })
+      api.me().then(onDone).catch(() => {})
+      setMsg('✅ تم توثيق بريدك')
+    } catch (e) {
+      setMsg(e.message === 'wrong_code' ? 'الرمز غلط' : e.message === 'expired' ? 'انتهت مدة الرمز' : 'تعذّر التحقق')
+    } finally { setBusy(false) }
+  }
+
+  return (
+    <div className="card-lux p-4 mt-4 space-y-2">
+      <p className="font-extrabold text-sm text-[#11221A]">✉️ توثيق البريد الإلكتروني</p>
+      <p className="text-[11px] text-gray-500">نرسل رمز على بريدك — يزيد موثوقية حسابك.</p>
+      <input
+        value={email}
+        onChange={(e) => setEmail(e.target.value)}
+        placeholder="name@example.com"
+        dir="ltr"
+        className="w-full px-3 py-2 border border-[#E3D9BF] rounded-xl text-sm"
+      />
+      {stage === 'code' && (
+        <input
+          value={code}
+          onChange={(e) => setCode(e.target.value)}
+          placeholder="رمز التحقق (6 أرقام)"
+          dir="ltr"
+          className="w-full px-3 py-2 border border-[#E3D9BF] rounded-xl text-sm text-center tracking-widest"
+        />
+      )}
+      {msg && <p className="text-[11px] font-bold text-[#006C35]">{msg}</p>}
+      {stage === 'idle' ? (
+        <button onClick={send} disabled={busy} className="btn-primary">{busy ? '…' : 'إرسال رمز التحقق'}</button>
+      ) : (
+        <button onClick={verify} disabled={busy} className="btn-primary">{busy ? '…' : 'تأكيد الرمز'}</button>
+      )}
+    </div>
+  )
+}
+
 export default function Profile() {
   const { user, logout, login } = useAuth()
   const { favorites } = useFavorites()
@@ -153,6 +223,8 @@ export default function Profile() {
       {isExpert && <WalletCard />}
 
       <LoyaltyCard />
+
+      <EmailVerify profile={profile} onDone={(d) => setMe(d)} />
 
       <div className="card-lux p-4 mt-4 space-y-2">
         <Link to="/privacy" className="block text-[12px] font-bold text-[#006C35] underline">🔒 سياسة الخصوصية</Link>
