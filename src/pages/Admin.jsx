@@ -544,7 +544,7 @@ function VatSettings() {
   const { d, set, save, msg } = useSiteSettings()
   const [rep, setRep] = useState(null)
   const [busy, setBusy] = useState(false)
-  useEffect(() => { api.get('/api/admin/vat/report').then(setRep).catch(() => {}) }, [msg])
+  useEffect(() => { api('/api/admin/vat/report').then(setRep).catch(() => {}) }, [msg])
   if (!d) return <p className="text-gray-500">جارٍ التحميل…</p>
   const on = d.vat_enabled === '1'
   const rate = Number(d.vat_rate) || 15
@@ -556,7 +556,7 @@ function VatSettings() {
 
   const apply = async () => {
     setBusy(true)
-    try { await save(); const r = await api.get('/api/admin/vat/report'); setRep(r) } catch {}
+    try { await save(); const r = await api('/api/admin/vat/report'); setRep(r) } catch {}
     setBusy(false)
   }
 
