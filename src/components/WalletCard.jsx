@@ -87,6 +87,15 @@ export default function WalletCard() {
           </div>
         </div>
 
+        {Number(w.due_platform) > 0 && (
+          <div className="mt-2 rounded-xl bg-[#FDF2F2] border border-[#F3C6C6] px-3 py-2">
+            <p className="text-[11px] font-extrabold text-red-600">
+              💳 عمولة المنصة عليك: {money(w.due_platform)} ر.س
+            </p>
+            <p className="text-[10px] text-red-500/80">محصّلة مع مبلغ العميل — تُخصم من رصيدك المتاح وتُسدد للمنصة.</p>
+          </div>
+        )}
+
         <p className="text-[10px] text-gray-500 mt-2 leading-4">
           مستحقاتك تبقى في حساب الموقع {w.hold_days} أيام بعد إكمال الطلب (للفصل في أي نزاع) ثم تصبح قابلة للسحب.
         </p>

@@ -38,6 +38,17 @@ CREATE TABLE IF NOT EXISTS credits (
   expires_at TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS platform_dues (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  expert_id INTEGER NOT NULL,
+  invoice_id INTEGER,
+  request_id INTEGER,
+  amount REAL NOT NULL,
+  status TEXT NOT NULL DEFAULT 'due',
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  settled_at TEXT
+);
+
 CREATE TABLE IF NOT EXISTS finance_reports (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   code TEXT UNIQUE NOT NULL,
@@ -136,8 +147,10 @@ export function walletSummary(expertId) {
     .get(expertId).v
   const pending = Number(sum('hold')) || 0
   const availableRaw = Number(sum('available')) || 0
+  const due = duePlatformOf(expertId)
   return {
-    available: Math.max(0, Math.round((availableRaw - Number(withdrawals || 0)) * 100) / 100),
+    due_platform: due,
+    available: Math.max(0, Math.round((availableRaw - Number(withdrawals || 0) - due) * 100) / 100),
     pending: Math.round(pending * 100) / 100,
     paid: Math.round(Number(paid || 0) * 100) / 100,
     hold_days: HOLD_DAYS(),
@@ -231,6 +244,22 @@ export function checkReferralBonus(expertId) {
     note: `مكافأة دعوة: ${qualified} فني نشط سجّل بكودك`,
   })
   return { qualified, target, credited: tx ? REF_BONUS() : 0 }
+}
+
+/* ---------------- عمولة المنصة على الفني (يحصّلها كاش من العميل) ---------------- */
+export function addPlatformDue({ expertId, amount, invoiceId, requestId }) {
+  const amt = money(amount)
+  if (!expertId || !(amt > 0)) return null
+  if (invoiceId && db.prepare('SELECT 1 FROM platform_dues WHERE invoice_id = ?').get(invoiceId)) return null
+  return db
+    .prepare('INSERT INTO platform_dues (expert_id, invoice_id, request_id, amount) VALUES (?, ?, ?, ?)')
+    .run(expertId, invoiceId || null, requestId || null, amt)
+}
+
+export function duePlatformOf(expertId) {
+  return money(
+    db.prepare("SELECT COALESCE(SUM(amount),0) v FROM platform_dues WHERE expert_id = ? AND status = 'due'").get(expertId).v,
+  )
 }
 
 /* ---------------- السحب ---------------- */

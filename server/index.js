@@ -17,7 +17,7 @@ import { issueInvoice, autoSettle, getSetting as getSet } from './flow.js'
 import { seedServices, tradesOf, catsOf, certsOf, decorateExpert, parseJson } from './services.js'
 import {
   ensureInviteCode, backfillInviteCodes, expertByCode, walletSummary, listTx, releaseDue,
-  requestWithdrawal, invitesOf, checkReferralBonus, weekRange, money,
+  requestWithdrawal, invitesOf, checkReferralBonus, weekRange, money, duePlatformOf, addPlatformDue,
   HOLD_DAYS, REF_BONUS, REF_TARGET,
   ensureUserCode, backfillUserCodes, inviterUserOf, creditBalance, listCredits,
   spendCredit, clientInvites, checkLoyaltyBonus, expireCredits,
@@ -83,7 +83,17 @@ async function kvGetFile(name) {
 app.use((req, res, next) => {
   res.on('finish', () => {
     const f = req.file
-    if (f?.filename) kvPutFile(f.filename).catch(() => {})
+    if (!f?.filename) return
+    kvPutFile(f.filename).catch(() => {})
+    // نسخة دائمة داخل قاعدة البيانات (تُستعاد مع كل نسخة احتياطية)
+    try {
+      const fp = path.join(uploadsDir, f.filename)
+      if (fs.existsSync(fp)) {
+        const buf = fs.readFileSync(fp)
+        db.prepare("INSERT OR REPLACE INTO files (id, name, mime, size, data) VALUES (?, ?, ?, ?, ?)")
+          .run(f.filename, f.originalname || null, f.mimetype || 'application/octet-stream', buf.length, buf)
+      }
+    } catch (e) { console.error('FILE_DB_SAVE_FAIL', f.filename, e.message) }
   })
   next()
 })
@@ -104,6 +114,15 @@ app.get('/uploads/:name', async (req, res) => {
       return fs.createReadStream(fp).pipe(res)
     }
   } catch {}
+  // 1) من قاعدة البيانات (تنجو مع النسخ الاحتياطية)
+  const row = db.prepare('SELECT mime, data FROM files WHERE id = ?').get(name)
+  if (row?.data) {
+    try { fs.writeFileSync(fp, Buffer.from(row.data)) } catch {}
+    res.setHeader('Content-Type', row.mime || type)
+    res.setHeader('Cache-Control', 'public, max-age=604800')
+    return res.send(Buffer.from(row.data))
+  }
+  // 2) من النسخة السحابية (KV)
   const buf = await kvGetFile(name)
   if (!buf) return res.status(404).send('not_found')
   try { fs.writeFileSync(fp, buf) } catch {}
@@ -2479,6 +2498,7 @@ function financeRows(from, to) {
       pending: money(w.pending),
       paid_total: money(w.paid),
       due: money(w.available),
+      due_platform: money(duePlatformOf(e.id)),
     }
   })
 }
@@ -2496,6 +2516,7 @@ app.get('/api/admin/finance', adminRequired, adminCan('finance'), (req, res) => 
       available: sum('available'),
       pending: sum('pending'),
       requested: sum('requested'),
+      due_platform: sum('due_platform'),
       week_earned: sum('week_earned'),
       week_paid: sum('week_paid'),
       paid_total: sum('paid_total'),
@@ -2538,6 +2559,13 @@ app.post('/api/admin/finance/pay/:expertId', adminRequired, adminCan('finance'),
     })
   }
   res.json({ ok: true, id: info.lastInsertRowid, amount, wallet: walletSummary(e.id) })
+})
+
+app.post('/api/admin/finance/settle-dues/:expertId', adminRequired, adminCan('finance'), (req, res) => {
+  const e = db.prepare('SELECT * FROM experts WHERE id = ?').get(req.params.expertId)
+  if (!e) return res.status(404).json({ error: 'not_found' })
+  db.prepare("UPDATE platform_dues SET status = 'settled', settled_at = datetime('now') WHERE expert_id = ? AND status = 'due'").run(e.id)
+  res.json({ ok: true, wallet: walletSummary(e.id) })
 })
 
 app.post('/api/admin/finance/withdrawals/:id', adminRequired, adminCan('finance'), (req, res) => {
@@ -2756,7 +2784,7 @@ app.get('/api/requests/:id/invoices', authRequired, (req, res) => {
 
 /* ---------- نسخ احتياطي ---------- */
 
-const BACKUP_TABLES = ['users', 'experts', 'requests', 'bids', 'reviews', 'invoices', 'ads', 'city_requests', 'categories', 'payments', 'settings', 'wallet_tx', 'withdrawals', 'credits', 'finance_reports', 'admins', 'blocked_phones']
+const BACKUP_TABLES = ['users', 'experts', 'requests', 'bids', 'reviews', 'invoices', 'ads', 'city_requests', 'categories', 'payments', 'settings', 'wallet_tx', 'withdrawals', 'credits', 'finance_reports', 'platform_dues', 'admins', 'blocked_phones']
 
 const collectUploads = () => {
   const refs = new Set()
@@ -2786,7 +2814,7 @@ app.get('/api/admin/backup', adminRequired, (_req, res) => {
 })
 
 function applyBackup(tables, files) {
-  const order = ['reviews', 'payments', 'bids', 'invoices', 'wallet_tx', 'withdrawals', 'credits', 'finance_reports', 'admins', 'blocked_phones', 'requests', 'city_requests', 'ads', 'experts', 'users', 'categories', 'settings'].filter(t => BACKUP_TABLES.includes(t))
+  const order = ['reviews', 'payments', 'bids', 'invoices', 'wallet_tx', 'withdrawals', 'credits', 'finance_reports', 'platform_dues', 'admins', 'blocked_phones', 'requests', 'city_requests', 'ads', 'experts', 'users', 'categories', 'settings'].filter(t => BACKUP_TABLES.includes(t))
 
   db.pragma('foreign_keys = OFF')
   try {

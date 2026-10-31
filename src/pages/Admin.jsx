@@ -1889,6 +1889,7 @@ function Finance() {
         <div className="card-lux p-3 text-center"><p className="text-[10px] text-gray-500">محجوز عند المنصة</p><p className="text-xl font-extrabold text-[#8a6d13]">{money(t.pending)}</p></div>
         <div className="card-lux p-3 text-center"><p className="text-[10px] text-gray-500">مستحق الفترة</p><p className="text-lg font-extrabold text-[#11221A]">{money(t.week_earned)}</p></div>
         <div className="card-lux p-3 text-center"><p className="text-[10px] text-gray-500">طُلب سحبه</p><p className="text-lg font-extrabold text-[#11221A]">{money(t.requested)}</p></div>
+        <div className="card-lux p-3 text-center"><p className="text-[10px] text-gray-500">عمولة مستحقة على الفنيين</p><p className="text-lg font-extrabold text-red-500">{money(t.due_platform)}</p></div>
       </div>
 
       <div className="card-lux p-3 space-y-1">
@@ -1928,7 +1929,7 @@ function Finance() {
         <table className="w-full text-[11px]">
           <thead className="bg-[#006C35] text-white">
             <tr>
-              {['رقم', 'الفني', 'التخصص', 'مستحق الفترة', 'محجوز', 'متاح', 'مدفوع', ''].map((h) => (
+              {['رقم', 'الفني', 'التخصص', 'مستحق الفترة', 'محجوز', 'متاح', 'عمولة عليه', 'مدفوع', ''].map((h) => (
                 <th key={h} className="px-2 py-2 text-start font-bold whitespace-nowrap">{h}</th>
               ))}
             </tr>
@@ -1942,13 +1943,27 @@ function Finance() {
                 <td className="px-2 py-1.5">{money(r.week_earned)}</td>
                 <td className="px-2 py-1.5 text-[#8a6d13]">{money(r.pending)}</td>
                 <td className="px-2 py-1.5 font-extrabold text-[#006C35]">{money(r.available)}</td>
+                <td className="px-2 py-1.5 text-red-500 font-bold">{money(r.due_platform)}</td>
                 <td className="px-2 py-1.5 text-gray-500">{money(r.paid_total)}</td>
                 <td className="px-2 py-1.5">
-                  {r.available > 0.009 && (
-                    <button disabled={busy} onClick={() => pay(r)} className="bg-[#11221A] text-white px-2 py-1 rounded text-[10px] font-bold whitespace-nowrap">
-                      تحويل
-                    </button>
-                  )}
+                  <div className="flex gap-1">
+                    {r.available > 0.009 && (
+                      <button disabled={busy} onClick={() => pay(r)} className="bg-[#11221A] text-white px-2 py-1 rounded text-[10px] font-bold whitespace-nowrap">
+                        تحويل
+                      </button>
+                    )}
+                    {r.due_platform > 0.009 && (
+                      <button
+                        onClick={async () => {
+                          if (!confirm(`تسجيل استلام عمولة ${money(r.due_platform)} ر.س من ${r.name}؟`)) return
+                          await api(`/api/admin/finance/settle-dues/${r.id}`, { method: 'POST' }).catch(() => {})
+                          load()
+                        }}
+                        className="bg-[#C9A227] text-white px-2 py-1 rounded text-[10px] font-bold whitespace-nowrap">
+                        استلام العمولة
+                      </button>
+                    )}
+                  </div>
                 </td>
               </tr>
             ))}

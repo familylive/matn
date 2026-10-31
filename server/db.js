@@ -184,6 +184,15 @@ CREATE TABLE IF NOT EXISTS settings (
   value TEXT
 );
 
+CREATE TABLE IF NOT EXISTS files (
+  id TEXT PRIMARY KEY,
+  name TEXT,
+  mime TEXT,
+  size INTEGER,
+  data BLOB,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
 CREATE TABLE IF NOT EXISTS blocked_phones (
   phone TEXT PRIMARY KEY,
   reason TEXT,

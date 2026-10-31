@@ -1,5 +1,5 @@
 import { db } from './db.js'
-import { creditHold } from './wallet.js'
+import { creditHold, addPlatformDue } from './wallet.js'
 
 export const getSetting = (k, d) =>
   db.prepare('SELECT value FROM settings WHERE key = ?').get(k)?.value ?? d
@@ -63,6 +63,13 @@ export function issueInvoice(requestId) {
       amount: net,
       ref: `inv-${invoice.id}`,
       note: `مستحق الخدمة — طلب #${request.number || request.id}`,
+    })
+    // عمولة المنصة: جزء من المبلغ الذي حصّله الفني من العميل → يُخصم من رصيده
+    addPlatformDue({
+      expertId: bid.expert_id,
+      amount: round2(customerFee + expertFee),
+      invoiceId: invoice.id,
+      requestId,
     })
   } catch (e) {
     console.error('WALLET_CREDIT_FAIL', e.message)
