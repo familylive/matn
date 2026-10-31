@@ -1,4 +1,4 @@
-const CACHE = 'mihnati-v1'
+const CACHE = 'mihnati-v3'
 
 self.addEventListener('install', () => self.skipWaiting())
 self.addEventListener('activate', (event) => {
@@ -15,21 +15,36 @@ self.addEventListener('fetch', (event) => {
   if (url.origin !== self.location.origin) return
   if (url.pathname.startsWith('/api') || url.pathname.startsWith('/socket.io')) return
 
+  // صفحات: من الشبكة دائماً (عشان التحديثات تظهر فوراً)
   if (request.mode === 'navigate') {
     event.respondWith(
-      fetch(request).catch(() => caches.match('/index.html')),
+      fetch(request, { cache: 'no-store' })
+        .then((res) => {
+          const copy = res.clone()
+          caches.open(CACHE).then((c) => c.put('/index.html', copy)).catch(() => {})
+          return res
+        })
+        .catch(() => caches.match('/index.html')),
     )
     return
   }
 
+  // ملفات الـ build (بها بصمة) → كاش، وغيرها من الشبكة
+  const hashed = /\/assets\/.+-[A-Za-z0-9_]{6,}\.(js|css)$/.test(url.pathname)
+  if (!hashed) {
+    event.respondWith(fetch(request, { cache: 'no-store' }).catch(() => caches.match(request)))
+    return
+  }
+
   event.respondWith(
-    caches.match(request).then((cached) =>
-      cached ||
-      fetch(request).then((res) => {
-        const copy = res.clone()
-        caches.open(CACHE).then((c) => c.put(request, copy))
-        return res
-      }).catch(() => cached),
+    caches.match(request).then(
+      (cached) =>
+        cached ||
+        fetch(request).then((res) => {
+          const copy = res.clone()
+          caches.open(CACHE).then((c) => c.put(request, copy)).catch(() => {})
+          return res
+        }),
     ),
   )
 })

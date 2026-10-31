@@ -26,6 +26,9 @@ import {
 } from './wallet.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
+const BOOT_ID = fs.existsSync(path.join(__dirname, '..', 'dist', 'index.html'))
+  ? String(fs.statSync(path.join(__dirname, '..', 'dist', 'index.html')).mtimeMs)
+  : String(Date.now())
 const app = express()
 const server = http.createServer(app)
 const io = new SocketServer(server, { cors: { origin: '*' } })
@@ -2685,6 +2688,9 @@ const collectUploads = () => {
   db.prepare('SELECT avatar FROM users').all().forEach((r) => push(r.avatar))
   db.prepare('SELECT image FROM categories').all().forEach((r) => push(r.image))
   db.prepare('SELECT iqama_image FROM experts').all().forEach((r) => push(r.iqama_image))
+  for (const row of db.prepare('SELECT certs FROM experts').all()) {
+    try { for (const c of JSON.parse(row.certs || '[]')) push(c?.url) } catch {}
+  }
   const files = {}
   for (const name of refs) {
     const fp = path.join(uploadsDir, name)
@@ -2796,6 +2802,34 @@ app.get('/api/admin/snapshots', adminRequired, adminCan('backup'), async (_req, 
   }
 })
 
+/* استرجاع الصور والملفات فقط من نسخة سحابية (بدون لمس البيانات) */
+app.post('/api/admin/snapshots/files', adminRequired, async (req, res) => {
+  const key = String(req.body?.key || 'bk:latest')
+  if (key !== 'bk:latest' && !/^bk:\d{12}$/.test(key)) return res.status(400).json({ error: 'bad_key' })
+  const { token, acc, ns } = cfCfg()
+  if (!token) return res.status(400).json({ error: 'not_configured' })
+  try {
+    const r = await fetch(
+      `https://api.cloudflare.com/client/v4/accounts/${acc}/storage/kv/namespaces/${ns}/values/${encodeURIComponent(key)}`,
+      { headers: { authorization: `Bearer ${token}` } },
+    )
+    if (!r.ok) return res.status(404).json({ error: 'snapshot_not_found' })
+    const snap = await r.json()
+    const files = snap?.files || {}
+    let n = 0
+    for (const [name, b64] of Object.entries(files)) {
+      if (typeof b64 !== 'string') continue
+      try {
+        fs.writeFileSync(path.join(uploadsDir, path.basename(name)), Buffer.from(b64, 'base64'))
+        n++
+      } catch {}
+    }
+    res.json({ ok: true, key, files: n })
+  } catch (e) {
+    res.status(500).json({ error: 'failed', detail: String(e.message) })
+  }
+})
+
 app.post('/api/admin/snapshots/restore', adminRequired, async (req, res) => {
   const key = String(req.body?.key || '')
   if (key !== 'bk:latest' && !/^bk:\d{12}$/.test(key)) return res.status(400).json({ error: 'bad_key' })
@@ -2817,11 +2851,17 @@ app.post('/api/admin/snapshots/restore', adminRequired, async (req, res) => {
   }
 })
 
+app.get('/api/version', (_req, res) => {
+  res.setHeader('Cache-Control', 'no-store')
+  res.json({ build: process.env.RENDER_GIT_COMMIT || process.env.BUILD_ID || String(BOOT_ID) })
+})
+
 app.get('/api/health', (_req, res) => res.json({ ok: true, at: new Date().toISOString() }))
 
 const clientDist = path.join(__dirname, '..', 'dist')
 app.use(express.static(clientDist, { setHeaders: (res, filePath) => {
   if (filePath.endsWith('index.html')) res.setHeader('Cache-Control', 'no-store, must-revalidate')
+  if (filePath.endsWith('sw.js') || filePath.endsWith('.webmanifest')) res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate')
 } }))
 app.get('*', (req, res, next) => {
   if (req.path.startsWith('/api') || req.path.startsWith('/socket.io')) return next()
