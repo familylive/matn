@@ -468,7 +468,11 @@ function startSession(userId) {
 
 const DEV_MODE = process.env.NODE_ENV !== 'production' || process.env.DEV_OTP === '1'
 
+/* الدخول/التسجيل برمز الجوال — يُوقف من الإعدادات (otp_enabled=0) */
+const phoneOtpOn = () => (db.prepare("SELECT value FROM settings WHERE key='otp_enabled'").get()?.value ?? '1') === '1'
+
 app.post('/api/auth/request-otp', (req, res) => {
+  if (!phoneOtpOn()) return res.status(403).json({ error: 'phone_login_disabled' })
   const phone = normalizePhone(req.body?.phone)
   if (!phone) return res.status(400).json({ error: 'invalid_phone' })
 
@@ -546,6 +550,7 @@ app.post('/api/auth/login-local', (req, res) => {
 })
 
 app.post('/api/auth/verify', (req, res) => {
+  if (!phoneOtpOn()) return res.status(403).json({ error: 'phone_login_disabled' })
   const phone = normalizePhone(req.body?.phone)
   const code = String(req.body?.code || '').trim()
   if (!phone) return res.status(400).json({ error: 'invalid_phone' })
@@ -3182,6 +3187,8 @@ app.get('/api/site-config', (_req, res) => {
     site_name: out.site_name, site_email: out.site_email,
     support_phone: out.support_phone, support_whatsapp: out.support_whatsapp,
     maintenance: out.maintenance === '1',
+    otp_enabled: out.otp_enabled === '1',
+    signup_open: out.signup_open === '1',
     methods: { cash: out.pay_cash === '1', card: out.pay_card === '1', stcpay: out.pay_stcpay === '1', urpay: out.pay_urpay === '1' },
   })
 })
@@ -3200,6 +3207,59 @@ app.patch('/api/admin/site-settings', adminRequired, adminCan('site'), (req, res
     set.run(k, typeof b[k] === 'boolean' ? (b[k] ? '1' : '0') : String(b[k]))
   }
   res.json({ ok: true })
+})
+
+/* ================= تصفير المنصة قبل الإطلاق الحقيقي =================
+   يمسح كل البيانات التشغيلية والحسابات التجريبية ويبقي:
+   الإعدادات · التصنيفات · الإعلانات · المشرفين · ملفات الموقع · الحسابات المستثناة.
+   الاستخدام: POST /api/admin/maintenance/reset {confirm:"تصفير", keep_user_ids:[...]} */
+app.post('/api/admin/maintenance/reset', adminRequired, adminCan('backup'), async (req, res) => {
+  const confirm = String(req.body?.confirm || '').trim()
+  if (!['تصفير', 'RESET'].includes(confirm)) return res.status(400).json({ error: 'confirm_required' })
+  const keep = (Array.isArray(req.body?.keep_user_ids) ? req.body.keep_user_ids : []).map(Number).filter(Boolean)
+  if (!keep.length) return res.status(400).json({ error: 'keep_user_ids_required' })
+
+  // نسخة أمان قبل المسح — تُرجّع في الرد نفسه
+  const snapshot = {}
+  for (const t of ['users', 'experts', 'requests', 'bids', 'payments', 'invoices', 'reviews', 'wallet_tx', 'credits']) {
+    try { snapshot[t] = db.prepare(`SELECT * FROM ${t}`).all() } catch { snapshot[t] = [] }
+  }
+
+  const wipe = [
+    'messages', 'bids', 'reviews', 'invoices', 'payments', 'request_extras', 'commission_ledger',
+    'disputes', 'requests', 'wallet_tx', 'withdrawals', 'credits', 'finance_reports', 'platform_dues',
+    'city_requests', 'experts', 'otps', 'email_otps', 'push_subs', 'page_views', 'audit_log',
+  ]
+  const deleted = {}
+  db.transaction(() => {
+    for (const t of wipe) {
+      try { deleted[t] = db.prepare(`DELETE FROM ${t}`).run().changes } catch { deleted[t] = 0 }
+    }
+    const ph = keep.map(() => '?').join(',')
+    deleted.users = db.prepare(`DELETE FROM users WHERE id NOT IN (${ph})`).run(...keep).changes
+    try {
+      db.prepare(`DELETE FROM sqlite_sequence WHERE name IN (${[...wipe, 'users'].map(() => '?').join(',')})`)
+        .run(...wipe, 'users')
+    } catch {}
+  })()
+
+  // نسخة نظيفة إلى السحابة فوراً — حتى لا ترجع البيانات القديمة عند أي إعادة تشغيل
+  let cloud = false
+  try {
+    const { token, acc, ns } = cfCfg()
+    if (token && acc && ns) {
+      const tables = {}
+      for (const t of BACKUP_TABLES) { try { tables[t] = db.prepare(`SELECT * FROM ${t}`).all() } catch {} }
+      const r = await fetch(`https://api.cloudflare.com/client/v4/accounts/${acc}/storage/kv/namespaces/${ns}/values/bk:latest`, {
+        method: 'PUT',
+        headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
+        body: JSON.stringify({ at: new Date().toISOString(), version: 2, tables, files: collectUploads() }),
+      })
+      cloud = r.ok
+    }
+  } catch (e) { console.error('RESET_SNAP_FAIL', e.message) }
+
+  res.json({ ok: true, deleted, kept_user_ids: keep, cloud_snapshot: cloud, snapshot })
 })
 
 /* الأرقام المحجوبة (حجب الجوال) */

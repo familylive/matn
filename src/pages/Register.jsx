@@ -141,8 +141,8 @@ export default function Register() {
                 className="w-full mt-1 px-3 py-2.5 border border-[#E3D9BF] rounded-xl outline-none focus:border-[#006C35]" />
             </div>
             <div>
-              <label className="text-xs font-bold text-gray-600">الجوال *</label>
-              <input required value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })}
+              <label className="text-xs font-bold text-gray-600">الجوال <span className="text-gray-400 font-normal">(اختياري مؤقتاً)</span></label>
+              <input value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })}
                 placeholder="+966 5X XXX XXXX"
                 className="w-full mt-1 px-3 py-2.5 border border-[#E3D9BF] rounded-xl outline-none focus:border-[#006C35]" />
             </div>

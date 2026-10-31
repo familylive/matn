@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext.jsx'
 import { api, setToken } from '../lib/api.js'
@@ -19,7 +19,13 @@ export default function Login() {
   const [devCode, setDevCode] = useState('')
   const [sent, setSent] = useState(false)
   const [otpErr, setOtpErr] = useState('')
+  const [otpOn, setOtpOn] = useState(false)
   const navigate = useNavigate()
+
+  // الدخول برمز الجوال يظهر فقط إذا كان مفعّلاً في إعدادات الموقع
+  useEffect(() => {
+    fetch('/api/site-config').then((r) => r.json()).then((d) => setOtpOn(!!d?.otp_enabled)).catch(() => {})
+  }, [])
   const { login } = useAuth()
 
   const submit = async (e) => {
@@ -121,9 +127,11 @@ export default function Login() {
       </form>
 
       <div className="text-center mt-4 flex items-center justify-center gap-4">
-        <button onClick={() => { setOtpOpen((v) => !v); setEmailOpen(false) }} className="text-xs font-bold text-[#8a6d13] underline">
-          دخول برمز الجوال
-        </button>
+        {otpOn && (
+          <button onClick={() => { setOtpOpen((v) => !v); setEmailOpen(false) }} className="text-xs font-bold text-[#8a6d13] underline">
+            دخول برمز الجوال
+          </button>
+        )}
         <button onClick={() => { setEmailOpen((v) => !v); setOtpOpen(false) }} className="text-xs font-bold text-[#006C35] underline">
           دخول برمز البريد
         </button>
@@ -180,7 +188,7 @@ export default function Login() {
         </div>
       )}
 
-      {otpOpen && (
+      {otpOn && otpOpen && (
         <div className="card-lux p-4 mt-3 space-y-2">
           <p className="text-xs font-bold text-gray-700">دخول سريع برمز الجوال</p>
           <input
