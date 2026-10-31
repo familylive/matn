@@ -3254,6 +3254,10 @@ app.post('/api/admin/maintenance/reset', adminRequired, adminCan('backup'), asyn
     } catch {}
   })()
 
+  // نسجّل وقت التصفير: أي نسخة سحابية أقدم منه تُتجاهل عند الإقلاع
+  db.prepare("INSERT INTO settings (key, value) VALUES ('reset_at', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value")
+    .run(new Date().toISOString())
+
   // نسخة نظيفة إلى السحابة فوراً — حتى لا ترجع البيانات القديمة عند أي إعادة تشغيل
   let cloud = false
   try {
@@ -4042,6 +4046,12 @@ async function autoRestoreOnBoot() {
     const snap = await r.json()
     const tables = snap?.tables
     if (!tables || typeof tables !== 'object') return console.log('AUTORESTORE: bad snapshot')
+
+    // لا ترجّع بيانات أقدم من آخر تصفير للمنصة
+    const resetAt = db.prepare("SELECT value FROM settings WHERE key = 'reset_at'").get()?.value
+    if (resetAt && snap?.at && Date.parse(snap.at) <= Date.parse(resetAt)) {
+      return console.log('AUTORESTORE: skipped — snapshot older than last reset', snap.at, resetAt)
+    }
 
     const order = ['users', 'experts', 'categories', 'requests', 'bids', 'payments', 'invoices', 'reviews', 'ads', 'city_requests', 'wallet_tx', 'withdrawals', 'credits', 'finance_reports', 'admins', 'blocked_phones', 'settings']
     db.pragma('foreign_keys = OFF')
