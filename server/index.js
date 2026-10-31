@@ -44,6 +44,7 @@ const RL_RULES = [
   [/^\/api\/auth\/request-otp$/, 6, 10 * 60e3],
   [/^\/api\/auth\/verify$/, 12, 10 * 60e3],
   [/^\/api\/admin\/login$/, 10, 10 * 60e3],
+  [/^\/api\/auth\/email\/send$/, 6, 10 * 60e3],
 ]
 app.use((req, res, next) => {
   const rule = RL_RULES.find(([re]) => re.test(req.path))
@@ -448,6 +449,8 @@ app.post('/api/auth/signup', (req, res) => {
   }
 
   if (isBlockedPhone(phone)) return res.status(403).json({ error: 'phone_blocked' })
+  if (!b.email || !/^[^@\s]+@[^@\s]+\.[a-z]{2,}$/i.test(String(b.email).trim()))
+    return res.status(400).json({ error: 'email_required' })
   const role = ['expert', 'support', 'customer'].includes(b.role) ? b.role : 'customer'
   const info = db
     .prepare(
@@ -2548,6 +2551,53 @@ app.post('/api/me/email/verify', authRequired, (req, res) => {
   db.prepare('DELETE FROM email_otps WHERE email = ?').run(email)
   db.prepare('UPDATE users SET email = ?, email_verified = 1 WHERE id = ?').run(email, req.userId)
   res.json({ ok: true, email })
+})
+
+
+/* ================= دخول برمز البريد ================= */
+app.post('/api/auth/email/send', async (req, res) => {
+  const email = String(req.body?.email || '').trim().toLowerCase()
+  if (!/^[^@\s]+@[^@\s]+\.[a-z]{2,}$/i.test(email)) return res.status(400).json({ error: 'invalid_email' })
+  const user = db.prepare('SELECT * FROM users WHERE lower(email) = ?').get(email)
+  const code = emailCode()
+  if (user) {
+    db.prepare(
+      `INSERT INTO email_otps (email, code, expires_at, attempts) VALUES (?, ?, ?, 0)
+       ON CONFLICT(email) DO UPDATE SET code = excluded.code, expires_at = excluded.expires_at, attempts = 0`,
+    ).run(email, code, Date.now() + 10 * 60 * 1000)
+    const html = `
+      <div style="font-family:Tahoma,Arial;direction:rtl;background:#FBF9F2;padding:24px">
+        <div style="max-width:480px;margin:auto;background:#fff;border:1px solid #EADFC8;border-radius:16px;padding:24px;text-align:center">
+          <h2 style="color:#006C35;margin:0 0 8px">مهنتي</h2>
+          <p style="color:#444">رمز الدخول لحسابك</p>
+          <div style="font-size:34px;font-weight:bold;letter-spacing:8px;background:#FBF5E3;border:1px dashed #C9A227;border-radius:12px;padding:14px">${code}</div>
+          <p style="color:#888;font-size:12px;margin-top:14px">صالح ١٠ دقائق — إذا ما طلبت الدخول تجاهل الرسالة.</p>
+        </div>
+      </div>`
+    const r = await sendEmail(email, `رمز الدخول — مهنتي: ${code}`, html)
+    if (!r.ok && String(process.env.DEV_OTP || '0') === '1') return res.json({ ok: true })
+    if (!r.ok) return res.status(503).json({ error: 'send_failed' })
+  }
+  res.json({ ok: true })
+})
+
+app.post('/api/auth/email/login', (req, res) => {
+  const email = String(req.body?.email || '').trim().toLowerCase()
+  const code = String(req.body?.code || '').trim()
+  const row = db.prepare('SELECT * FROM email_otps WHERE email = ?').get(email)
+  if (!row) return res.status(400).json({ error: 'not_requested' })
+  if (Date.now() > row.expires_at) return res.status(400).json({ error: 'expired' })
+  if (row.attempts >= 6) return res.status(429).json({ error: 'too_many' })
+  if (row.code !== code) {
+    db.prepare('UPDATE email_otps SET attempts = attempts + 1 WHERE email = ?').run(email)
+    return res.status(400).json({ error: 'wrong_code' })
+  }
+  const user = db.prepare('SELECT * FROM users WHERE lower(email) = ?').get(email)
+  if (!user) return res.status(404).json({ error: 'user_not_found' })
+  if (user.status === 'suspended' || user.status === 'deleted') return res.status(403).json({ error: 'account_suspended' })
+  db.prepare('DELETE FROM email_otps WHERE email = ?').run(email)
+  db.prepare('UPDATE users SET email_verified = 1, last_seen = datetime(\'now\') WHERE id = ?').run(user.id)
+  res.json({ ...startSession(user.id), user: fullUser(user.id) })
 })
 
 /* ================= المساعد الخاص (سعودي) ================= */

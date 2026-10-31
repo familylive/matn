@@ -9,6 +9,11 @@ export default function Login() {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const [otpOpen, setOtpOpen] = useState(false)
+  const [emailOpen, setEmailOpen] = useState(false)
+  const [email, setEmail] = useState('')
+  const [emailCode, setEmailCode] = useState('')
+  const [emailSent, setEmailSent] = useState(false)
+  const [emailErr, setEmailErr] = useState('')
   const [phone, setPhone] = useState('')
   const [code, setCode] = useState('')
   const [devCode, setDevCode] = useState('')
@@ -115,11 +120,65 @@ export default function Login() {
         </div>
       </form>
 
-      <div className="text-center mt-4">
-        <button onClick={() => setOtpOpen((v) => !v)} className="text-xs font-bold text-[#8a6d13] underline">
-          دخول برمز الجوال (OTP)
+      <div className="text-center mt-4 flex items-center justify-center gap-4">
+        <button onClick={() => { setOtpOpen((v) => !v); setEmailOpen(false) }} className="text-xs font-bold text-[#8a6d13] underline">
+          دخول برمز الجوال
+        </button>
+        <button onClick={() => { setEmailOpen((v) => !v); setOtpOpen(false) }} className="text-xs font-bold text-[#006C35] underline">
+          دخول برمز البريد
         </button>
       </div>
+
+      {emailOpen && (
+        <div className="card-lux p-4 mt-3 space-y-2">
+          <p className="text-xs font-bold text-gray-700">دخول برمز يُرسل على بريدك</p>
+          <input
+            type="email" dir="ltr" value={email} onChange={(e) => setEmail(e.target.value)}
+            placeholder="name@example.com"
+            className="w-full px-3 py-2 border border-[#E3D9BF] rounded-lg text-sm"
+          />
+          {!emailSent ? (
+            <button
+              onClick={async () => {
+                setEmailErr('')
+                try {
+                  await api.post('/api/auth/email/send', { email })
+                  setEmailSent(true)
+                } catch { setEmailErr('بريد غير صحيح') }
+              }}
+              className="w-full bg-[#006C35] text-white py-2 rounded-lg text-xs font-bold"
+            >
+              إرسال الرمز
+            </button>
+          ) : (
+            <>
+              <input
+                dir="ltr" value={emailCode} onChange={(e) => setEmailCode(e.target.value)}
+                placeholder="رمز التحقق (6 أرقام)"
+                className="w-full px-3 py-2 border border-[#E3D9BF] rounded-lg text-sm text-center tracking-widest"
+              />
+              <button
+                onClick={async () => {
+                  setEmailErr('')
+                  try {
+                    const r = await api.post('/api/auth/email/login', { email, code: emailCode })
+                    setToken(r.token)
+                    login({ ...r.user, userName: r.user?.name })
+                    navigate('/')
+                  } catch (e) {
+                    setEmailErr(e.message === 'wrong_code' ? 'الرمز غلط' : e.message === 'user_not_found' ? 'ما فيه حساب بهذا البريد' : 'تعذّر الدخول')
+                  }
+                }}
+                className="w-full bg-[#006B35] text-white py-2 rounded-lg text-xs font-bold"
+              >
+                دخول
+              </button>
+              <p className="text-[10px] text-gray-500">ما وصلك؟ شيّك مجلد الرسائل غير المرغوبة.</p>
+            </>
+          )}
+          {emailErr && <p className="text-[11px] text-red-500">{emailErr}</p>}
+        </div>
+      )}
 
       {otpOpen && (
         <div className="card-lux p-4 mt-3 space-y-2">
@@ -182,12 +241,6 @@ export default function Login() {
         <Link to="/terms" className="text-[11px] text-gray-500 underline">الشروط والأحكام</Link>
       </div>
 
-      <Link
-        to="/admin"
-        className="block text-center mt-6 text-xs font-bold text-[#8a6d13] bg-[#FBF5E3] border border-[#EADFC8] py-2.5 rounded-xl"
-      >
-        🛡️ دخول لوحة التحكم
-      </Link>
     </div>
   )
 }

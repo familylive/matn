@@ -55,6 +55,7 @@ export default function Register() {
     e.preventDefault()
     setError('')
     if (!form.city) return setError('اختر مدينتك')
+    if (!form.email || !/^[^@\s]+@[^@\s]+\.[a-z]{2,}$/i.test(form.email)) return setError('أدخل بريد إلكتروني صحيح')
     if (!form.lat || !form.lng) return setError('حدد موقعك على الخريطة')
     if (form.role === 'expert' && !(form.trades || []).length) return setError('اختر تخصصاً واحداً على الأقل')
     setBusy(true)
@@ -146,8 +147,8 @@ export default function Register() {
                 className="w-full mt-1 px-3 py-2.5 border border-[#E3D9BF] rounded-xl outline-none focus:border-[#006C35]" />
             </div>
             <div>
-              <label className="text-xs font-bold text-gray-600">الإيميل</label>
-              <input type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })}
+              <label className="text-xs font-bold text-gray-600">الإيميل *</label>
+              <input required type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })}
                 className="w-full mt-1 px-3 py-2.5 border border-[#E3D9BF] rounded-xl outline-none focus:border-[#006C35]" />
             </div>
             <div className="grid grid-cols-2 gap-3">
