@@ -2007,6 +2007,7 @@ app.post('/api/requests/:id/pay', authRequired, (req, res) => {
   refreshInviterAll(req.userId)
   const updated = requestWithBids(request.id)
   io.to(`request:${request.id}`).emit('request:accepted', updated)
+  tgNotify(`💵 دفعة جديدة\nطلب #${request.number || request.id} — ${request.title}\nالمبلغ: ${amount} ريال (${method})`)
   io.to(`user:${request.user_id}`).emit('notify', {
     type: 'payment',
     title: method === 'cash' ? 'تم تأكيد الدفع عند الاستلام' : 'تم الدفع بنجاح',
@@ -2322,6 +2323,7 @@ app.post('/api/requests/:id/dispute', authRequired, (req, res) => {
     .prepare('INSERT INTO disputes (request_id, opened_by, side, reason, details) VALUES (?, ?, ?, ?, ?)')
     .run(r.id, req.userId, isOwner ? 'customer' : 'expert', reason.slice(0, 200), String(req.body?.details || '').slice(0, 1000))
   io.to('admins').emit('admin:dispute', { id: info.lastInsertRowid, requestId: r.id, reason })
+  tgNotify(`⚠️ شكوى جديدة\nطلب #${r.number || r.id} — ${r.title}\nالسبب: ${reason}`)
   res.status(201).json({ ok: true, id: info.lastInsertRowid })
 })
 
@@ -2543,6 +2545,75 @@ app.post('/api/admin/agent', adminRequired, (req, res) => {
   } catch (e) {
     res.status(500).json({ reply: 'صار خطأ بسيط، جرّب مرة ثانية 🙏' })
   }
+})
+
+
+/* ================= رمزي على تليجرام ================= */
+const TG_TOKEN = process.env.TELEGRAM_BOT_TOKEN || ''
+const TG_SECRET = process.env.TELEGRAM_SECRET || ''
+
+async function tgSend(chatId, text) {
+  if (!TG_TOKEN || !chatId) return false
+  try {
+    const r = await fetch(`https://api.telegram.org/bot${TG_TOKEN}/sendMessage`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ chat_id: chatId, text: String(text).slice(0, 3800), disable_web_page_preview: true }),
+    })
+    return r.ok
+  } catch { return false }
+}
+
+function tgOwnerId() {
+  return db.prepare("SELECT value FROM settings WHERE key = 'telegram_owner'").get()?.value || ''
+}
+
+function tgNotify(text) {
+  const id = tgOwnerId()
+  if (id) tgSend(id, text).catch(() => {})
+}
+
+app.post('/api/telegram/:secret', async (req, res) => {
+  res.json({ ok: true })
+  try {
+    if (TG_SECRET && req.params.secret !== TG_SECRET) return
+    const hdr = req.headers['x-telegram-bot-api-secret-token']
+    if (TG_SECRET && hdr && hdr !== TG_SECRET) return
+
+    const msg = req.body?.message || req.body?.edited_message
+    const text = String(msg?.text || '').trim()
+    if (!text) return
+    const chatId = String(msg.chat.id)
+    const name = msg.from?.first_name || ''
+
+    const owner = tgOwnerId()
+    if (!owner) {
+      db.prepare("INSERT INTO settings (key, value) VALUES ('telegram_owner', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value").run(chatId)
+      await tgSend(chatId, `يا هلا ${name} 👋\nأنا رمزي — مساعدك الخاص في مهنتي، ومن الحين أنا مربوط عليك أنت بس.\n\n• /status — وضع الموقع\n• /money — الدخل والعمولات\n• أو اكتب لي بالعربي: «يا رمزي وش وضع الموقع»`)
+      return
+    }
+    if (chatId !== owner) {
+      await tgSend(chatId, 'عذراً، أنا مساعد خاص وما أرد على غير المالك 🙏')
+      return
+    }
+
+    if (text === '/start') {
+      await tgSend(chatId, 'رمزي معك 🫡\n\n/status وضع الموقع\n/money الدخل والعمولات\n\nأو اكتب سؤالك بالعربي مباشرة.')
+      return
+    }
+    if (text === '/status') {
+      const r = agentReply('وضع الموقع')
+      await tgSend(chatId, r.reply)
+      return
+    }
+    if (text === '/money') {
+      const r = agentReply('الدخل')
+      await tgSend(chatId, r.reply)
+      return
+    }
+    const r = agentReply(text)
+    await tgSend(chatId, r.reply)
+  } catch (e) { console.error('TG_HOOK_FAIL', e.message) }
 })
 
 /* ================= إعدادات الموقع (الإدارة) ================= */
