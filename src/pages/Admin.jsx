@@ -63,7 +63,7 @@ function Login({ onDone }) {
 
 const NAV = [
   { key: 'overview', label: 'نظرة عامة', icon: '📊' },
-  { key: 'agent', label: 'المساعد الخاص', icon: '🤖' },
+  { key: 'agent', label: 'رمزي — مساعدك', icon: '🤖' },
   { group: 'إعدادات الموقع', icon: '⚙️', items: [
     { key: 'site', label: 'الإعدادات الرئيسية', icon: '🏠' },
     { key: 'tech', label: 'الإعدادات الفنية', icon: '🧩' },
@@ -102,7 +102,7 @@ const NAV = [
 ]
 
 const TITLES = {
-  agent: 'المساعد الخاص 🤖',
+  agent: 'رمزي — مساعدك الخاص 🤖',
   site: 'إعدادات الموقع الرئيسية', tech: 'الإعدادات الفنية', gateways: 'بوابات الدفع',
   bank: 'الدفع كاش / الحساب البنكي', finance_reports: 'التقارير المالية للمحاسب', blocked: 'الأرقام المحجوبة',
   'users:ceo': 'المدير التنفيذي', 'users:finance': 'المشرف المالي', 'users:support': 'الدعم الفني',
@@ -390,7 +390,7 @@ const inp = 'w-full mt-1 px-3 py-2 border border-[#E3D9BF] rounded-xl text-sm bg
 
 function AgentChat() {
   const [msgs, setMsgs] = useState([
-    { who: 'bot', text: 'هلا والله وغلا يا طويل العمر 👋\nأنا مساعدك الخاص في مهنتي — اسألني عن وضع الموقع أو الدخل أو الطلبات، وأنا أجاوبك بالعربي.' },
+    { who: 'bot', text: 'هلا والله وغلا يا طويل العمر 👋\nأنا رمزي — مساعدك الخاص في مهنتي.\n\nنادني «يا رمزي» وأنا أرد عليك، واسألني عن وضع الموقع أو الدخل أو الطلبات.' },
   ])
   const [text, setText] = useState('')
   const [busy, setBusy] = useState(false)
@@ -436,7 +436,7 @@ function AgentChat() {
       </div>
 
       <form onSubmit={send} className="flex gap-2">
-        <input value={text} onChange={(e) => setText(e.target.value)} placeholder="اكتب لي بالعربي…"
+        <input value={text} onChange={(e) => setText(e.target.value)} placeholder="نادني: يا رمزي…"
           className="flex-1 px-3 py-2.5 border border-[#E3D9BF] rounded-xl text-sm" />
         <button disabled={busy} className="bg-[#006C35] text-white px-4 rounded-xl text-sm font-bold">
           {busy ? '…' : 'إرسال'}
