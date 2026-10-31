@@ -2495,7 +2495,7 @@ function agentReply(msg) {
   }
 
   // النزاعات
-  if (has('نزاع', 'شكوي', 'شكو', 'نزاعات')) {
+  if (has('نزاع', 'شكوي', 'شكاوي', 'كاوي', 'شكو', 'نزاعات')) {
     const n = db.prepare("SELECT COUNT(*) c FROM disputes WHERE status='open'").get().c
     return { reply: n ? `عندك ${n} شكوى مفتوحة، تبي أطلعها لك؟` : 'ما فيه شكاوى مفتوحة الحين ✅' }
   }
@@ -2516,6 +2516,16 @@ function agentReply(msg) {
 
   return { reply: pick(SA.nope) + '\n\nجرّب تقول: «وضع الموقع» أو «الدخل» أو «الطلبات».' }
 }
+
+app.post('/api/agent/telegram', (req, res) => {
+  const secret = process.env.AGENT_SECRET || ''
+  if (secret && req.headers['x-agent-secret'] !== secret) return res.status(401).json({ error: 'unauthorized' })
+  try {
+    res.json(agentReply(req.body?.message))
+  } catch (e) {
+    res.status(500).json({ reply: 'صار خطأ بسيط، جرّب مرة ثانية 🙏' })
+  }
+})
 
 app.post('/api/admin/agent', adminRequired, (req, res) => {
   try {
