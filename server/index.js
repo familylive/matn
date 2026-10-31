@@ -470,6 +470,9 @@ const DEV_MODE = process.env.NODE_ENV !== 'production' || process.env.DEV_OTP ==
 
 /* الدخول/التسجيل برمز الجوال — يُوقف من الإعدادات (otp_enabled=0) */
 const phoneOtpOn = () => (db.prepare("SELECT value FROM settings WHERE key='otp_enabled'").get()?.value ?? '1') === '1'
+/* حسابات بلا جوال: نخزّن رقم داخلي يبدأ بـ x (العمود NOT NULL UNIQUE) ونعرضه فارغاً */
+const anonPhone = () => 'x' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6)
+const showPhone = (p) => (p && !String(p).startsWith('x') ? p : null)
 
 app.post('/api/auth/request-otp', (req, res) => {
   if (!phoneOtpOn()) return res.status(403).json({ error: 'phone_login_disabled' })
@@ -499,12 +502,13 @@ app.post('/api/auth/signup', (req, res) => {
   const exists = db.prepare('SELECT id FROM users WHERE lower(username) = ?').get(username.toLowerCase())
   if (exists) return res.status(409).json({ error: 'username_taken' })
 
-  const phone = normalizePhone(b.phone)
-  if (phone && db.prepare('SELECT id FROM users WHERE phone = ?').get(phone)) {
+  const realPhone = normalizePhone(b.phone)
+  if (realPhone && db.prepare('SELECT id FROM users WHERE phone = ?').get(realPhone)) {
     return res.status(409).json({ error: 'phone_taken' })
   }
+  const phone = realPhone || anonPhone()
 
-  if (isBlockedPhone(phone)) return res.status(403).json({ error: 'phone_blocked' })
+  if (realPhone && isBlockedPhone(realPhone)) return res.status(403).json({ error: 'phone_blocked' })
   if (!b.email || !/^[^@\s]+@[^@\s]+\.[a-z]{2,}$/i.test(String(b.email).trim()))
     return res.status(400).json({ error: 'email_required' })
   const role = ['expert', 'support', 'customer'].includes(b.role) ? b.role : 'customer'
@@ -525,7 +529,7 @@ app.post('/api/auth/signup', (req, res) => {
     db.prepare(
       `INSERT INTO experts (name, name_ar, job, city, rate, rating, reviews_count, image, phone, skills, experience, lat, lng, user_id, verify_status, has_car, trades, exp_years)
        VALUES (?, ?, ?, ?, '150 ريال/ساعة', 4.5, 0, '/experts/ac.jpg', ?, '[]', ?, ?, ?, ?, 'pending', ?, ?, ?)`,
-    ).run(name, name, job, b.city || 'الرياض', phone,
+    ).run(name, name, job, b.city || 'الرياض', realPhone || null,
       years ? `${years} سنة` : '1 سنة',
       b.lat != null ? Number(b.lat) : null, b.lng != null ? Number(b.lng) : null, userId, b.has_car ? 1 : 0,
       JSON.stringify(trades), b.exp_years != null ? Number(b.exp_years) : null)
@@ -575,7 +579,7 @@ app.post('/api/auth/verify', (req, res) => {
   res.json({ ...startSession(user.id), user })
 })
 
-const fullUser = (id) =>
+const fullUserRaw = (id) =>
   db
     .prepare(
       `SELECT id, phone, name, city, role, email, nationality, specialty, lat, lng, avatar,
@@ -585,6 +589,12 @@ const fullUser = (id) =>
        FROM users WHERE id = ?`,
     )
     .get(id)
+
+const fullUser = (id) => {
+  const u = fullUserRaw(id)
+  if (u) u.phone = showPhone(u.phone)
+  return u
+}
 
 app.get('/api/me', authRequired, (req, res) => {
   const user = fullUser(req.userId)
@@ -1635,6 +1645,7 @@ app.get('/api/admin/users', adminRequired, (req, res) => {
   }
   const out = rows.map((u) => ({
     ...publicUser(u),
+    phone: showPhone(u.phone),
     verified: !!u.verified,
     stars_total: u.stars_total || 0,
     reviews_count: u.reviews_count || 0,
