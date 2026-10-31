@@ -2802,6 +2802,21 @@ app.get('/api/admin/snapshots', adminRequired, adminCan('backup'), async (_req, 
   }
 })
 
+/* استرجاع الصور والملفات فقط (بدون لمس البيانات) */
+app.post('/api/admin/restore-files', adminRequired, adminCan('backup'), (req, res) => {
+  const files = req.body?.files
+  if (!files || typeof files !== 'object') return res.status(400).json({ error: 'no_files' })
+  let n = 0
+  for (const [name, b64] of Object.entries(files)) {
+    if (typeof b64 !== 'string') continue
+    try {
+      fs.writeFileSync(path.join(uploadsDir, path.basename(name)), Buffer.from(b64, 'base64'))
+      n++
+    } catch (e) { console.error('FILE_RESTORE_FAIL', name, e.message) }
+  }
+  res.json({ ok: true, files: n })
+})
+
 /* استرجاع الصور والملفات فقط من نسخة سحابية (بدون لمس البيانات) */
 app.post('/api/admin/snapshots/files', adminRequired, async (req, res) => {
   const key = String(req.body?.key || 'bk:latest')
@@ -2865,6 +2880,7 @@ app.use(express.static(clientDist, { setHeaders: (res, filePath) => {
 } }))
 app.get('*', (req, res, next) => {
   if (req.path.startsWith('/api') || req.path.startsWith('/socket.io')) return next()
+  if (req.path.startsWith('/uploads/')) return res.status(404).send('not_found')
   res.sendFile(path.join(clientDist, 'index.html'))
 })
 
