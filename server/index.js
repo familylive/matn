@@ -2755,7 +2755,9 @@ app.get('/api/admin/vat/report', adminRequired, (req, res) => {
     FROM invoices GROUP BY m ORDER BY m DESC LIMIT 12`).all()
   const year = new Date().getFullYear()
   const y = db.prepare(`SELECT ROUND(SUM(commission),2) c, ROUND(SUM(vat_commission + vat_total),2) v FROM invoices WHERE substr(issued_at,1,4) = ?`).get(String(year))
-  res.json({ months: rows, year, annual_commission: y?.c || 0, annual_vat: y?.v || 0, threshold: 375000 })
+  // الحد النظامي يُقاس على آخر ١٢ شهراً متحركة (وليس السنة الميلادية)
+  const roll = db.prepare(`SELECT ROUND(SUM(commission),2) c FROM invoices WHERE date(issued_at) >= date('now','-12 months')`).get()
+  res.json({ months: rows, year, annual_commission: y?.c || 0, annual_vat: y?.v || 0, rolling_commission: roll?.c || 0, threshold: 375000 })
 })
 
 app.get('/api/admin/audit', adminRequired, (req, res) => {

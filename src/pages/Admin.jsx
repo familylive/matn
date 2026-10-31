@@ -608,11 +608,11 @@ function VatSettings() {
       {rep && (
         <div className="card-lux p-4">
           <p className="font-extrabold text-sm text-[#11221A]">📊 التقرير الضريبي</p>
-          <p className="text-[10px] text-gray-500 mt-1">إيراد العمولات هذا العام: <b>{Number(rep.annual_commission).toFixed(2)}</b> ريال · الضريبة المحصّلة: <b>{Number(rep.annual_vat).toFixed(2)}</b></p>
+          <p className="text-[10px] text-gray-500 mt-1">إيراد العمولات — آخر ١٢ شهراً: <b>{Number(rep.rolling_commission ?? rep.annual_commission).toFixed(2)}</b> ريال · الضريبة المحصّلة هذا العام: <b>{Number(rep.annual_vat).toFixed(2)}</b></p>
           <div className="mt-2 h-2 bg-gray-200 rounded-full overflow-hidden">
-            <div className="h-full bg-[#006C35]" style={{ width: `${Math.min(100, (rep.annual_commission / rep.threshold) * 100)}%` }} />
+            <div className="h-full bg-[#006C35]" style={{ width: `${Math.min(100, ((rep.rolling_commission ?? rep.annual_commission) / rep.threshold) * 100)}%` }} />
           </div>
-          <p className="text-[10px] text-gray-500 mt-1">{((rep.annual_commission / rep.threshold) * 100).toFixed(1)}% من حد التسجيل الإلزامي (375,000)</p>
+          <p className="text-[10px] text-gray-500 mt-1">{(((rep.rolling_commission ?? rep.annual_commission) / rep.threshold) * 100).toFixed(1)}% من حد التسجيل الإلزامي (375,000 خلال ١٢ شهراً)</p>
           <div className="mt-3 overflow-x-auto">
             <table className="w-full text-[11px]">
               <thead><tr className="text-gray-400 border-b"><th className="text-start py-1">الشهر</th><th>فواتير</th><th>إجمالي</th><th>ضريبة</th></tr></thead>
@@ -634,7 +634,7 @@ function VatSettings() {
       <p className="text-[10px] text-gray-500 leading-5">
         • الضريبة تُخصم من مستحق الفني وتُورَّد للهيئة — ليست على المنصة.<br />
         • العميل يدفع السومة فقط (شاملة الضريبة) عند تفعيل «الأسعار شاملة».<br />
-        • التسجيل إلزامي عند تجاوز 375,000 ريال إيرادات سنوية.
+        • الحد 375,000 ريال <b>سنوياً</b> (آخر ١٢ شهراً متحركة) — ليس شهرياً.
       </p>
 
       {msg && <p className="text-[11px] font-bold text-[#006C35]">{msg}</p>}
