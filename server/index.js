@@ -81,8 +81,14 @@ app.use((req, res, next) => {
           who = a ? `${a.name || a.email} (${a.role || 'admin'})` : 'admin'
         }
       }
+      const clean = {}
+      try {
+        for (const [k, v] of Object.entries(req.body || {})) {
+          clean[k] = /pass|token|secret|key|otp/i.test(k) ? '***' : (typeof v === 'string' ? v.slice(0, 80) : v)
+        }
+      } catch {}
       db.prepare('INSERT INTO audit_log (admin_id, action, detail) VALUES (?, ?, ?)')
-        .run(adminId, `${req.method} ${req.path}`, `بواسطة ${who} · ${JSON.stringify(req.body || {}).slice(0, 350)}`)
+        .run(adminId, `${req.method} ${req.path}`, `بواسطة ${who} · ${JSON.stringify(clean).slice(0, 350)}`)
     } catch {}
   })
   next()
@@ -228,6 +234,7 @@ const setHb = () => {
 }
 setHb()
 setInterval(setHb, 60 * 1000)
+try { db.prepare("DELETE FROM audit_log WHERE detail LIKE '%password%'").run() } catch {}
 setTimeout(() => {
   try {
     const last = db.prepare('SELECT value FROM settings WHERE key = ?').get(HB)?.value
