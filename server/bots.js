@@ -3,6 +3,10 @@ import { autoSettle } from './flow.js'
 
 const timers = new Map()
 
+/* الفنيون الوهميون (بوتات المزاد) — للتجربة فقط.
+   في الإنتاج تكون مطفية إلا إذا DEMO_BOTS=1 صراحةً. */
+export const demoBotsOn = () => process.env.DEMO_BOTS === '1'
+
 const BOT_TEMPLATES = {
   AC: ['أبو خالد للتبريد', 'مؤسسة النسيم للتكييف', 'فني التكييف السريع', 'مركز البرودة'],
   Plumber: ['مؤسسة المياه الذهبية', 'سباك الرياض السريع'],
@@ -20,6 +24,7 @@ const BOTS = [
 ]
 
 export function seedBots() {
+  if (!demoBotsOn()) return
   try { markBotCars() } catch {}
   const insert = db.prepare(
     `INSERT INTO experts (name, name_ar, job, city, rate, rating, reviews_count, image, phone, skills, experience, lat, lng, is_bot, has_car)
@@ -150,6 +155,7 @@ function tick(io, requestId) {
 }
 
 export function onNewRequest(io, request) {
+  if (!demoBotsOn()) return
   if (timers.has(request.id)) return
   let n = 0
   const demoOn = () => db.prepare("SELECT value FROM settings WHERE key = 'demo_auto_accept'").get()?.value === '1'
@@ -173,6 +179,7 @@ function stop(requestId) {
 }
 
 export function resumeBots(io) {
+  if (!demoBotsOn()) return
   const open = db.prepare("SELECT * FROM requests WHERE status = 'open'").all()
   for (const r of open) onNewRequest(io, r)
   console.log(`bots resumed on ${open.length} open AC request(s)`)
