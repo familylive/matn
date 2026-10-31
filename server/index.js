@@ -2526,6 +2526,14 @@ app.post('/api/me/email/send', authRequired, async (req, res) => {
   res.json({ ok: true })
 })
 
+app.post('/api/admin/email/test', adminRequired, async (req, res) => {
+  const to = String(req.body?.to || '').trim()
+  if (!to) return res.status(400).json({ error: 'email_required' })
+  const code = emailCode()
+  const r = await sendEmail(to, `تجربة إرسال — مهنتي (${code})`, `<div style="font-family:Tahoma;direction:rtl"><h2 style="color:#006C35">مهنتي ✅</h2><p>الإرسال شغّال. الرمز التجريبي: <b style="font-size:22px">${code}</b></p></div>`)
+  res.status(r.ok ? 200 : 500).json(r)
+})
+
 app.post('/api/me/email/verify', authRequired, (req, res) => {
   const email = String(req.body?.email || '').trim().toLowerCase()
   const code = String(req.body?.code || '').trim()
