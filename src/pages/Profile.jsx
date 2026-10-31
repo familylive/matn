@@ -73,8 +73,8 @@ export default function Profile() {
         </button>
         <div className="relative inline-block pt-2">
           {/* زر تعديل الصورة — على اليسار، كبير وواضح */}
-          <label className="absolute -bottom-3 -end-3 z-20 w-10 h-10 rounded-full bg-[#C9A227] text-white grid place-items-center cursor-pointer shadow-lg ring-2 ring-white">
-            <svg className="w-4.5 h-4.5" style={{ width: 18, height: 18 }} fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+          <label className="absolute -bottom-2 -end-2 z-20 w-7 h-7 rounded-full bg-[#C9A227] text-white grid place-items-center cursor-pointer shadow-md ring-2 ring-white">
+            <svg className="w-4.5 h-4.5" style={{ width: 14, height: 14 }} fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" d="M16.862 3.487a2.06 2.06 0 112.914 2.914L7.5 18.65l-4 1 1-4L16.862 3.487z" />
             </svg>
             <input
@@ -105,7 +105,7 @@ export default function Profile() {
         </div>
         <h2 className="text-lg font-extrabold text-[#11221A] mt-4 flex items-center justify-center gap-1.5">
           <span className="truncate">{profile.name || profile.userName}</span>
-          {!!profile.verified && <VerifiedBadge size={22} title="موثّق" />}
+          {!!profile.verified && <VerifiedBadge size={28} title="موثّق" />}
         </h2>
         <div className="flex items-center justify-center gap-2 mt-1 flex-wrap">
           <span className={`text-[11px] px-2 py-0.5 rounded-full font-bold ${isExpert ? 'bg-[#FBF5E3] text-[#8a6d13]' : 'bg-[#E9F5EE] text-[#006C35]'}`}>
