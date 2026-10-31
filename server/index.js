@@ -2440,6 +2440,91 @@ app.post('/api/me/delete', authRequired, (req, res) => {
   res.json({ ok: true })
 })
 
+
+/* ================= المساعد الخاص (سعودي) ================= */
+const SA = {
+  hi: ['هلا والله وغلا 👋', 'يا هلا بالمدير 🙌', 'هلا بك، تامر أمر؟'],
+  ok: ['تم يا طويل العمر ✅', 'أبشر، خلصتها ✅', 'تم اللي طلبته ✅'],
+  nope: ['العذر منك، ما فهمت عليك 🤔', 'ما وصلني قصدك، وضّح لي شوي؟'],
+}
+
+const pick = (arr) => arr[Math.floor(Math.random() * arr.length)]
+const sar = (n) => `${Number(n || 0).toFixed(2)} ريال`
+
+function agentReply(msg) {
+  const q = String(msg || '').trim()
+  const t = q.replace(/[أإآ]/g, 'ا').replace(/ى/g, 'ي').replace(/ة/g, 'ه').toLowerCase()
+
+  const has = (...w) => w.some((x) => t.includes(x))
+
+  // سلام
+  if (has('هلا', 'السلام', 'مرحبا', 'صباح', 'مساء', 'يا هلا') && q.length < 25) {
+    return { reply: pick(SA.hi) + '\n\nأقدر أقولك: وضع الموقع، الطلبات، الدخل، المحافظ، النزاعات، وأسوي لك نسخة احتياطية أو أرجّع آخر نسخة.' }
+  }
+
+  // وضع الموقع
+  if (has('وضع الموقع', 'الموقع شغال', 'شغال', 'الحالة', 'صاحي', 'واقف')) {
+    const reqs = db.prepare("SELECT COUNT(*) c FROM requests WHERE date(created_at,'+3 hours') = date('now','+3 hours')").get().c
+    const open = db.prepare("SELECT COUNT(*) c FROM requests WHERE status = 'open'").get().c
+    const exp = db.prepare('SELECT COUNT(*) c FROM experts').get().c
+    const usr = db.prepare("SELECT COUNT(*) c FROM users WHERE COALESCE(status,'active')='active'").get().c
+    return {
+      reply: `الموقع شغّال تمام يا طويل العمر ✅\n\n📥 طلبات اليوم: ${reqs}\n🟢 مزادات مفتوحة: ${open}\n🧰 فنيين: ${exp}\n👥 أعضاء: ${usr}`,
+      data: { reqs, open, exp, usr },
+    }
+  }
+
+  // المال
+  if (has('دخل', 'ايراد', 'فلوس', 'محفظ', 'عمول', 'كم كسبنا', 'المبلغ')) {
+    const fin = db.prepare('SELECT COALESCE(SUM(commission),0) c, COALESCE(SUM(total_paid),0) p, COUNT(*) n FROM invoices').get()
+    const due = db.prepare("SELECT COALESCE(SUM(amount),0) v FROM platform_dues WHERE status='due'").get().v
+    const avail = db.prepare("SELECT COALESCE(SUM(amount),0) v FROM wallet_tx WHERE status='available'").get().v
+    return {
+      reply: `الحسبة يا طويل العمر 💰\n\n🧾 فواتير: ${fin.n}\n💵 إجمالي مدفوعات العملاء: ${sar(fin.p)}\n🏦 عمولة المنصة: ${sar(fin.c)}\n⏳ عمولة لسّه عند الفنيين: ${sar(due)}\n✅ متاح لسحب الفنيين: ${sar(avail)}`,
+      data: { fin, due, avail },
+    }
+  }
+
+  // الطلبات
+  if (has('طلبات', 'طلبات اليوم', 'اخر الطلبات')) {
+    const rows = db.prepare("SELECT id, number, title, status, city FROM requests ORDER BY id DESC LIMIT 5").all()
+    return {
+      reply: 'آخر ٥ طلبات 📋\n\n' + rows.map((r) => `#${r.number || r.id} — ${r.title} (${r.status})`).join('\n'),
+      data: rows,
+    }
+  }
+
+  // النزاعات
+  if (has('نزاع', 'شكوي', 'شكو', 'نزاعات')) {
+    const n = db.prepare("SELECT COUNT(*) c FROM disputes WHERE status='open'").get().c
+    return { reply: n ? `عندك ${n} شكوى مفتوحة، تبي أطلعها لك؟` : 'ما فيه شكاوى مفتوحة الحين ✅' }
+  }
+
+  // نسخة احتياطية
+  if (has('نسخة', 'باكن', 'احتياط')) {
+    const tables = ['users', 'experts', 'requests', 'bids', 'invoices', 'wallet_tx', 'credits']
+    const counts = tables.map((t) => `${t}: ${db.prepare(`SELECT COUNT(*) c FROM ${t}`).get().c}`).join(' · ')
+    return { reply: `أبشر، النسخة تناخذ تلقائياً كل ٣٠ دقيقة ☁️\n\nالحين عندنا:\n${counts}` }
+  }
+
+  // المساعدة
+  if (has('ساعد', 'وش تسوي', 'مساعدة', 'اوامر', 'تقدر')) {
+    return {
+      reply: `أقدر أسوي لك 👇\n\n• «وضع الموقع» — يطلع لك الأرقام الحين\n• «الدخل» أو «العمولات» — حسبة الفلوس\n• «الطلبات» — آخر الطلبات\n• «الشكاوى» — المفتوحة\n• «النسخ» — حالة النسخ الاحتياطي\n\nولو تبي شي ثاني قل لي بالعربي وأنا أفهم 😉`,
+    }
+  }
+
+  return { reply: pick(SA.nope) + '\n\nجرّب تقول: «وضع الموقع» أو «الدخل» أو «الطلبات».' }
+}
+
+app.post('/api/admin/agent', adminRequired, (req, res) => {
+  try {
+    res.json(agentReply(req.body?.message))
+  } catch (e) {
+    res.status(500).json({ reply: 'صار خطأ بسيط، جرّب مرة ثانية 🙏' })
+  }
+})
+
 /* ================= إعدادات الموقع (الإدارة) ================= */
 const SITE_KEYS = {
   site_name: 'مهنتي',

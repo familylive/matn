@@ -1,5 +1,5 @@
 import VerifiedBadge from '../components/VerifiedBadge.jsx'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 
 const TOKEN_KEY = 'adminToken'
@@ -63,6 +63,7 @@ function Login({ onDone }) {
 
 const NAV = [
   { key: 'overview', label: 'نظرة عامة', icon: '📊' },
+  { key: 'agent', label: 'المساعد الخاص', icon: '🤖' },
   { group: 'إعدادات الموقع', icon: '⚙️', items: [
     { key: 'site', label: 'الإعدادات الرئيسية', icon: '🏠' },
     { key: 'tech', label: 'الإعدادات الفنية', icon: '🧩' },
@@ -101,6 +102,7 @@ const NAV = [
 ]
 
 const TITLES = {
+  agent: 'المساعد الخاص 🤖',
   site: 'إعدادات الموقع الرئيسية', tech: 'الإعدادات الفنية', gateways: 'بوابات الدفع',
   bank: 'الدفع كاش / الحساب البنكي', finance_reports: 'التقارير المالية للمحاسب', blocked: 'الأرقام المحجوبة',
   'users:ceo': 'المدير التنفيذي', 'users:finance': 'المشرف المالي', 'users:support': 'الدعم الفني',
@@ -384,6 +386,65 @@ const Fld = ({ label, children, hint }) => (
   </div>
 )
 const inp = 'w-full mt-1 px-3 py-2 border border-[#E3D9BF] rounded-xl text-sm bg-white'
+
+
+function AgentChat() {
+  const [msgs, setMsgs] = useState([
+    { who: 'bot', text: 'هلا والله وغلا يا طويل العمر 👋\nأنا مساعدك الخاص في مهنتي — اسألني عن وضع الموقع أو الدخل أو الطلبات، وأنا أجاوبك بالعربي.' },
+  ])
+  const [text, setText] = useState('')
+  const [busy, setBusy] = useState(false)
+  const endRef = useRef(null)
+
+  useEffect(() => { endRef.current?.scrollIntoView({ behavior: 'smooth' }) }, [msgs])
+
+  const send = async (e) => {
+    e && e.preventDefault()
+    const t = text.trim()
+    if (!t || busy) return
+    setMsgs((m) => [...m, { who: 'me', text: t }])
+    setText(''); setBusy(true)
+    try {
+      const r = await api('/api/admin/agent', { method: 'POST', body: { message: t } })
+      setMsgs((m) => [...m, { who: 'bot', text: r.reply }])
+    } catch {
+      setMsgs((m) => [...m, { who: 'bot', text: 'ما قدرت أوصل للسيرفر، جرّب بعد شوي 🙏' }])
+    } finally { setBusy(false) }
+  }
+
+  const quick = ['وضع الموقع', 'الدخل', 'الطلبات', 'الشكاوى', 'النسخ']
+
+  return (
+    <div className="space-y-3">
+      <div className="card-lux p-3 h-[60vh] overflow-y-auto flex flex-col gap-2 bg-[#FBF9F2]">
+        {msgs.map((m, i) => (
+          <div key={i} className={`max-w-[85%] px-3 py-2 rounded-2xl text-[12.5px] leading-6 whitespace-pre-line ${m.who === 'me' ? 'self-start bg-[#006C35] text-white' : 'self-end bg-white border border-[#EADFC8] text-[#11221A]'}`}>
+            {m.text}
+          </div>
+        ))}
+        {busy && <div className="self-end text-[11px] text-gray-400">يكتب…</div>}
+        <div ref={endRef} />
+      </div>
+
+      <div className="flex gap-1.5 flex-wrap">
+        {quick.map((q) => (
+          <button key={q} onClick={() => { setText(q); setTimeout(() => send(), 10) }}
+            className="text-[11px] font-bold px-2.5 py-1.5 rounded-full bg-white border border-[#E3D9BF] text-gray-600">
+            {q}
+          </button>
+        ))}
+      </div>
+
+      <form onSubmit={send} className="flex gap-2">
+        <input value={text} onChange={(e) => setText(e.target.value)} placeholder="اكتب لي بالعربي…"
+          className="flex-1 px-3 py-2.5 border border-[#E3D9BF] rounded-xl text-sm" />
+        <button disabled={busy} className="bg-[#006C35] text-white px-4 rounded-xl text-sm font-bold">
+          {busy ? '…' : 'إرسال'}
+        </button>
+      </form>
+    </div>
+  )
+}
 
 function SiteSettings() {
   const { d, set, save, msg } = useSiteSettings()
@@ -2410,6 +2471,7 @@ function Shell({ onLogout }) {
       case 'ads': return <Ads />
       case 'invoices': return <Invoices />
       case 'categories': return <Categories />
+      case 'agent': return <AgentChat />
       case 'site': return <SiteSettings />
       case 'tech': return <TechSettings />
       case 'gateways': return <Gateways />
