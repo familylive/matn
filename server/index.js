@@ -3258,23 +3258,35 @@ app.post('/api/admin/maintenance/reset', adminRequired, adminCan('backup'), asyn
   db.prepare("INSERT INTO settings (key, value) VALUES ('reset_at', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value")
     .run(new Date().toISOString())
 
-  // نسخة نظيفة إلى السحابة فوراً — حتى لا ترجع البيانات القديمة عند أي إعادة تشغيل
+  // نسخة نظيفة إلى السحابة فوراً (الجداول فقط — الصور محفوظة أصلاً لكل ملف في KV)
+  // وإلا فإعادة تشغيل الخدمة ترجّع البيانات القديمة من آخر نسخة سحابية.
   let cloud = false
+  let cloudErr = null
+  const at = new Date().toISOString()
   try {
     const { token, acc, ns } = cfCfg()
     if (token && acc && ns) {
       const tables = {}
       for (const t of BACKUP_TABLES) { try { tables[t] = db.prepare(`SELECT * FROM ${t}`).all() } catch {} }
+      const body = JSON.stringify({ at, version: 2, tables, reset: true })
       const r = await fetch(`https://api.cloudflare.com/client/v4/accounts/${acc}/storage/kv/namespaces/${ns}/values/bk:latest`, {
         method: 'PUT',
         headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
-        body: JSON.stringify({ at: new Date().toISOString(), version: 2, tables, files: collectUploads() }),
+        body,
       })
       cloud = r.ok
+      if (!r.ok) cloudErr = `http_${r.status} ${String(await r.text().catch(() => '')).slice(0, 200)} body=${body.length}B`
+      // علامة مستقلة: أي نسخة أقدم من هذا الوقت تُتجاهل عند الإقلاع
+      const rm = await fetch(`https://api.cloudflare.com/client/v4/accounts/${acc}/storage/kv/namespaces/${ns}/values/reset:at`, {
+        method: 'PUT',
+        headers: { authorization: `Bearer ${token}`, 'content-type': 'text/plain' },
+        body: at,
+      })
+      if (!rm.ok) console.error('RESET_MARK_FAIL', rm.status)
     }
-  } catch (e) { console.error('RESET_SNAP_FAIL', e.message) }
+  } catch (e) { cloudErr = String(e.message); console.error('RESET_SNAP_FAIL', e.message) }
 
-  res.json({ ok: true, deleted, kept_user_ids: keep, cloud_snapshot: cloud, snapshot })
+  res.json({ ok: true, deleted, kept_user_ids: keep, cloud_snapshot: cloud, cloud_error: cloudErr, snapshot })
 })
 
 /* الأرقام المحجوبة (حجب الجوال) */
@@ -4047,8 +4059,17 @@ async function autoRestoreOnBoot() {
     const tables = snap?.tables
     if (!tables || typeof tables !== 'object') return console.log('AUTORESTORE: bad snapshot')
 
-    // لا ترجّع بيانات أقدم من آخر تصفير للمنصة
-    const resetAt = db.prepare("SELECT value FROM settings WHERE key = 'reset_at'").get()?.value
+    // لا ترجّع بيانات أقدم من آخر تصفير للمنصة (العلامة في KV + في الإعدادات)
+    let resetAt = process.env.RESET_AT || db.prepare("SELECT value FROM settings WHERE key = 'reset_at'").get()?.value || null
+    try {
+      const rm = await fetch(`https://api.cloudflare.com/client/v4/accounts/${acc}/storage/kv/namespaces/${ns}/values/reset:at`, {
+        headers: { authorization: `Bearer ${tok}` },
+      })
+      if (rm.ok) {
+        const v = (await rm.text()).trim()
+        if (v && (!resetAt || Date.parse(v) > Date.parse(resetAt))) resetAt = v
+      }
+    } catch {}
     if (resetAt && snap?.at && Date.parse(snap.at) <= Date.parse(resetAt)) {
       return console.log('AUTORESTORE: skipped — snapshot older than last reset', snap.at, resetAt)
     }
