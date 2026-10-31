@@ -349,7 +349,7 @@ export default function RequestDetail() {
 
   const lowest = data.bids[0]?.amount
   const base = lowest ?? 0
-  const customerFee = Math.round(base * fees.customer) / 100
+  const customerFee = Math.round(base * (fees.customer || 0)) / 100
   const total = Math.round((base + customerFee) * 100) / 100
   const expertFee = Math.round(base * fees.expert) / 100
   const endMs = data.ends_at ? new Date(data.ends_at.replace(' ', 'T') + 'Z').getTime() : null
@@ -644,11 +644,10 @@ export default function RequestDetail() {
             <div className="gold-bar absolute inset-x-0 top-0" />
             <p className="font-extrabold text-[#11221A] pt-1">💳 إتمام الدفع</p>
             <div className="rounded-lg bg-white border border-[#EADFC8] p-3 text-xs space-y-1 text-gray-600">
-              <div className="flex justify-between"><span>قيمة السومة</span><span>{base} ر.س</span></div>
-              <div className="flex justify-between"><span>رسوم خدمة ({fees.customer}%)</span><span>{customerFee} ر.س</span></div>
-              <div className="flex justify-between font-extrabold text-[#006C35] pt-1 border-t border-dashed">
-                <span>الإجمالي المطلوب</span><span>{total} ر.س</span>
+              <div className="flex justify-between font-extrabold text-[#006C35]">
+                <span>قيمة المزايدة</span><span>{total} ر.س</span>
               </div>
+              <p className="text-[10px] text-gray-400 pt-1">السعر شامل كل شيء — بدون أي رسوم إضافية عليك.</p>
             </div>
             {credit > 0 && (
               <label className="flex items-center gap-2 rounded-xl border border-[#C9A227] bg-[#FBF5E3] px-3 py-2.5 cursor-pointer">
@@ -696,8 +695,8 @@ export default function RequestDetail() {
                 : `ادفع ${Math.max(0, Number(total || 0) - (pay.useCredit ? Math.min(credit, Number(total || 0)) : 0)).toFixed(2)} ر.س`}
             </button>
             <div className="rounded-lg bg-[#FBF9F2] border border-[#EADFC8] p-2 text-[11px] text-[#8a6d13] leading-relaxed">
-              للفني: {base} − عمولة {fees.expert}% ({expertFee}) = <b>{Math.round((base - expertFee) * 100) / 100} ر.س</b>
-              {pay.method === 'cash' && <><br />الفني يستلم {total} كاش ويحوّل للمنصة {Math.round((customerFee + expertFee) * 100) / 100} ر.س.</>}
+              للفني (لا يظهر للعميل في الفاتورة): {base} − رسم خدمة {fees.expert}% ({expertFee}) =
+              <b> {Math.round((base - expertFee) * 100) / 100} ر.س</b> صافي مستحقه.
             </div>
             <p className="text-[10px] text-gray-400 text-center">
               الدفع الإلكتروني تجريبي — نربط بوابة (Moyasar) عند الحاجة.

@@ -65,12 +65,15 @@ export function issueInvoice(requestId) {
       note: `مستحق الخدمة — طلب #${request.number || request.id}`,
     })
     // عمولة المنصة: جزء من المبلغ الذي حصّله الفني من العميل → يُخصم من رصيده
-    addPlatformDue({
-      expertId: bid.expert_id,
-      amount: round2(customerFee + expertFee),
-      invoiceId: invoice.id,
-      requestId,
-    })
+    // لا توجد عمولة على العميل الآن — العمولة تُحسم من مستحق الفني مباشرة
+    if (customerFee > 0) {
+      addPlatformDue({
+        expertId: bid.expert_id,
+        amount: round2(customerFee),
+        invoiceId: invoice.id,
+        requestId,
+      })
+    }
   } catch (e) {
     console.error('WALLET_CREDIT_FAIL', e.message)
   }

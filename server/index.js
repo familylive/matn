@@ -875,7 +875,7 @@ const getSetting = (k, d) => db.prepare('SELECT value FROM settings WHERE key = 
 const commissionCustomer = () => Number(getSetting('commission_customer', 7.5))
 const commissionExpert = () => Number(getSetting('commission_expert', 7.5))
 const round2 = (n) => Math.round(n * 100) / 100
-const customerTotal = (amount) => round2(amount * (1 + commissionCustomer() / 100))
+const customerTotal = (amount) => round2(Number(amount) || 0) // العميل يدفع قيمة السومة فقط — العمولة على الفني
 
 const R_EARTH_KM = 6371
 function haversineKm(aLat, aLng, bLat, bLng) {
@@ -2756,9 +2756,10 @@ app.get('/api/requests/:id/invoices', authRequired, (req, res) => {
   }
 
   const expDeferred = round2(applied.filter((x) => x.side === 'expert').reduce((a, x) => a + x.amount, 0))
-  const expItems = [{ label: 'قيمة الخدمة (مستحقك)', amount: round2(inv.net) }]
+  const expItems = [{ label: 'قيمة السومة', amount: round2(inv.amount) }]
+  if (Number(inv.expert_fee) > 0) expItems.push({ label: `رسم خدمة المنصة (${expPct}%)`, amount: -round2(inv.expert_fee) })
   if (expDeferred > 0) expItems.push({ label: 'مستحق سابق', amount: -expDeferred })
-  const dueToPlatform = round2(inv.customer_fee + inv.expert_fee)
+  const dueToPlatform = round2(inv.customer_fee)
 
   res.json({
     customer: {
