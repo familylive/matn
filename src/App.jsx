@@ -1,3 +1,4 @@
+import { useEffect } from 'react'
 import { Navigate, Route, Routes, useLocation } from 'react-router-dom'
 import Layout from './components/Layout.jsx'
 import Home from './pages/Home.jsx'
@@ -10,6 +11,7 @@ import Requests from './pages/Requests.jsx'
 import RequestDetail from './pages/RequestDetail.jsx'
 import Admin from './pages/Admin.jsx'
 import FinanceReport from './pages/FinanceReport.jsx'
+import Privacy from './pages/Privacy.jsx'
 import Register from './pages/Register.jsx'
 import Verify from './pages/Verify.jsx'
 import MyRequests from './pages/MyRequests.jsx'
@@ -21,6 +23,15 @@ import { useAuth } from './context/AuthContext.jsx'
 function RequireAuth({ children }) {
   const { isAuthenticated, loading } = useAuth()
   const location = useLocation()
+  useEffect(() => {
+    const t = setTimeout(() => {
+      fetch('/api/track', {
+        method: 'POST', headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ path: location.pathname }),
+      }).catch(() => {})
+    }, 800)
+    return () => clearTimeout(t)
+  }, [location.pathname])
 
   if (loading) {
     return (
@@ -52,6 +63,7 @@ export default function App() {
       <Route path="/my-requests" element={<Layout><MyRequests /></Layout>} />
       <Route path="/invoice/:id/:type" element={<Invoice />} />
       <Route path="/terms" element={<Layout><Terms /></Layout>} />
+      <Route path="/privacy" element={<Layout><Privacy /></Layout>} />
       <Route path="/nearby" element={<Layout><Nearby /></Layout>} />
       <Route path="/admin/finance/report" element={<FinanceReport />} />
       <Route path="/admin/*" element={<Admin />} />

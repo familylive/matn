@@ -142,6 +142,156 @@ function ExtraForm({ requestId, onAdded }) {
   )
 }
 
+
+function DisputeBox({ requestId, isOwner, isExpert }) {
+  const [open, setOpen] = useState(false)
+  const [existing, setExisting] = useState(null)
+  const [reason, setReason] = useState('')
+  const [details, setDetails] = useState('')
+  const [msg, setMsg] = useState('')
+  const [busy, setBusy] = useState(false)
+
+  useEffect(() => {
+    if (!isOwner && !isExpert) return
+    api.get(`/api/requests/${requestId}/dispute`).then(setExisting).catch(() => {})
+  }, [requestId, isOwner, isExpert])
+
+  if (!isOwner && !isExpert) return null
+
+  if (existing?.status === 'open') {
+    return (
+      <div className="card-lux p-3 mt-3 text-[11px] text-[#8a6d13] bg-[#FBF5E3]">
+        📩 عندك شكوى مفتوحة على هذا الطلب — بانتظار قرار الإدارة.
+      </div>
+    )
+  }
+  if (existing?.status === 'resolved') {
+    return (
+      <div className="card-lux p-3 mt-3 text-[11px] text-[#006C35]">
+        ✅ تم البت في الشكوى ({existing.outcome === 'refund' ? 'استرجاع' : 'إغلاق'}).
+      </div>
+    )
+  }
+
+  return (
+    <div className="card-lux p-3 mt-3">
+      {!open ? (
+        <button onClick={() => setOpen(true)} className="text-[12px] font-bold text-red-500">⚠️ فتح شكوى / نزاع</button>
+      ) : (
+        <div className="space-y-2">
+          <p className="font-extrabold text-sm text-[#11221A]">⚠️ شكوى على الطلب</p>
+          <input value={reason} onChange={(e) => setReason(e.target.value)} placeholder="سبب الشكوى (مثال: لم يكمل العمل)"
+            className="w-full px-3 py-2 border border-[#E3D9BF] rounded-xl text-sm" />
+          <textarea rows={2} value={details} onChange={(e) => setDetails(e.target.value)} placeholder="تفاصيل إضافية"
+            className="w-full px-3 py-2 border border-[#E3D9BF] rounded-xl text-sm" />
+          {msg && <p className="text-[11px] text-red-500">{msg}</p>}
+          <div className="flex gap-2">
+            <button
+              disabled={busy}
+              onClick={async () => {
+                setBusy(true); setMsg('')
+                try {
+                  await api.post(`/api/requests/${requestId}/dispute`, { reason, details })
+                  setExisting({ status: 'open' }); setOpen(false)
+                } catch (e) { setMsg(e.message === 'reason_required' ? 'اكتب سبب واضح' : 'تعذّر الإرسال') }
+                finally { setBusy(false) }
+              }}
+              className="flex-1 bg-red-500 text-white py-2 rounded-xl text-xs font-bold"
+            >
+              {busy ? 'جارٍ الإرسال…' : 'إرسال الشكوى'}
+            </button>
+            <button onClick={() => setOpen(false)} className="px-3 border border-[#E3D9BF] rounded-xl text-xs font-bold">إلغاء</button>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function VisitTracker({ requestId, isExpert, data }) {
+  const [msg, setMsg] = useState('')
+  const set = async (state) => {
+    let lat = null, lng = null
+    if (state === 'on_way') {
+      try {
+        const pos = await new Promise((res, rej) => navigator.geolocation.getCurrentPosition(res, rej, { timeout: 8000 }))
+        lat = pos.coords.latitude; lng = pos.coords.longitude
+      } catch {}
+    }
+    try {
+      await api.post(`/api/requests/${requestId}/visit`, { state, lat, lng })
+      setMsg('تم التحديث ✅'); setTimeout(() => setMsg(''), 2000)
+    } catch { setMsg('تعذّر التحديث') }
+  }
+  const stateLabel = {
+    on_way: '🚗 الفني في الطريق',
+    arrived: '📍 الفني وصل',
+    started: '🛠️ بدأ العمل',
+  }[data.visit_state]
+
+  if (!isExpert && !stateLabel) return null
+
+  return (
+    <div className="card-lux p-3 mt-3">
+      {isExpert ? (
+        <>
+          <p className="text-[12px] font-extrabold text-[#11221A] mb-2">🚗 حالة الوصول</p>
+          <div className="flex gap-1.5 flex-wrap">
+            <button onClick={() => set('on_way')} className="text-[11px] font-bold px-2.5 py-1.5 rounded-lg bg-[#FBF5E3] text-[#8a6d13]">في الطريق</button>
+            <button onClick={() => set('arrived')} className="text-[11px] font-bold px-2.5 py-1.5 rounded-lg bg-[#EAF4EE] text-[#006C35]">وصلت</button>
+            <button onClick={() => set('started')} className="text-[11px] font-bold px-2.5 py-1.5 rounded-lg bg-[#006C35] text-white">بدأت العمل</button>
+          </div>
+          {msg && <p className="text-[10px] text-[#006C35] mt-1">{msg}</p>}
+        </>
+      ) : (
+        <p className="text-[12px] font-extrabold text-[#006C35]">{stateLabel}</p>
+      )}
+    </div>
+  )
+}
+
+
+function RequestImages({ requestId, images = [], canEdit, onChange }) {
+  const [busy, setBusy] = useState(false)
+  const [err, setErr] = useState('')
+  const list = Array.isArray(images) ? images : []
+  return (
+    <div className="mt-2">
+      {list.length > 0 && (
+        <div className="flex gap-2 overflow-x-auto pb-1">
+          {list.map((src) => (
+            <a key={src} href={src} target="_blank" rel="noreferrer">
+              <img src={src} alt="" className="h-20 w-20 rounded-xl object-cover border border-[#EADFC8]" />
+            </a>
+          ))}
+        </div>
+      )}
+      {canEdit && list.length < 6 && (
+        <label className="mt-2 inline-flex items-center gap-1.5 text-[11px] font-bold text-[#006C35] bg-[#EAF4EE] border border-[#CFE6D8] rounded-lg px-2.5 py-1.5 cursor-pointer">
+          {busy ? 'جارٍ الرفع…' : '＋ إضافة صور للمشكلة'}
+          <input type="file" accept="image/*" multiple className="hidden" onChange={async (e) => {
+            const files = Array.from(e.target.files || []).slice(0, 6 - list.length)
+            e.target.value = ''
+            if (!files.length) return
+            setBusy(true); setErr('')
+            try {
+              const fd = new FormData()
+              files.forEach((f) => fd.append('images', f))
+              const res = await fetch(`/api/requests/${requestId}/images`, {
+                method: 'POST', headers: { authorization: `Bearer ${localStorage.getItem('authToken')}` }, body: fd,
+              })
+              const d = await res.json()
+              if (!res.ok) throw new Error(d.error)
+              onChange && onChange(d.images)
+            } catch { setErr('تعذّر رفع الصور') } finally { setBusy(false) }
+          }} />
+        </label>
+      )}
+      {err && <p className="text-[10px] text-red-500">{err}</p>}
+    </div>
+  )
+}
+
 export default function RequestDetail() {
   const { id } = useParams()
   const navigate = useNavigate()
@@ -420,6 +570,13 @@ export default function RequestDetail() {
         )}
 
         {data.description && <p className="text-gray-700 mb-3">{data.description}</p>}
+
+        <RequestImages
+          requestId={id}
+          images={data.images ? (typeof data.images === 'string' ? JSON.parse(data.images || '[]') : data.images) : []}
+          canEdit={isOwner && data.status === 'open'}
+          onChange={(imgs) => setData((d) => ({ ...d, images: imgs }))}
+        />
 
         <div className="grid grid-cols-2 gap-3 mb-5">
           <div className="bg-white rounded-xl p-3 border border-gray-100">
@@ -723,6 +880,14 @@ export default function RequestDetail() {
           <button onClick={complete} className="w-full mt-4 bg-green-500 text-white py-2.5 rounded-xl font-medium">
             {t('rd.complete')}
           </button>
+        )}
+
+        {['assigned', 'done', 'closed'].includes(data.status) && (
+          <VisitTracker requestId={id} isExpert={isAssignedExpert} data={data} />
+        )}
+
+        {['assigned', 'done', 'closed'].includes(data.status) && (
+          <DisputeBox requestId={id} isOwner={isOwner} isExpert={isAssignedExpert} />
         )}
 
         <ReviewBox

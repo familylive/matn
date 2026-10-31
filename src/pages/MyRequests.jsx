@@ -80,6 +80,11 @@ export default function MyRequests() {
               {r.lowest_bid ? ` · الأقل ${r.lowest_bid}` : ''}
             </p>
             <p className="text-[10px] text-gray-400 mt-1">{r.created_at?.slice(0, 16)}</p>
+            {['assigned', 'done', 'closed'].includes(r.status) && (
+              <p className="mt-1.5 inline-flex items-center gap-1 text-[10px] font-extrabold text-[#C9A227]">
+                ⭐ قيّم الفني — اضغط لتقييم تجربتك
+              </p>
+            )}
           </Link>
         ))}
         {!loading && rows.length === 0 && (

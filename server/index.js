@@ -35,6 +35,47 @@ const io = new SocketServer(server, { cors: { origin: '*' } })
 
 app.use(cors())
 app.use(express.json({ limit: '60mb' }))
+
+/* 🛡️ حماية بسيطة من التخمين: حد أقصى للمحاولات */
+const rlHits = new Map()
+const RL_RULES = [
+  [/^\/api\/auth\/login-local$/, 12, 5 * 60e3],
+  [/^\/api\/auth\/signup$/, 8, 10 * 60e3],
+  [/^\/api\/auth\/request-otp$/, 6, 10 * 60e3],
+  [/^\/api\/auth\/verify$/, 12, 10 * 60e3],
+  [/^\/api\/admin\/login$/, 10, 10 * 60e3],
+]
+app.use((req, res, next) => {
+  const rule = RL_RULES.find(([re]) => re.test(req.path))
+  if (!rule) return next()
+  const [, max, win] = rule
+  const key = `${req.ip}:${req.path}`
+  const now = Date.now()
+  const rec = rlHits.get(key) || { n: 0, reset: now + win }
+  if (now > rec.reset) { rec.n = 0; rec.reset = now + win }
+  rec.n++
+  rlHits.set(key, rec)
+  if (rec.n > max) {
+    res.setHeader('Retry-After', Math.ceil((rec.reset - now) / 1000))
+    return res.status(429).json({ error: 'too_many_requests', retry_after: Math.ceil((rec.reset - now) / 1000) })
+  }
+  next()
+})
+
+/* 🧾 سجل عمليات الإدارة */
+app.use((req, res, next) => {
+  if (!/^\/api\/admin\//.test(req.path)) return next()
+  if (!['POST', 'PATCH', 'PUT', 'DELETE'].includes(req.method)) return next()
+  res.on('finish', () => {
+    if (res.statusCode >= 400) return
+    try {
+      const id = Number(String(req.headers.authorization || '').replace('Bearer ', '').split('.')[1] ? 0 : 0)
+      db.prepare('INSERT INTO audit_log (admin_id, action, detail) VALUES (?, ?, ?)')
+        .run(null, `${req.method} ${req.path}`, JSON.stringify(req.body || {}).slice(0, 400))
+    } catch {}
+  })
+  next()
+})
 app.locals.verify = verifyToken
 
 const uploadsDir = process.env.UPLOADS_DIR || path.join(process.env.DATA_DIR || __dirname, 'uploads')
@@ -2260,6 +2301,144 @@ app.get('/api/me/loyalty', authRequired, (req, res) => {
   })
 })
 
+
+
+/* ================= النزاعات / الشكاوى ================= */
+app.post('/api/requests/:id/dispute', authRequired, (req, res) => {
+  const r = db.prepare('SELECT * FROM requests WHERE id = ?').get(req.params.id)
+  if (!r) return res.status(404).json({ error: 'not_found' })
+  const mine = db.prepare('SELECT * FROM experts WHERE user_id = ?').get(req.userId)
+  const bid = r.accepted_bid_id ? db.prepare('SELECT * FROM bids WHERE id = ?').get(r.accepted_bid_id) : null
+  const isOwner = r.user_id === req.userId
+  const isExpert = !!(mine && bid && bid.expert_id === mine.id)
+  if (!isOwner && !isExpert) return res.status(403).json({ error: 'forbidden' })
+  if (!['assigned', 'done', 'closed'].includes(r.status)) return res.status(409).json({ error: 'not_active' })
+  const reason = String(req.body?.reason || '').trim()
+  if (reason.length < 5) return res.status(400).json({ error: 'reason_required' })
+  if (db.prepare("SELECT 1 FROM disputes WHERE request_id = ? AND status = 'open'").get(r.id)) {
+    return res.status(409).json({ error: 'already_open' })
+  }
+  const info = db
+    .prepare('INSERT INTO disputes (request_id, opened_by, side, reason, details) VALUES (?, ?, ?, ?, ?)')
+    .run(r.id, req.userId, isOwner ? 'customer' : 'expert', reason.slice(0, 200), String(req.body?.details || '').slice(0, 1000))
+  io.to('admins').emit('admin:dispute', { id: info.lastInsertRowid, requestId: r.id, reason })
+  res.status(201).json({ ok: true, id: info.lastInsertRowid })
+})
+
+app.get('/api/requests/:id/dispute', authRequired, (req, res) => {
+  const d = db.prepare('SELECT * FROM disputes WHERE request_id = ? ORDER BY id DESC LIMIT 1').get(req.params.id)
+  res.json(d || null)
+})
+
+app.get('/api/admin/disputes', adminRequired, (req, res) => {
+  const status = String(req.query.status || 'open')
+  const rows = db
+    .prepare(
+      `SELECT d.*, q.number AS request_number, q.title AS request_title, q.status AS request_status,
+        u.name AS opener_name, u.phone AS opener_phone, q.user_id AS customer_id
+       FROM disputes d LEFT JOIN requests q ON q.id = d.request_id LEFT JOIN users u ON u.id = d.opened_by
+       WHERE (? = 'all' OR d.status = ?) ORDER BY d.id DESC LIMIT 200`,
+    )
+    .all(status, status)
+  res.json(rows)
+})
+
+app.post('/api/admin/disputes/:id/resolve', adminRequired, adminCan('requests'), (req, res) => {
+  const d = db.prepare('SELECT * FROM disputes WHERE id = ?').get(req.params.id)
+  if (!d) return res.status(404).json({ error: 'not_found' })
+  const outcome = ['refund', 'close', 'warn', 'partial'].includes(req.body?.outcome) ? req.body.outcome : 'close'
+  db.prepare("UPDATE disputes SET status = 'resolved', outcome = ?, admin_note = ?, resolved_at = datetime('now') WHERE id = ?")
+    .run(outcome, String(req.body?.note || '').slice(0, 500), d.id)
+
+  const r = db.prepare('SELECT * FROM requests WHERE id = ?').get(d.request_id)
+  if (outcome === 'refund' && r) {
+    db.prepare("UPDATE requests SET status = 'canceled', close_reason = 'استرجاع — قرار الإدارة', closed_at = datetime('now'), closed_by = 'admin' WHERE id = ?").run(r.id)
+    // سحب مستحق الفني المحجوز
+    const bid = r.accepted_bid_id ? db.prepare('SELECT * FROM bids WHERE id = ?').get(r.accepted_bid_id) : null
+    if (bid) db.prepare("UPDATE wallet_tx SET status = 'hold', amount = 0 WHERE expert_id = ? AND status IN ('hold','available') AND ref LIKE 'inv-%'").run(bid.expert_id)
+  }
+  if (outcome === 'close' && r) {
+    db.prepare("UPDATE requests SET status = 'closed', closed_at = datetime('now'), closed_by = 'admin', close_reason = 'أُغلق بعد شكوى — قرار الإدارة' WHERE id = ?").run(r.id)
+  }
+  io.to(`user:${d.opened_by}`).emit('notify', {
+    type: 'dispute',
+    title: '📩 تم البت في شكواك',
+    body: outcome === 'refund' ? 'تم الاسترجاع لصالحك' : 'تمت مراجعة الشكوى وإغلاقها',
+    requestId: d.request_id,
+  })
+  res.json({ ok: true })
+})
+
+/* ================= متابعة الفني في الطريق ================= */
+app.post('/api/requests/:id/visit', authRequired, (req, res) => {
+  const r = db.prepare('SELECT * FROM requests WHERE id = ?').get(req.params.id)
+  if (!r) return res.status(404).json({ error: 'not_found' })
+  const mine = db.prepare('SELECT * FROM experts WHERE user_id = ?').get(req.userId)
+  const bid = r.accepted_bid_id ? db.prepare('SELECT * FROM bids WHERE id = ?').get(r.accepted_bid_id) : null
+  if (!(mine && bid && bid.expert_id === mine.id)) return res.status(403).json({ error: 'forbidden' })
+  const state = ['on_way', 'arrived', 'started', 'none'].includes(req.body?.state) ? req.body.state : 'on_way'
+  db.prepare("UPDATE requests SET visit_state = ?, expert_lat = ?, expert_lng = ?, visit_updated_at = datetime('now') WHERE id = ?")
+    .run(state, req.body?.lat != null ? Number(req.body.lat) : r.expert_lat,
+      req.body?.lng != null ? Number(req.body.lng) : r.expert_lng, r.id)
+  const label = { on_way: 'الفني في الطريق إليك 🚗', arrived: 'الفني وصل موقعك 📍', started: 'الفني بدأ العمل 🛠️', none: '' }[state]
+  if (label) io.to(`user:${r.user_id}`).emit('notify', { type: 'visit', title: label, body: r.title, requestId: r.id })
+  io.to(`request:${r.id}`).emit('request:visit', { id: r.id, state, lat: req.body?.lat, lng: req.body?.lng })
+  res.json({ ok: true, state })
+})
+
+/* ================= صور الطلب ================= */
+app.post('/api/requests/:id/images', authRequired, upload.array('images', 5), (req, res) => {
+  const r = db.prepare('SELECT * FROM requests WHERE id = ?').get(req.params.id)
+  if (!r) return res.status(404).json({ error: 'not_found' })
+  if (r.user_id !== req.userId) return res.status(403).json({ error: 'forbidden' })
+  const files = (req.files || []).map((f) => `/uploads/${f.filename}`)
+  if (!files.length) return res.status(400).json({ error: 'no_files' })
+  const cur = parseJson(r.images, [])
+  const next = [...cur, ...files].slice(0, 6)
+  db.prepare('UPDATE requests SET images = ? WHERE id = ?').run(JSON.stringify(next), r.id)
+  res.status(201).json({ ok: true, images: next })
+})
+
+/* ================= الإحصائيات ================= */
+app.get('/api/admin/stats', adminRequired, (_req, res) => {
+  const today = new Date(Date.now() + 3 * 3600e3).toISOString().slice(0, 10)
+  const visits = db.prepare('SELECT COALESCE(SUM(n),0) v FROM page_views WHERE day = ?').get(today).v
+  const visits7 = db.prepare("SELECT COALESCE(SUM(n),0) v FROM page_views WHERE day >= date('now','-6 days')").get().v
+  const byCat = db
+    .prepare('SELECT category, COUNT(*) c FROM requests WHERE created_at >= datetime(\'now\',\'-30 days\') GROUP BY category ORDER BY c DESC LIMIT 6')
+    .all()
+  const conversion = db
+    .prepare("SELECT (SELECT COUNT(*) FROM requests) reqs, (SELECT COUNT(*) FROM requests WHERE status IN ('assigned','done','closed')) paid")
+    .get()
+  res.json({
+    visits_today: visits,
+    visits_7d: visits7,
+    top_categories: byCat,
+    conversion: conversion.reqs ? Math.round((conversion.paid / conversion.reqs) * 100) : 0,
+    open_disputes: db.prepare("SELECT COUNT(*) c FROM disputes WHERE status = 'open'").get().c,
+  })
+})
+
+app.post('/api/track', (req, res) => {
+  try {
+    const p = String(req.body?.path || '/').slice(0, 80)
+    const day = new Date(Date.now() + 3 * 3600e3).toISOString().slice(0, 10)
+    db.prepare('INSERT INTO page_views (day, path, n) VALUES (?, ?, 1) ON CONFLICT(day, path) DO UPDATE SET n = n + 1').run(day, p)
+  } catch {}
+  res.json({ ok: true })
+})
+
+/* ================= حذف الحساب ================= */
+app.post('/api/me/delete', authRequired, (req, res) => {
+  const u = db.prepare('SELECT * FROM users WHERE id = ?').get(req.userId)
+  if (!u) return res.status(404).json({ error: 'not_found' })
+  const open = db.prepare("SELECT COUNT(*) c FROM requests WHERE user_id = ? AND status IN ('open','awaiting_payment','assigned')").get(u.id).c
+  if (open) return res.status(409).json({ error: 'has_open_requests' })
+  db.prepare("UPDATE users SET status = 'deleted', name = 'حساب محذوف', avatar = NULL, phone = ? WHERE id = ?")
+    .run(`deleted-${u.id}-${Date.now()}`, u.id)
+  db.prepare("UPDATE experts SET verify_status = 'rejected' WHERE user_id = ?").run(u.id)
+  res.json({ ok: true })
+})
 
 /* ================= إعدادات الموقع (الإدارة) ================= */
 const SITE_KEYS = {

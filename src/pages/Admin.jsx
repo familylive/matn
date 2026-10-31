@@ -88,6 +88,7 @@ const NAV = [
   ]},
   { key: 'verifications', label: 'طلبات التوثيق', icon: '🪪' },
   { key: 'reviews', label: 'التقييمات', icon: '⭐' },
+  { key: 'disputes', label: 'الشكاوى والنزاعات', icon: '⚠️' },
   { key: 'loyalty', label: 'نادي الولاء', icon: '👑' },
   { key: 'reports', label: 'التقارير', icon: '📈' },
   { key: 'commissions', label: 'تقرير العمولات', icon: '💵' },
@@ -105,7 +106,7 @@ const TITLES = {
   'users:ceo': 'المدير التنفيذي', 'users:finance': 'المشرف المالي', 'users:support': 'الدعم الفني',
   'users:admin': 'المشرفون',
   overview: 'نظرة عامة', reports: 'التقارير', ads: 'الإعلانات', invoices: 'الفواتير',
-  categories: 'التصنيفات', payments: 'المدفوعات', commissions: 'تقرير العمولات', verifications: 'طلبات التوثيق', finance: 'المالية والمحافظ', loyalty: 'نادي الولاء', reviews: 'التقييمات',
+  categories: 'التصنيفات', payments: 'المدفوعات', commissions: 'تقرير العمولات', verifications: 'طلبات التوثيق', finance: 'المالية والمحافظ', loyalty: 'نادي الولاء', reviews: 'التقييمات', disputes: 'الشكاوى والنزاعات',
   cities: 'طلبات المدن', backup: 'النسخ الاحتياطي',
   'users:admins': 'المستخدمون — الإدارة', 'users:experts': 'المستخدمون — الفنيون',
   'users:customers': 'المستخدمون — العملاء', 'users:support': 'المستخدمون — الدعم الفني',
@@ -188,7 +189,7 @@ function Overview() {
 
 
 const PERM_LABELS = {
-  site: 'إعدادات الموقع', finance: 'المالية والمحافظ', loyalty: 'نادي الولاء', reviews: 'التقييمات', users: 'المستخدمون',
+  site: 'إعدادات الموقع', finance: 'المالية والمحافظ', loyalty: 'نادي الولاء', reviews: 'التقييمات', disputes: 'الشكاوى والنزاعات', users: 'المستخدمون',
   requests: 'الطلبات', verifications: 'التوثيق', categories: 'التصنيفات', ads: 'الإعلانات',
   invoices: 'الفواتير', payments: 'المدفوعات', backup: 'النسخ الاحتياطي', reports: 'التقارير',
 }
@@ -1834,6 +1835,84 @@ function Loyalty() {
   )
 }
 
+
+function Disputes() {
+  const [rows, setRows] = useState([])
+  const [tab, setTab] = useState('open')
+  const [msg, setMsg] = useState('')
+  const load = () => api(`/api/admin/disputes?status=${tab}`).then(setRows).catch(() => {})
+  useEffect(load, [tab])
+
+  const resolve = async (d, outcome) => {
+    const note = prompt('ملاحظة الإدارة (اختياري):') || ''
+    await api(`/api/admin/disputes/${d.id}/resolve`, { method: 'POST', body: { outcome, note } }).catch(() => {})
+    setMsg('✅ تم البت في الشكوى')
+    load()
+  }
+
+  return (
+    <div className="space-y-3">
+      <div className="flex gap-2">
+        {[['open', 'مفتوحة'], ['resolved', 'مغلقة'], ['all', 'الكل']].map(([k, l]) => (
+          <button key={k} onClick={() => setTab(k)}
+            className={`px-3 py-1.5 rounded-full text-[11px] font-bold ${tab === k ? 'bg-[#006C35] text-white' : 'bg-white border border-[#E3D9BF] text-gray-600'}`}>{l}</button>
+        ))}
+      </div>
+      {msg && <p className="text-[11px] font-bold text-[#006C35]">{msg}</p>}
+      {rows.length === 0 && <p className="text-sm text-gray-500">ما فيه شكاوى.</p>}
+      {rows.map((d) => (
+        <div key={d.id} className="card-lux p-3 space-y-2">
+          <div className="flex items-center justify-between">
+            <p className="font-bold text-sm text-[#11221A]">طلب #{d.request_number || d.request_id} — {d.request_title}</p>
+            <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${d.status === 'open' ? 'bg-amber-50 text-amber-700' : 'bg-[#EAF4EE] text-[#006C35]'}`}>
+              {d.status === 'open' ? 'مفتوحة' : `مغلقة · ${d.outcome === 'refund' ? 'استرجاع' : d.outcome === 'warn' ? 'إنذار' : 'إغلاق'}`}
+            </span>
+          </div>
+          <p className="text-[11px] text-gray-500">
+            من: {d.opener_name || '—'} ({d.side === 'customer' ? 'عميل' : 'فني'}) · {String(d.created_at).slice(0, 16)}
+          </p>
+          <p className="text-[12px] font-bold text-[#11221A]">📌 {d.reason}</p>
+          {d.details && <p className="text-[11px] text-gray-600 bg-[#FBF9F2] rounded-lg p-2">{d.details}</p>}
+          {d.status === 'open' && (
+            <div className="flex flex-wrap gap-1.5">
+              <button onClick={() => resolve(d, 'refund')} className="text-[11px] font-bold bg-red-50 text-red-600 px-2.5 py-1.5 rounded-lg">استرجاع للعميل</button>
+              <button onClick={() => resolve(d, 'close')} className="text-[11px] font-bold bg-[#006C35] text-white px-2.5 py-1.5 rounded-lg">إغلاق لصالح التنفيذ</button>
+              <button onClick={() => resolve(d, 'warn')} className="text-[11px] font-bold bg-[#FBF5E3] text-[#8a6d13] px-2.5 py-1.5 rounded-lg">إنذار</button>
+            </div>
+          )}
+          {d.admin_note && <p className="text-[10px] text-gray-500">ملاحظة: {d.admin_note}</p>}
+        </div>
+      ))}
+    </div>
+  )
+}
+
+function LiveStats() {
+  const [s, setS] = useState(null)
+  useEffect(() => {
+    api('/api/admin/stats').then(setS).catch(() => {})
+    const id = setInterval(() => api('/api/admin/stats').then(setS).catch(() => {}), 30000)
+    return () => clearInterval(id)
+  }, [])
+  if (!s) return null
+  return (
+    <div className="card-lux p-3 mt-3">
+      <p className="font-extrabold text-sm text-[#11221A] mb-2">📊 إحصائيات سريعة</p>
+      <div className="grid grid-cols-2 gap-2 text-center">
+        <div><p className="text-[10px] text-gray-500">زيارات اليوم</p><p className="font-extrabold text-[#006C35]">{s.visits_today}</p></div>
+        <div><p className="text-[10px] text-gray-500">زيارات 7 أيام</p><p className="font-extrabold text-[#11221A]">{s.visits_7d}</p></div>
+        <div><p className="text-[10px] text-gray-500">نسبة تحويل الطلبات</p><p className="font-extrabold text-[#11221A]">{s.conversion}%</p></div>
+        <div><p className="text-[10px] text-gray-500">شكاوى مفتوحة</p><p className={`font-extrabold ${s.open_disputes ? 'text-red-500' : 'text-gray-400'}`}>{s.open_disputes}</p></div>
+      </div>
+      {s.top_categories?.length > 0 && (
+        <p className="text-[10px] text-gray-500 mt-2">
+          الأكثر طلباً: {s.top_categories.map((c) => `${c.category} (${c.c})`).join(' · ')}
+        </p>
+      )}
+    </div>
+  )
+}
+
 function Finance() {
   const [d, setD] = useState(null)
   const [from, setFrom] = useState('')
@@ -2326,7 +2405,7 @@ function Shell({ onLogout }) {
     if (section.startsWith('users:')) return <Users type={section.split(':')[1]} />
     if (section.startsWith('requests:')) return <Requests scope={section.split(':')[1]} />
     switch (section) {
-      case 'overview': return (<><Overview /><div className="mt-4"><ActiveRequests /></div></>)
+      case 'overview': return (<><Overview /><LiveStats /><div className="mt-4"><ActiveRequests /></div></>)
       case 'reports': return <Reports />
       case 'ads': return <Ads />
       case 'invoices': return <Invoices />
@@ -2337,6 +2416,7 @@ function Shell({ onLogout }) {
       case 'bank': return <BankSettings />
       case 'finance_reports': return <FinanceReports />
       case 'blocked': return <Blocked />
+      case 'disputes': return <Disputes />
       case 'reviews': return <ReviewsAdmin />
       case 'loyalty': return <Loyalty />
       case 'finance': return <Finance />

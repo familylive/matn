@@ -10,6 +10,8 @@ export default function Search() {
   const category = params.get('category') || ''
   const [query, setQuery] = useState('')
   const [sort, setSort] = useState('rating')
+  const [onlyVerified, setOnlyVerified] = useState(false)
+  const [onlyCompany, setOnlyCompany] = useState(false)
   const { t, lang } = useLang()
   const categories = useCategories()
 
@@ -57,11 +59,13 @@ export default function Search() {
   }, [query, category])
 
   const results = useMemo(() => {
-    const list = [...rows]
+    let list = [...rows]
+    if (onlyVerified) list = list.filter((e) => e.approved !== false)
+    if (onlyCompany) list = list.filter((e) => e.is_company)
     return sort === 'rating'
       ? list.sort((a, b) => Number(b.rating || 0) - Number(a.rating || 0))
       : list.sort((a, b) => String(a.personName || '').localeCompare(String(b.personName || '')))
-  }, [rows, sort])
+  }, [rows, sort, onlyVerified, onlyCompany])
 
   return (
     <div className="px-4 py-6">
@@ -74,6 +78,17 @@ export default function Search() {
         onChange={(e) => setQuery(e.target.value)}
         className="w-full px-4 py-3 border border-gray-200 rounded-xl bg-gray-100 focus:bg-white focus:border-blue-400 outline-none mb-4"
       />
+
+      <div className="flex gap-2 mb-3">
+        <button onClick={() => setOnlyVerified((v) => !v)}
+          className={`text-[11px] font-bold px-3 py-1.5 rounded-full border ${onlyVerified ? 'bg-[#006C35] text-white border-[#006C35]' : 'bg-white text-gray-600 border-[#E3D9BF]'}`}>
+          ✅ موثّقون
+        </button>
+        <button onClick={() => setOnlyCompany((v) => !v)}
+          className={`text-[11px] font-bold px-3 py-1.5 rounded-full border ${onlyCompany ? 'bg-[#006C35] text-white border-[#006C35]' : 'bg-white text-gray-600 border-[#E3D9BF]'}`}>
+          🏢 شركات
+        </button>
+      </div>
 
       <div className="flex gap-2 overflow-x-auto pb-2 mb-4">
         <button

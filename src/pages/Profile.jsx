@@ -154,6 +154,25 @@ export default function Profile() {
 
       <LoyaltyCard />
 
+      <div className="card-lux p-4 mt-4 space-y-2">
+        <Link to="/privacy" className="block text-[12px] font-bold text-[#006C35] underline">🔒 سياسة الخصوصية</Link>
+        <button
+          onClick={async () => {
+            if (!confirm('حذف الحساب نهائياً؟ سيُخفى اسمك وجوالك ويُلغى ظهورك في المنصة.')) return
+            try {
+              await api.post('/api/me/delete', {})
+              logout()
+              navigate('/')
+            } catch (e) {
+              alert(e.message === 'has_open_requests' ? 'عندك طلبات مفتوحة — انتظر إغلاقها أولاً' : 'تعذّر حذف الحساب')
+            }
+          }}
+          className="w-full text-[12px] font-bold text-red-500 bg-red-50 border border-red-100 rounded-xl py-2"
+        >
+          🗑️ حذف حسابي
+        </button>
+      </div>
+
       {isExpert && myExpert && <ExpertWorkspace expert={myExpert} onChange={setMyExpert} />}
 
       <div className="card-lux p-4 mt-4">

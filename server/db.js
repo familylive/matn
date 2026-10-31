@@ -184,6 +184,35 @@ CREATE TABLE IF NOT EXISTS settings (
   value TEXT
 );
 
+CREATE TABLE IF NOT EXISTS disputes (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  request_id INTEGER NOT NULL,
+  opened_by INTEGER NOT NULL,
+  side TEXT,
+  reason TEXT NOT NULL,
+  details TEXT,
+  status TEXT NOT NULL DEFAULT 'open',
+  outcome TEXT,
+  admin_note TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  resolved_at TEXT
+);
+
+CREATE TABLE IF NOT EXISTS audit_log (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  admin_id INTEGER,
+  action TEXT NOT NULL,
+  detail TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS page_views (
+  day TEXT NOT NULL,
+  path TEXT NOT NULL,
+  n INTEGER NOT NULL DEFAULT 0,
+  PRIMARY KEY (day, path)
+);
+
 CREATE TABLE IF NOT EXISTS files (
   id TEXT PRIMARY KEY,
   name TEXT,
@@ -290,6 +319,11 @@ addColumn('users', 'phone_verified', 'INTEGER DEFAULT 0')
 addColumn('users', 'verified', 'INTEGER DEFAULT 0')
 addColumn('users', 'stars_total', 'INTEGER DEFAULT 0')
 addColumn('users', 'reviews_count', 'INTEGER DEFAULT 0')
+addColumn('requests', 'images', 'TEXT')
+addColumn('requests', 'visit_state', "TEXT DEFAULT 'none'")
+addColumn('requests', 'expert_lat', 'REAL')
+addColumn('requests', 'expert_lng', 'REAL')
+addColumn('requests', 'visit_updated_at', 'TEXT')
 addColumn('reviews', 'author_id', 'INTEGER')
 addColumn('reviews', 'target', "TEXT DEFAULT 'expert'")
 addColumn('reviews', 'tags', 'TEXT')
