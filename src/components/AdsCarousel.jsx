@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from 'react'
 export default function AdsCarousel() {
   const [ads, setAds] = useState([])
   const [index, setIndex] = useState(0)
+  const [bad, setBad] = useState({})
 
   useEffect(() => {
     let alive = true
@@ -29,8 +30,13 @@ export default function AdsCarousel() {
         <div className="gold-bar" />
         <a href={current.link || '#'} target={current.link ? '_blank' : undefined} rel="noreferrer" className="block">
           <div className="relative h-36 bg-[#F3F5F3]">
-            {current.image ? (
-              <img src={current.image} alt={current.title} className="w-full h-full object-cover" />
+            {current.image && !bad[current.id] ? (
+              <img
+                src={current.image}
+                alt={current.title}
+                onError={() => setBad((b) => ({ ...b, [current.id]: true }))}
+                className="w-full h-full object-cover"
+              />
             ) : (
               <div className="w-full h-full flex items-center justify-center text-[#006C35] font-bold">
                 {current.title}

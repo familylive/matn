@@ -3,6 +3,24 @@ import { useNavigate } from 'react-router-dom'
 import { api } from '../lib/api.js'
 import { useAuth } from '../context/AuthContext.jsx'
 
+/* تصغير صورة الجوال قبل الرفع — يسرّع قراءة الإقامة ويمنع تعليق الرفع */
+async function shrinkImage(file, max = 1800, quality = 0.82) {
+  try {
+    if (!file.type.startsWith('image/') || file.size < 700 * 1024) return file
+    const bmp = await createImageBitmap(file)
+    const scale = Math.min(1, max / Math.max(bmp.width, bmp.height))
+    const canvas = document.createElement('canvas')
+    canvas.width = Math.max(1, Math.round(bmp.width * scale))
+    canvas.height = Math.max(1, Math.round(bmp.height * scale))
+    canvas.getContext('2d').drawImage(bmp, 0, 0, canvas.width, canvas.height)
+    const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/jpeg', quality))
+    if (!blob) return file
+    return new File([blob], 'iqama.jpg', { type: 'image/jpeg' })
+  } catch {
+    return file
+  }
+}
+
 export default function Verify() {
   const { user } = useAuth()
   const navigate = useNavigate()
@@ -22,7 +40,7 @@ export default function Verify() {
     setScanning(true)
     try {
       const fd = new FormData()
-      fd.append('iqama', file)
+      fd.append('iqama', await shrinkImage(file))
       const res = await fetch('/api/me/iqama', {
         method: 'POST',
         headers: { authorization: `Bearer ${localStorage.getItem('authToken')}` },

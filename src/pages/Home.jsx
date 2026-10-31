@@ -120,13 +120,7 @@ export default function Home() {
               onClick={() => navigate(`/search?category=${encodeURIComponent(c.name)}`)}
               className="card-ornate active:scale-[.98] p-5 pt-6 flex flex-col items-center gap-2.5"
             >
-              {c.image ? (
-                <img src={c.image} alt={c.ar} className="w-16 h-16 rounded-2xl object-cover ring-2 ring-[#C9A227]/40 shadow-sm" />
-              ) : (
-                <span className="w-16 h-16 rounded-2xl bg-[#FBF5E3] border border-[#EADFC8] grid place-items-center text-3xl shadow-inner">
-                  {c.icon}
-                </span>
-              )}
+              <CatIcon c={c} />
               <span className="text-[16px] font-extrabold text-[#0B0A08] tracking-tight leading-tight text-center">
                 {catLabel(c, lang)}
               </span>
@@ -169,5 +163,25 @@ export default function Home() {
         </div>
       </div>
     </div>
+  )
+}
+
+/* أيقونة القسم: لو الصورة ناقصة/محذوفة نرجع للأيقونة بدل صورة مكسورة */
+function CatIcon({ c }) {
+  const [bad, setBad] = useState(false)
+  if (c.image && !bad) {
+    return (
+      <img
+        src={c.image}
+        alt={c.ar}
+        onError={() => setBad(true)}
+        className="w-16 h-16 rounded-2xl object-cover ring-2 ring-[#C9A227]/40 shadow-sm"
+      />
+    )
+  }
+  return (
+    <span className="w-16 h-16 rounded-2xl bg-[#FBF5E3] border border-[#EADFC8] grid place-items-center text-3xl shadow-inner">
+      {c.icon || '🛠️'}
+    </span>
   )
 }
