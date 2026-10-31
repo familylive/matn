@@ -21,26 +21,36 @@ export default function Invoice() {
       <style>{`
         .stamp {
           transform: rotate(-7deg);
-          width: 158px;
+          display: inline-flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 14px;
+          min-width: 244px;
           border: 2.5px solid #A8121B;
-          border-radius: 9px;
-          padding: 7px 9px 6px;
+          border-radius: 10px;
+          padding: 8px 16px;
           color: #A8121B;
           position: relative;
-          background: rgba(168,18,27,.03);
+          background: rgba(168,18,27,.035);
         }
         .stamp::after {
           content: ''; position: absolute; inset: 3px;
-          border: 1px solid #A8121B; border-radius: 6px; opacity: .55; pointer-events: none;
+          border: 1px solid #A8121B; border-radius: 7px; opacity: .55; pointer-events: none;
         }
-        .stamp-brand { width: 86px; height: auto; display: block; margin: 0 auto 2px; opacity: .95; }
         .stamp-logo {
-          width: 62px; height: 62px; object-fit: contain; display: block; margin: 6px auto 5px;
+          width: 50px; height: 50px; object-fit: contain;
           filter: grayscale(1) sepia(1) hue-rotate(-28deg) saturate(7) brightness(.75);
           opacity: .92;
         }
-        .stamp-approved { font-size: 10.5px; font-weight: 800; letter-spacing: 3px; text-align: center; border-top: 1px solid #A8121B; padding-top: 3px; }
-        .stamp-meta { margin-top: 15px; font-size: 9px; color: #A8121B; text-align: center; margin-top: 5px; font-family: ui-monospace, monospace; line-height: 1.5; }
+        .stamp-brand { width: 80px; height: auto; display: block; opacity: .95; }
+        .stamp-approved {
+          font-size: 12px; font-weight: 800; letter-spacing: 2px; text-align: center;
+          border-top: 1px solid #A8121B; padding-top: 3px; line-height: 1; min-width: 56px;
+        }
+        .stamp-meta {
+          margin-top: 20px; font-size: 9px; color: #A8121B; text-align: center;
+          font-family: ui-monospace, monospace; line-height: 1.5; letter-spacing: .3px;
+        }
         @media print {
           .no-print { display: none !important; }
           body { background: #fff !important; }
@@ -118,24 +128,22 @@ export default function Invoice() {
             </div>
           )}
 
-          <div className="mt-6 flex items-end justify-between gap-3">
-            <div className="flex-1 text-[9px] text-gray-400 leading-5">
-              {inv.vat_number && <p>الرقم الضريبي للمنصة: <span dir="ltr">{inv.vat_number}</span></p>}
-              <p>هذه الفاتورة صادرة إلكترونياً عبر منصة مهنتي</p>
-              <p dir="ltr" className="text-[8px]">mihnati.onrender.com</p>
-            </div>
-            <div className="shrink-0">
+          <div className="mt-5 flex justify-center">
+            <div>
               <div className="stamp">
                 <img src="/stamp-word.png" alt="مهنتي" className="stamp-brand" />
                 <img src="/logo-mark.png" alt="" className="stamp-logo" />
-                <p className="stamp-approved">معتمد</p>
+                <span className="stamp-approved">معتمد</span>
               </div>
               <p className="stamp-meta">
-                {inv.number}<br />
-                {String(data.issued_at || '').slice(0, 10)}<br />
-                {String(data.issued_at || '').slice(11, 16)}
+                {inv.number} · {String(data.issued_at || '').slice(0, 10)} · {String(data.issued_at || '').slice(11, 16)}
               </p>
             </div>
+          </div>
+
+          <div className="mt-4 text-[9px] text-gray-400 leading-5 text-center">
+            {inv.vat_number && <p>الرقم الضريبي للمنصة: <span dir="ltr">{inv.vat_number}</span></p>}
+            <p>هذه الفاتورة صادرة إلكترونياً عبر منصة مهنتي · <span dir="ltr">mihnati.onrender.com</span></p>
           </div>
         </div>
       </div>
