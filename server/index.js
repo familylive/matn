@@ -63,16 +63,26 @@ app.use((req, res, next) => {
   next()
 })
 
-/* 🧾 سجل عمليات الإدارة */
+/* 🧾 سجل عمليات الإدارة (باسم المشرف) */
 app.use((req, res, next) => {
   if (!/^\/api\/admin\//.test(req.path)) return next()
   if (!['POST', 'PATCH', 'PUT', 'DELETE'].includes(req.method)) return next()
   res.on('finish', () => {
     if (res.statusCode >= 400) return
     try {
-      const id = Number(String(req.headers.authorization || '').replace('Bearer ', '').split('.')[1] ? 0 : 0)
+      let adminId = null
+      let who = 'admin'
+      const tok = String(req.headers.authorization || '').replace('Bearer ', '')
+      if (tok) {
+        const data = req.app.locals.verify(tok)
+        if (data && String(data.uid).startsWith('admin:')) {
+          adminId = Number(String(data.uid).split(':')[1])
+          const a = db.prepare('SELECT name, email, role FROM admins WHERE id = ?').get(adminId)
+          who = a ? `${a.name || a.email} (${a.role || 'admin'})` : 'admin'
+        }
+      }
       db.prepare('INSERT INTO audit_log (admin_id, action, detail) VALUES (?, ?, ?)')
-        .run(null, `${req.method} ${req.path}`, JSON.stringify(req.body || {}).slice(0, 400))
+        .run(adminId, `${req.method} ${req.path}`, `بواسطة ${who} · ${JSON.stringify(req.body || {}).slice(0, 350)}`)
     } catch {}
   })
   next()
@@ -207,6 +217,25 @@ releaseDue()
 setTimeout(() => { try { notifyExpiringCredits() } catch (e) { console.error('CREDIT_NOTICE_FAIL', e.message) } }, 5000)
 setInterval(() => { try { releaseDue() } catch (e) { console.error('RELEASE_FAIL', e.message) } }, 30 * 60 * 1000)
 setInterval(() => { try { notifyExpiringCredits() } catch (e) { console.error('CREDIT_NOTICE_FAIL', e.message) } }, 6 * 60 * 60 * 1000)
+
+/* 💓 نبضة تشغيل — تكشف لو الموقع وقف ورجع */
+const HB = 'heartbeat_at'
+const setHb = () => {
+  try {
+    db.prepare("INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value")
+      .run(HB, new Date().toISOString())
+  } catch {}
+}
+setHb()
+setInterval(setHb, 60 * 1000)
+setTimeout(() => {
+  try {
+    const last = db.prepare('SELECT value FROM settings WHERE key = ?').get(HB)?.value
+    if (!last) return
+    const gapMin = Math.round((Date.now() - new Date(last).getTime()) / 60000)
+    if (gapMin >= 10) tgNotify(`🔔 رجع الموقع للعمل\nكان واقف حوالي ${gapMin} دقيقة.\nكل شي رجع طبيعي ✅`)
+  } catch {}
+}, 8000)
 
 function backfillNumbers() {
   const rows = db.prepare('SELECT id FROM requests WHERE number IS NULL ORDER BY id').all()
@@ -2400,6 +2429,23 @@ app.post('/api/requests/:id/visit', authRequired, (req, res) => {
   res.json({ ok: true, state })
 })
 
+/* ================= موعد الزيارة ================= */
+app.post('/api/requests/:id/appointment', authRequired, (req, res) => {
+  const r = db.prepare('SELECT * FROM requests WHERE id = ?').get(req.params.id)
+  if (!r) return res.status(404).json({ error: 'not_found' })
+  if (r.user_id !== req.userId) return res.status(403).json({ error: 'forbidden' })
+  const at = String(req.body?.at || '').trim()
+  if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(at)) return res.status(400).json({ error: 'invalid_datetime' })
+  const utc = new Date(at).toISOString().slice(0, 19).replace('T', ' ')
+  db.prepare('UPDATE requests SET visit_at = ? WHERE id = ?').run(utc, r.id)
+  const bid = r.accepted_bid_id ? db.prepare('SELECT * FROM bids WHERE id = ?').get(r.accepted_bid_id) : null
+  if (bid) {
+    const ex = db.prepare('SELECT user_id FROM experts WHERE id = ?').get(bid.expert_id)
+    if (ex?.user_id) io.to(`user:${ex.user_id}`).emit('notify', { type: 'visit', title: '📅 موعد زيارة جديد', body: r.title, requestId: r.id })
+  }
+  res.json({ ok: true, visit_at: utc })
+})
+
 /* ================= صور الطلب ================= */
 app.post('/api/requests/:id/images', authRequired, upload.array('images', 5), (req, res) => {
   const r = db.prepare('SELECT * FROM requests WHERE id = ?').get(req.params.id)
@@ -2598,6 +2644,83 @@ app.post('/api/auth/email/login', (req, res) => {
   db.prepare('DELETE FROM email_otps WHERE email = ?').run(email)
   db.prepare('UPDATE users SET email_verified = 1, last_seen = datetime(\'now\') WHERE id = ?').run(user.id)
   res.json({ ...startSession(user.id), user: fullUser(user.id) })
+})
+
+
+/* ================= نشر مُدار من الداخل (نسخ ← نشر ← استرجاع ← فحص ← تراجع) ================= */
+const RH = () => process.env.RENDER_API_KEY || ''
+const RS = () => process.env.RENDER_SERVICE_ID || 'srv-dbgilgou01pc73c708ig'
+const rh = () => ({ authorization: `Bearer ${RH()}`, 'content-type': 'application/json' })
+
+async function renderDeploy(commitId) {
+  const body = commitId ? JSON.stringify({ commitId }) : '{}'
+  const r = await fetch(`https://api.render.com/v1/services/${RS()}/deploys`, { method: 'POST', headers: rh(), body })
+  const d = await r.json().catch(() => ({}))
+  if (!r.ok) throw new Error(d.message || 'deploy_failed')
+  return d
+}
+
+const waitDeploy = async (id, ms = 8 * 60 * 1000) => {
+  const t0 = Date.now()
+  while (Date.now() - t0 < ms) {
+    const r = await fetch(`https://api.render.com/v1/services/${RS()}/deploys/${id}`, { headers: rh() })
+    const d = await r.json().catch(() => ({}))
+    if (['live', 'build_failed', 'canceled', 'deactivated'].includes(d.status)) return d
+    await new Promise((x) => setTimeout(x, 10000))
+  }
+  return { status: 'timeout' }
+}
+
+async function lastLiveCommit() {
+  const r = await fetch(`https://api.render.com/v1/services/${RS()}/deploys?limit=20`, { headers: rh() })
+  const arr = await r.json().catch(() => [])
+  const live = arr.find((x) => x.deploy?.status === 'live')
+  return live?.deploy?.commit?.id || null
+}
+
+async function managedDeploy(notify) {
+  if (!RH()) return 'ما فيه مفتاح Render مربوط — أضف RENDER_API_KEY.'
+  const tables = {}
+  for (const t of BACKUP_TABLES) tables[t] = db.prepare(`SELECT * FROM ${t}`).all()
+  const files = collectUploads()
+  notify && tgNotify('🚀 بدأت نشر نسخة جديدة…')
+
+  const dep = await renderDeploy()
+  const res = await waitDeploy(dep.id)
+  if (res.status !== 'live') {
+    const prev = await lastLiveCommit().catch(() => null)
+    if (prev) {
+      const rb = await renderDeploy(prev).catch(() => null)
+      tgNotify(`⚠️ النشر فشل (${res.status}) — رجّعت آخر نسخة ناجحة تلقائياً ${rb ? '✅' : '❌'}`)
+      return `فشل النشر — تم التراجع ${rb ? 'بنجاح' : 'لكنه تعذّر'}`
+    }
+    tgNotify(`⚠️ النشر فشل (${res.status}) وما لقيت نسخة سابقة`)
+    return 'فشل النشر وما قدرت أتراجع'
+  }
+
+  // استرجاع البيانات بعد النشر
+  try {
+    applyBackup(tables, files)
+  } catch (e) { tgNotify('⚠️ النشر نجح لكن الاسترجاع فشل: ' + e.message) }
+
+  tgNotify('✅ تم النشر واسترجاع البيانات بنجاح')
+  return 'تم النشر واسترجعت البيانات ✅'
+}
+
+app.post('/api/admin/deploy', adminRequired, adminCan('backup'), async (req, res) => {
+  if (global.__deploying) return res.status(409).json({ error: 'already_running' })
+  global.__deploying = true
+  try {
+    const msg = await managedDeploy(true)
+    res.json({ ok: true, message: msg })
+  } catch (e) {
+    res.status(500).json({ error: 'deploy_failed', detail: e.message })
+  } finally { global.__deploying = false }
+})
+
+app.get('/api/admin/audit', adminRequired, (req, res) => {
+  const rows = db.prepare('SELECT * FROM audit_log ORDER BY id DESC LIMIT 200').all()
+  res.json(rows)
 })
 
 /* ================= المساعد الخاص (سعودي) ================= */
@@ -2804,6 +2927,12 @@ async function agentReply(msg) {
   // سلام
   if (has('هلا', 'السلام', 'مرحبا', 'صباح', 'مساء', 'يا هلا') && q.length < 25) {
     return { reply: pick(SA.hi) + '\n\nأنا رمزي، مساعدك الخاص. أقدر أقولك: وضع الموقع، الطلبات، الدخل، المحافظ، النزاعات، وأسوي لك نسخة احتياطية أو أرجّع آخر نسخة.' }
+  }
+
+  // نشر / تحديث
+  if (has('انشر', 'نشر', 'حدث الموقع', 'حدّث الموقع', 'رفع نسخه', 'رفع نسخة')) {
+    const msg = await managedDeploy(true)
+    return { reply: msg }
   }
 
   // فحص تشغيل الموقع
@@ -3688,6 +3817,21 @@ app.post('/api/admin/snapshots/restore', adminRequired, async (req, res) => {
   } catch (e) {
     res.status(500).json({ error: 'restore_failed', detail: String(e.message) })
   }
+})
+
+app.get('/.well-known/assetlinks.json', (_req, res) => {
+  res.setHeader('Content-Type', 'application/json')
+  res.setHeader('Cache-Control', 'public, max-age=300')
+  res.json([{
+    relation: ['delegate_permission/common.handle_all_urls'],
+    target: {
+      namespace: 'android_app',
+      package_name: 'net.dellini.mihnati',
+      sha256_cert_fingerprints: [
+        '0C:AB:99:A6:8A:93:7B:06:1E:6E:80:96:E8:3F:BD:35:20:70:48:19:80:C9:B4:E3:EC:75:23:D6:24:12:CB:85',
+      ],
+    },
+  }])
 })
 
 app.get('/api/version', (_req, res) => {
