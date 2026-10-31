@@ -2550,7 +2550,7 @@ function Shell({ onLogout }) {
   const permOf = (key) => {
     if (key.startsWith('users:') || key === 'blocked') return 'users'
     if (key.startsWith('requests:')) return 'requests'
-    if (key === 'finance' || key === 'finance_reports') return 'finance'
+    if (key === 'finance' || key === 'finance_reports' || key === 'vat') return 'finance'
     if (key === 'site' || key === 'tech' || key === 'gateways' || key === 'bank') return 'site'
     if (key === 'reports' || key === 'commissions') return 'reports'
     return key
