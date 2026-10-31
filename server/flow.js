@@ -39,8 +39,27 @@ export function issueInvoice(requestId) {
   const deferredCustomer = round2(pendingCust.reduce((a, r) => a + r.amount, 0))
   const deferredExpert = round2(pendingExp.reduce((a, r) => a + r.amount, 0))
 
-  const totalPaid = round2(base + customerFee + deferredCustomer)
-  const net = round2(base - expertFee - deferredExpert)
+  // 🧾 ضريبة القيمة المضافة (تشتغل بمفتاح من لوحة التحكم)
+  const vatOn = String(getSetting('vat_enabled', '0')) === '1'
+  const vatRate = Number(getSetting('vat_rate', '15')) || 0
+  const vatInclusive = String(getSetting('vat_inclusive', '1')) === '1'
+  const vatNumber = vatOn ? String(getSetting('vat_number', '') || '') : ''
+
+  let totalPaid = round2(base + customerFee + deferredCustomer)
+  let vatTotal = 0
+  if (vatOn && vatRate > 0) {
+    if (vatInclusive) {
+      const sub = round2(totalPaid / (1 + vatRate / 100))
+      vatTotal = round2(totalPaid - sub)
+    } else {
+      vatTotal = round2((totalPaid * vatRate) / 100)
+      totalPaid = round2(totalPaid + vatTotal)
+    }
+  }
+  // ضريبة على عمولة المنصة — تُخصم من مستحق الفني (المنصة تُحصّلها وتورّدها)
+  const vatCommission = vatOn && vatRate > 0 ? round2((expertFee * vatRate) / 100) : 0
+
+  const net = round2(base - expertFee - deferredExpert - vatCommission)
   const commission = round2(customerFee + expertFee + deferredCustomer + deferredExpert)
 
   const year = new Date().getFullYear()
@@ -48,9 +67,9 @@ export function issueInvoice(requestId) {
   const number = `MIH-${year}-${String(count + 1).padStart(4, '0')}`
 
   db.prepare(
-    `INSERT INTO invoices (number, request_id, amount, commission, net, customer_fee, expert_fee, total_paid, extras_total, deferred_customer, deferred_expert)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-  ).run(number, requestId, base, commission, net, customerFee, expertFee, totalPaid, round2(extrasTotal), deferredCustomer, deferredExpert)
+    `INSERT INTO invoices (number, request_id, amount, commission, net, customer_fee, expert_fee, total_paid, extras_total, deferred_customer, deferred_expert, vat_rate, vat_total, vat_commission, vat_number)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+  ).run(number, requestId, base, commission, net, customerFee, expertFee, totalPaid, round2(extrasTotal), deferredCustomer, deferredExpert, vatRate, vatTotal, vatCommission, vatNumber)
 
   const markApplied = db.prepare('UPDATE commission_ledger SET applied_request_id = ? WHERE id = ?')
   for (const r of [...pendingCust, ...pendingExp]) markApplied.run(requestId, r.id)

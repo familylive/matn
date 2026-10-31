@@ -70,6 +70,7 @@ const NAV = [
     { sub: 'القسم المالي', icon: '💰', items: [
       { key: 'gateways', label: 'بوابات الدفع', icon: '💳' },
       { key: 'bank', label: 'الدفع كاش / الحساب البنكي', icon: '🏦' },
+      { key: 'vat', label: 'ضريبة القيمة المضافة', icon: '🧾' },
       { key: 'finance', label: 'المالية والمحافظ', icon: '📈' },
       { key: 'finance_reports', label: 'التقارير المالية للمحاسب', icon: '🧮' },
     ]},
@@ -108,7 +109,7 @@ const TITLES = {
   'users:ceo': 'المدير التنفيذي', 'users:finance': 'المشرف المالي', 'users:support': 'الدعم الفني',
   'users:admin': 'المشرفون',
   overview: 'نظرة عامة', reports: 'التقارير', ads: 'الإعلانات', invoices: 'الفواتير',
-  categories: 'التصنيفات', payments: 'المدفوعات', commissions: 'تقرير العمولات', verifications: 'طلبات التوثيق', finance: 'المالية والمحافظ', loyalty: 'نادي الولاء', reviews: 'التقييمات', disputes: 'الشكاوى والنزاعات',
+  categories: 'التصنيفات', payments: 'المدفوعات', commissions: 'تقرير العمولات', verifications: 'طلبات التوثيق', finance: 'المالية والمحافظ', vat: 'ضريبة القيمة المضافة 🧾', loyalty: 'نادي الولاء', reviews: 'التقييمات', disputes: 'الشكاوى والنزاعات',
   cities: 'طلبات المدن', backup: 'النسخ الاحتياطي',
   'users:admins': 'المستخدمون — الإدارة', 'users:experts': 'المستخدمون — الفنيون',
   'users:customers': 'المستخدمون — العملاء', 'users:support': 'المستخدمون — الدعم الفني',
@@ -191,7 +192,7 @@ function Overview() {
 
 
 const PERM_LABELS = {
-  site: 'إعدادات الموقع', finance: 'المالية والمحافظ', loyalty: 'نادي الولاء', reviews: 'التقييمات', disputes: 'الشكاوى والنزاعات', users: 'المستخدمون',
+  site: 'إعدادات الموقع', finance: 'المالية والمحافظ', vat: 'ضريبة القيمة المضافة 🧾', loyalty: 'نادي الولاء', reviews: 'التقييمات', disputes: 'الشكاوى والنزاعات', users: 'المستخدمون',
   requests: 'الطلبات', verifications: 'التوثيق', categories: 'التصنيفات', ads: 'الإعلانات',
   invoices: 'الفواتير', payments: 'المدفوعات', backup: 'النسخ الاحتياطي', reports: 'التقارير',
 }
@@ -534,6 +535,110 @@ function BankSettings() {
       </div>
       {msg && <p className="text-[11px] font-bold text-[#006C35]">{msg}</p>}
       <button onClick={save} className="btn-primary">حفظ بيانات الحساب</button>
+    </div>
+  )
+}
+
+
+function VatSettings() {
+  const { d, set, save, msg } = useSiteSettings()
+  const [rep, setRep] = useState(null)
+  const [busy, setBusy] = useState(false)
+  useEffect(() => { api.get('/api/admin/vat/report').then(setRep).catch(() => {}) }, [msg])
+  if (!d) return <p className="text-gray-500">جارٍ التحميل…</p>
+  const on = d.vat_enabled === '1'
+  const rate = Number(d.vat_rate) || 15
+
+  // مثال حسابي حي
+  const ex = 126
+  const fee = Math.round(ex * 0.15 * 100) / 100
+  const vatFee = on ? Math.round(fee * rate) / 100 : 0
+
+  const apply = async () => {
+    setBusy(true)
+    try { await save(); const r = await api.get('/api/admin/vat/report'); setRep(r) } catch {}
+    setBusy(false)
+  }
+
+  return (
+    <div className="space-y-3">
+      {/* التشغيل / الإيقاف */}
+      <div className="rounded-2xl p-4 text-white" style={{ background: 'linear-gradient(135deg,#4A0A1E,#7A1230 55%,#3A0817)' }}>
+        <div className="flex items-center justify-between">
+          <div>
+            <p className="font-extrabold text-base">ضريبة القيمة المضافة</p>
+            <p className="text-[11px] text-white/70 mt-0.5">{on ? 'مفعّلة — تُحتسب على الفواتير الجديدة' : 'موقوفة — لا تُحتسب أي ضريبة'}</p>
+          </div>
+          <button
+            onClick={() => set('vat_enabled', on ? '0' : '1')}
+            className={`w-16 h-9 rounded-full flex items-center px-1 transition ${on ? 'bg-[#C9A227] justify-end' : 'bg-white/25 justify-start'}`}>
+            <span className="block w-7 h-7 rounded-full bg-white shadow" />
+          </button>
+        </div>
+        <div className="mt-3 text-[11px] font-bold text-[#F3E4B8] border-t border-white/20 pt-2">
+          {on ? '✅ الحالة: مفعّلة' : '⛔ الحالة: موقوفة'}
+        </div>
+      </div>
+
+      <div className="card-lux p-4 space-y-3">
+        <Fld label="النسبة %"><input type="number" className={inp} value={d.vat_rate} onChange={(e) => set('vat_rate', e.target.value)} /></Fld>
+        <Fld label="الرقم الضريبي (VAT Number)" hint="يظهر في الفواتير عند التفعيل"><input className={inp} dir="ltr" value={d.vat_number} onChange={(e) => set('vat_number', e.target.value.toUpperCase())} placeholder="310000000000003" /></Fld>
+        <button onClick={() => set('vat_inclusive', d.vat_inclusive === '1' ? '0' : '1')} className="w-full flex items-center justify-between bg-gray-50 rounded-xl p-3">
+          <div className="text-start">
+            <p className="font-bold text-[13px] text-[#11221A]">الأسعار شاملة الضريبة</p>
+            <p className="text-[10px] text-gray-500">العميل يدفع نفس السومة، وتُفصّل الضريبة داخلها</p>
+          </div>
+          <span className={`text-[10px] font-extrabold px-2 py-1 rounded-full ${d.vat_inclusive === '1' ? 'bg-[#EAF4EE] text-[#006C35]' : 'bg-gray-200 text-gray-600'}`}>
+            {d.vat_inclusive === '1' ? 'شاملة' : 'تُضاف'}
+          </span>
+        </button>
+      </div>
+
+      <div className="card-lux p-4">
+        <p className="font-extrabold text-sm text-[#11221A] mb-2">🧮 مثال حسابي</p>
+        <div className="text-[11px] space-y-1 text-gray-700">
+          <div className="flex justify-between"><span>سومة الفني</span><span className="font-bold">{ex.toFixed(2)}</span></div>
+          <div className="flex justify-between"><span>عمولة المنصة 15%</span><span className="font-bold">{fee.toFixed(2)}</span></div>
+          <div className="flex justify-between"><span>ضريبة على العمولة {rate}%</span><span className="font-bold">{vatFee.toFixed(2)}</span></div>
+          <div className="flex justify-between border-t pt-1"><span>يُخصم من الفني</span><span className="font-extrabold text-[#7A1230]">{(fee + vatFee).toFixed(2)}</span></div>
+          <div className="flex justify-between"><span>صافي الفني</span><span className="font-extrabold text-[#006C35]">{(ex - fee - vatFee).toFixed(2)}</span></div>
+        </div>
+      </div>
+
+      {rep && (
+        <div className="card-lux p-4">
+          <p className="font-extrabold text-sm text-[#11221A]">📊 التقرير الضريبي</p>
+          <p className="text-[10px] text-gray-500 mt-1">إيراد العمولات هذا العام: <b>{Number(rep.annual_commission).toFixed(2)}</b> ريال · الضريبة المحصّلة: <b>{Number(rep.annual_vat).toFixed(2)}</b></p>
+          <div className="mt-2 h-2 bg-gray-200 rounded-full overflow-hidden">
+            <div className="h-full bg-[#006C35]" style={{ width: `${Math.min(100, (rep.annual_commission / rep.threshold) * 100)}%` }} />
+          </div>
+          <p className="text-[10px] text-gray-500 mt-1">{((rep.annual_commission / rep.threshold) * 100).toFixed(1)}% من حد التسجيل الإلزامي (375,000)</p>
+          <div className="mt-3 overflow-x-auto">
+            <table className="w-full text-[11px]">
+              <thead><tr className="text-gray-400 border-b"><th className="text-start py-1">الشهر</th><th>فواتير</th><th>إجمالي</th><th>ضريبة</th></tr></thead>
+              <tbody>
+                {rep.months.map((m) => (
+                  <tr key={m.m} className="border-b border-gray-100">
+                    <td className="py-1">{m.m}</td><td className="text-center">{m.n}</td>
+                    <td className="text-center">{Number(m.gross).toFixed(0)}</td>
+                    <td className="text-center font-bold text-[#7A1230]">{Number(m.vat).toFixed(2)}</td>
+                  </tr>
+                ))}
+                {!rep.months.length && <tr><td colSpan={4} className="text-center text-gray-400 py-3">لا فواتير بعد</td></tr>}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      <p className="text-[10px] text-gray-500 leading-5">
+        • الضريبة تُخصم من مستحق الفني وتُورَّد للهيئة — ليست على المنصة.<br />
+        • العميل يدفع السومة فقط (شاملة الضريبة) عند تفعيل «الأسعار شاملة».<br />
+        • التسجيل إلزامي عند تجاوز 375,000 ريال إيرادات سنوية.
+      </p>
+
+      {msg && <p className="text-[11px] font-bold text-[#006C35]">{msg}</p>}
+      <button onClick={apply} disabled={busy} className="btn-primary">{busy ? '…' : 'حفظ إعدادات الضريبة'}</button>
     </div>
   )
 }
@@ -2481,6 +2586,7 @@ function Shell({ onLogout }) {
       case 'disputes': return <Disputes />
       case 'reviews': return <ReviewsAdmin />
       case 'loyalty': return <Loyalty />
+      case 'vat': return <VatSettings />
       case 'finance': return <Finance />
       case 'commissions': return <Commissions />
       case 'verifications': return <Verifications />

@@ -95,7 +95,12 @@ export default function Invoice() {
             </div>
           )}
 
-          <p className="text-[10px] text-gray-400 mt-5 text-center">
+          {inv.vat_number && (
+            <p className="text-[10px] text-gray-500 mt-3 text-center">
+              الرقم الضريبي: <span dir="ltr">{inv.vat_number}</span>
+            </p>
+          )}
+          <p className="text-[10px] text-gray-400 mt-2 text-center">
             هذه الفاتورة صادرة إلكترونياً من منصة مهنتي · mihnati.dellini.net
           </p>
         </div>

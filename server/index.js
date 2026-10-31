@@ -235,6 +235,22 @@ const setHb = () => {
 setHb()
 setInterval(setHb, 60 * 1000)
 try { db.prepare("DELETE FROM audit_log WHERE detail LIKE '%password%'").run() } catch {}
+
+/* 📈 تنبيه حد التسجيل الضريبي (375,000 ريال سنوي) */
+setTimeout(() => {
+  try {
+    const year = String(new Date().getFullYear())
+    const c = db.prepare("SELECT COALESCE(SUM(commission),0) c FROM invoices WHERE substr(issued_at,1,4) = ?").get(year).c
+    if (c >= 300000) {
+      const key = `vat_alert_${year}`
+      const sent = db.prepare('SELECT value FROM settings WHERE key = ?').get(key)
+      if (!sent) {
+        db.prepare('INSERT INTO settings (key, value) VALUES (?, ?)').run(key, '1')
+        tgNotify(`📈 تنبيه ضريبي\nإيرادات العمولات هذا العام ${Number(c).toFixed(0)} ريال.\nحد التسجيل الإلزامي 375,000 — راجع التسجيل في ضريبة القيمة المضافة.`)
+      }
+    }
+  } catch {}
+}, 20000)
 setTimeout(() => {
   try {
     const last = db.prepare('SELECT value FROM settings WHERE key = ?').get(HB)?.value
@@ -2732,6 +2748,16 @@ app.post('/api/admin/deploy', adminRequired, adminCan('backup'), async (req, res
   } finally { global.__deploying = false }
 })
 
+app.get('/api/admin/vat/report', adminRequired, (req, res) => {
+  const rows = db.prepare(`SELECT substr(issued_at,1,7) m,
+      COUNT(*) n, ROUND(SUM(total_paid),2) gross, ROUND(SUM(vat_total),2) vat,
+      ROUND(SUM(commission),2) commission, ROUND(SUM(vat_commission),2) vat_commission
+    FROM invoices GROUP BY m ORDER BY m DESC LIMIT 12`).all()
+  const year = new Date().getFullYear()
+  const y = db.prepare(`SELECT ROUND(SUM(commission),2) c, ROUND(SUM(vat_commission + vat_total),2) v FROM invoices WHERE substr(issued_at,1,4) = ?`).get(String(year))
+  res.json({ months: rows, year, annual_commission: y?.c || 0, annual_vat: y?.v || 0, threshold: 375000 })
+})
+
 app.get('/api/admin/audit', adminRequired, (req, res) => {
   const rows = db.prepare('SELECT * FROM audit_log ORDER BY id DESC LIMIT 200').all()
   res.json(rows)
@@ -3136,6 +3162,10 @@ const SITE_KEYS = {
   bank_name: '',
   bank_iban: '',
   bank_account_name: '',
+  vat_enabled: '0',
+  vat_rate: '15',
+  vat_number: '',
+  vat_inclusive: '1',
 }
 
 app.get('/api/site-config', (_req, res) => {
@@ -3615,6 +3645,19 @@ app.get('/api/requests/:id/invoices', authRequired, (req, res) => {
   const expItems = [{ label: 'قيمة السومة', amount: round2(inv.amount) }]
   if (Number(inv.expert_fee) > 0) expItems.push({ label: `رسم خدمة المنصة (${expPct}%)`, amount: -round2(inv.expert_fee) })
   if (expDeferred > 0) expItems.push({ label: 'مستحق سابق', amount: -expDeferred })
+  const vatRate = Number(inv.vat_rate) || 0
+  const vatTotal = Number(inv.vat_total) || 0
+  const vatCommission = Number(inv.vat_commission) || 0
+  if (vatCommission > 0) expItems.push({ label: `ضريبة القيمة المضافة على العمولة (${vatRate}%)`, amount: -vatCommission })
+  if (vatTotal > 0) {
+    const sub = round2(inv.total_paid - vatTotal)
+    custItems.length = 0
+    custItems.push({ label: 'قيمة الخدمة (غير شاملة الضريبة)', amount: sub })
+    for (const l of applied.filter((x) => x.side === 'customer')) {
+      custItems.push({ label: `مستحق سابق — طلب #${l.source_number}`, amount: l.amount })
+    }
+    custItems.push({ label: `ضريبة القيمة المضافة (${vatRate}%)`, amount: vatTotal })
+  }
   const dueToPlatform = round2(inv.customer_fee)
 
   res.json({
@@ -3624,6 +3667,9 @@ app.get('/api/requests/:id/invoices', authRequired, (req, res) => {
       to: user?.name || 'العميل',
       items: custItems,
       total: inv.total_paid,
+      vat: vatTotal,
+      vat_rate: vatRate,
+      vat_number: inv.vat_number || '',
     },
     expert: {
       number: inv.number + '-E',
@@ -3631,6 +3677,9 @@ app.get('/api/requests/:id/invoices', authRequired, (req, res) => {
       to: bid?.expert_name || 'الفني',
       items: expItems,
       total: inv.net,
+      vat: vatCommission,
+      vat_rate: vatRate,
+      vat_number: inv.vat_number || '',
       due_to_platform: dueToPlatform,
       note: dueToPlatform > 0 ? 'هذا المبلغ يُحوّل للمنصة — وهو جزء من المبلغ الذي استلمته من العميل.' : '',
     },
