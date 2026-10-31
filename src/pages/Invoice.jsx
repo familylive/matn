@@ -20,15 +20,16 @@ export default function Invoice() {
     <div className="min-h-screen bg-gray-100 p-4">
       <style>{`
         .stamp {
-          transform: rotate(-7deg);
+          transform: rotate(-6deg);
           display: inline-flex;
+          flex-direction: column;
           align-items: center;
-          justify-content: space-between;
-          gap: 14px;
-          min-width: 244px;
+          justify-content: center;
+          gap: 1px;
+          min-width: 216px;
           border: 2.5px solid #A8121B;
           border-radius: 10px;
-          padding: 8px 16px;
+          padding: 9px 18px 8px;
           color: #A8121B;
           position: relative;
           background: rgba(168,18,27,.035);
@@ -38,18 +39,19 @@ export default function Invoice() {
           border: 1px solid #A8121B; border-radius: 7px; opacity: .55; pointer-events: none;
         }
         .stamp-logo {
-          width: 50px; height: 50px; object-fit: contain;
+          width: 42px; height: 42px; object-fit: contain;
           filter: grayscale(1) sepia(1) hue-rotate(-28deg) saturate(7) brightness(.75);
           opacity: .92;
         }
-        .stamp-brand { width: 80px; height: auto; display: block; opacity: .95; }
+        .stamp-brand { width: 94px; height: auto; display: block; margin-top: 1px; opacity: .95; }
         .stamp-approved {
-          font-size: 12px; font-weight: 800; letter-spacing: 2px; text-align: center;
-          border-top: 1px solid #A8121B; padding-top: 3px; line-height: 1; min-width: 56px;
+          font-size: 10.5px; font-weight: 800; letter-spacing: 4px;
+          text-align: center; line-height: 1; margin-top: 2px; opacity: 1;
         }
         .stamp-meta {
-          margin-top: 20px; font-size: 9px; color: #A8121B; text-align: center;
-          font-family: ui-monospace, monospace; line-height: 1.5; letter-spacing: .3px;
+          margin-top: 6px; padding-top: 4px; border-top: 1px solid rgba(168,18,27,.55);
+          width: 100%; font-size: 8.5px; color: #A8121B; text-align: center;
+          font-family: ui-monospace, monospace; line-height: 1.4; letter-spacing: .2px;
         }
         @media print {
           .no-print { display: none !important; }
@@ -131,13 +133,13 @@ export default function Invoice() {
           <div className="mt-5 flex justify-center">
             <div>
               <div className="stamp">
-                <img src="/stamp-word.png" alt="مهنتي" className="stamp-brand" />
                 <img src="/logo-mark.png" alt="" className="stamp-logo" />
+                <img src="/stamp-word.png" alt="مهنتي" className="stamp-brand" />
                 <span className="stamp-approved">معتمد</span>
+                <div className="stamp-meta">
+                  {inv.number} · {String(data.issued_at || '').slice(0, 10)} · {String(data.issued_at || '').slice(11, 16)}
+                </div>
               </div>
-              <p className="stamp-meta">
-                {inv.number} · {String(data.issued_at || '').slice(0, 10)} · {String(data.issued_at || '').slice(11, 16)}
-              </p>
             </div>
           </div>
 
