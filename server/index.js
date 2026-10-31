@@ -696,6 +696,11 @@ app.patch('/api/me/expert', authRequired, (req, res) => {
     db.prepare('UPDATE experts SET exp_years = ?, experience = ? WHERE id = ?').run(y, y ? `${y} سنة` : null, e.id)
   }
   if (b.bio !== undefined) db.prepare('UPDATE experts SET bio = ? WHERE id = ?').run(String(b.bio || '').slice(0, 600), e.id)
+  if (b.vat_number !== undefined) {
+    const v = String(b.vat_number || '').replace(/\D/g, '').slice(0, 15)
+    if (v && !/^3\d{14}$/.test(v)) return res.status(400).json({ error: 'invalid_vat' })
+    db.prepare('UPDATE experts SET vat_number = ? WHERE id = ?').run(v || null, e.id)
+  }
   const updated = db.prepare('SELECT * FROM experts WHERE id = ?').get(e.id)
   res.json(decorateExpert(updated))
 })
@@ -3620,7 +3625,7 @@ app.get('/api/requests/:id/invoices', authRequired, (req, res) => {
   if (!inv) return res.status(404).json({ error: 'no_invoice' })
 
   const bid = db
-    .prepare('SELECT b.*, e.name_ar AS expert_name FROM bids b JOIN experts e ON e.id = b.expert_id WHERE b.id = ?')
+    .prepare('SELECT b.*, e.name_ar AS expert_name, e.vat_number AS expert_vat FROM bids b JOIN experts e ON e.id = b.expert_id WHERE b.id = ?')
     .get(request.accepted_bid_id)
   const user = db.prepare('SELECT name, phone FROM users WHERE id = ?').get(request.user_id)
 
@@ -3638,10 +3643,24 @@ app.get('/api/requests/:id/invoices', authRequired, (req, res) => {
 
   // فاتورة العميل: سعر واحد شامل — بدون أي سطر عمولة
   const custDeferred = round2(applied.filter((x) => x.side === 'customer').reduce((a, x) => a + x.amount, 0))
-  const custItems = [{ label: 'قيمة الخدمة', amount: round2(inv.total_paid - custDeferred) }]
+  // 🧾 فاتورة العميل باسم الفني — تُفصّل الضريبة إذا كان الفني مسجّلاً
+  const sellerVat = String(bid?.expert_vat || '').trim()
+  const sellerRate = Number(getSetting('vat_rate', '15')) || 15
+  const custBase = round2(inv.total_paid - custDeferred)
+  let custItems
+  let sellerSub = custBase
+  let sellerVatAmt = 0
+  if (sellerVat) {
+    sellerSub = round2(custBase / (1 + sellerRate / 100))
+    sellerVatAmt = round2(custBase - sellerSub)
+    custItems = [{ label: 'قيمة الخدمة (قبل الضريبة)', amount: sellerSub }]
+  } else {
+    custItems = [{ label: 'قيمة الخدمة — غير خاضعة للضريبة (الفني غير مسجّل)', amount: custBase }]
+  }
   for (const l of applied.filter((x) => x.side === 'customer')) {
     custItems.push({ label: `مستحق سابق — طلب #${l.source_number}`, amount: l.amount })
   }
+  if (sellerVat) custItems.push({ label: `ضريبة القيمة المضافة (${sellerRate}%)`, amount: sellerVatAmt })
 
   const expDeferred = round2(applied.filter((x) => x.side === 'expert').reduce((a, x) => a + x.amount, 0))
   const expItems = [{ label: 'قيمة السومة', amount: round2(inv.amount) }]
@@ -3651,22 +3670,19 @@ app.get('/api/requests/:id/invoices', authRequired, (req, res) => {
   const vatTotal = Number(inv.vat_total) || 0
   const vatCommission = Number(inv.vat_commission) || 0
   if (vatCommission > 0) expItems.push({ label: `ضريبة القيمة المضافة على العمولة (${vatRate}%)`, amount: -vatCommission })
-  if (vatTotal > 0) {
-    const sub = round2(inv.total_paid - vatTotal)
-    custItems.length = 0
-    custItems.push({ label: 'قيمة الخدمة (غير شاملة الضريبة)', amount: sub })
-    for (const l of applied.filter((x) => x.side === 'customer')) {
-      custItems.push({ label: `مستحق سابق — طلب #${l.source_number}`, amount: l.amount })
-    }
-    custItems.push({ label: `ضريبة القيمة المضافة (${vatRate}%)`, amount: vatTotal })
-  }
   const dueToPlatform = round2(inv.customer_fee)
 
   res.json({
     customer: {
       number: inv.number + '-C',
-      title: 'فاتورة العميل',
+      title: sellerVat ? 'فاتورة ضريبية' : 'فاتورة خدمة',
       to: user?.name || 'العميل',
+      seller_name: bid?.expert_name || 'الفني',
+      seller_vat: sellerVat,
+      seller_rate: sellerRate,
+      through: 'عبر منصة مهنتي',
+      subtotal: sellerSub,
+      vat_amount: sellerVatAmt,
       items: custItems,
       total: inv.total_paid,
       vat: vatTotal,

@@ -19,6 +19,28 @@ export default function Invoice() {
   return (
     <div className="min-h-screen bg-gray-100 p-4">
       <style>{`
+        .stamp {
+          transform: rotate(-7deg);
+          width: 158px;
+          border: 2.5px solid #A8121B;
+          border-radius: 9px;
+          padding: 7px 9px 6px;
+          color: #A8121B;
+          position: relative;
+          background: rgba(168,18,27,.03);
+        }
+        .stamp::after {
+          content: ''; position: absolute; inset: 3px;
+          border: 1px solid #A8121B; border-radius: 6px; opacity: .55; pointer-events: none;
+        }
+        .stamp-brand { width: 86px; height: auto; display: block; margin: 0 auto 2px; opacity: .95; }
+        .stamp-logo {
+          width: 62px; height: 62px; object-fit: contain; display: block; margin: 6px auto 5px;
+          filter: grayscale(1) sepia(1) hue-rotate(-28deg) saturate(7) brightness(.75);
+          opacity: .92;
+        }
+        .stamp-approved { font-size: 10.5px; font-weight: 800; letter-spacing: 3px; text-align: center; border-top: 1px solid #A8121B; padding-top: 3px; }
+        .stamp-meta { margin-top: 15px; font-size: 9px; color: #A8121B; text-align: center; margin-top: 5px; font-family: ui-monospace, monospace; line-height: 1.5; }
         @media print {
           .no-print { display: none !important; }
           body { background: #fff !important; }
@@ -39,10 +61,11 @@ export default function Invoice() {
         <div className="sheet bg-white rounded-2xl shadow p-6" style={{ direction: 'rtl' }}>
           <div className="flex items-start justify-between border-b border-gray-200 pb-4">
             <div className="flex items-center gap-2">
-              <img src="/logo.png" alt="مهنتي" className="w-10 h-10 object-contain" />
+              <img src="/logo-mark.png" alt="مهنتي" className="w-9 h-9 object-contain" />
               <div>
-                <p className="font-extrabold text-[#11221A]">مهنتي</p>
-                <p className="text-[10px] text-gray-500">منصة الخدمات والمزاد اللحظي</p>
+                <p className="font-extrabold text-[#11221A]">{inv.seller_name || 'مهنتي'}</p>
+                <p className="text-[10px] text-gray-500">{inv.through || 'منصة الخدمات والمزاد اللحظي'}</p>
+                {inv.seller_vat && <p className="text-[9px] text-gray-400" dir="ltr">VAT: {inv.seller_vat}</p>}
               </div>
             </div>
             <div className="text-end">
@@ -95,14 +118,25 @@ export default function Invoice() {
             </div>
           )}
 
-          {inv.vat_number && (
-            <p className="text-[10px] text-gray-500 mt-3 text-center">
-              الرقم الضريبي: <span dir="ltr">{inv.vat_number}</span>
-            </p>
-          )}
-          <p className="text-[10px] text-gray-400 mt-2 text-center">
-            هذه الفاتورة صادرة إلكترونياً من منصة مهنتي · mihnati.dellini.net
-          </p>
+          <div className="mt-6 flex items-end justify-between gap-3">
+            <div className="flex-1 text-[9px] text-gray-400 leading-5">
+              {inv.vat_number && <p>الرقم الضريبي للمنصة: <span dir="ltr">{inv.vat_number}</span></p>}
+              <p>هذه الفاتورة صادرة إلكترونياً عبر منصة مهنتي</p>
+              <p dir="ltr" className="text-[8px]">mihnati.onrender.com</p>
+            </div>
+            <div className="shrink-0">
+              <div className="stamp">
+                <img src="/stamp-word.png" alt="مهنتي" className="stamp-brand" />
+                <img src="/logo-mark.png" alt="" className="stamp-logo" />
+                <p className="stamp-approved">معتمد</p>
+              </div>
+              <p className="stamp-meta">
+                {inv.number}<br />
+                {String(data.issued_at || '').slice(0, 10)}<br />
+                {String(data.issued_at || '').slice(11, 16)}
+              </p>
+            </div>
+          </div>
         </div>
       </div>
     </div>

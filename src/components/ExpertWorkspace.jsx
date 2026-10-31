@@ -8,6 +8,7 @@ import { tradesOf } from '../data/services.js'
 export default function ExpertWorkspace({ expert, onChange }) {
   const [trades, setTrades] = useState(tradesOf(expert))
   const [years, setYears] = useState(expert.exp_years ?? '')
+  const [vat, setVat] = useState(expert.vat_number || '')
   const [busy, setBusy] = useState(false)
   const [msg, setMsg] = useState('')
   const [uploading, setUploading] = useState(false)
@@ -17,7 +18,7 @@ export default function ExpertWorkspace({ expert, onChange }) {
   const save = async () => {
     setBusy(true); setMsg('')
     try {
-      const updated = await api.patch('/api/me/expert', { trades, exp_years: years === '' ? 0 : Number(years) })
+      const updated = await api.patch('/api/me/expert', { trades, exp_years: years === '' ? 0 : Number(years), vat_number: vat })
       onChange(updated)
       setMsg('✅ تم الحفظ — راح توصلك طلبات كل التخصصات اللي اخترتها')
     } catch {
@@ -70,6 +71,20 @@ export default function ExpertWorkspace({ expert, onChange }) {
           placeholder="مثال: 7"
           className="w-full mt-1 px-3 py-2.5 border border-[#E3D9BF] rounded-xl outline-none focus:border-[#006C35]"
         />
+      </div>
+
+      <div>
+        <label className="text-xs font-bold text-gray-600">الرقم الضريبي (اختياري)</label>
+        <input
+          dir="ltr" inputMode="numeric" maxLength={15}
+          value={vat}
+          onChange={(e) => setVat(e.target.value.replace(/\D/g, '').slice(0, 15))}
+          placeholder="3xxxxxxxxxxxxxx"
+          className="w-full mt-1 px-3 py-2.5 border border-[#E3D9BF] rounded-xl outline-none focus:border-[#006C35] text-left"
+        />
+        <p className="text-[10px] text-gray-500 mt-1">
+          إذا كنت مسجّلاً في ضريبة القيمة المضافة، حط رقمك هنا — تظهر فاتورتك للعميل مفصّلة (قيمة الخدمة + 15% ضريبة).
+        </p>
       </div>
 
       <button onClick={save} disabled={busy} className="btn-primary">
