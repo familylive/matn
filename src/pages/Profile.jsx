@@ -87,6 +87,11 @@ export default function Profile() {
   const navigate = useNavigate()
   const [me, setMe] = useState(null)
   const [sound, setSound] = useState(localStorage.getItem('soundOn') !== '0')
+  const [site, setSite] = useState(null)
+
+  useEffect(() => {
+    fetch('/api/site-config').then((r) => r.json()).then(setSite).catch(() => {})
+  }, [])
 
   useEffect(() => {
     api.me().then((d) => {
@@ -308,6 +313,33 @@ export default function Profile() {
           <span className={`absolute top-0.5 w-6 h-6 bg-white rounded-full transition-all ${sound ? 'start-0.5' : 'end-0.5'}`} />
         </button>
       </div>
+
+      {site && (site.support_phone || site.support_whatsapp || site.site_email) && (
+        <div className="card-lux p-4 mt-4">
+          <p className="font-bold text-sm text-[#11221A]">📞 الدعم الفني</p>
+          <p className="text-[11px] text-gray-500 mt-0.5">فريق مهنتي جاهز لمساعدتك</p>
+          <div className="grid grid-cols-2 gap-2 mt-3">
+            {site.support_phone && (
+              <a href={`tel:${String(site.support_phone).replace(/\D/g, '')}`}
+                 className="rounded-xl border border-[#D8DEE3] bg-white py-2.5 text-center text-[13px] font-bold text-[#123]">
+                📞 اتصال
+              </a>
+            )}
+            {site.support_whatsapp && (
+              <a href={`https://wa.me/${String(site.support_whatsapp).replace(/\D/g, '')}`} target="_blank" rel="noreferrer"
+                 className="rounded-xl border border-[#25D366]/40 bg-[#F1FBF4] py-2.5 text-center text-[13px] font-bold text-[#0F7A3D]">
+                💬 واتساب
+              </a>
+            )}
+          </div>
+          {site.site_email && (
+            <a href={`mailto:${site.site_email}`} dir="ltr"
+               className="block text-center text-[12px] font-bold text-[#006C35] mt-3 break-all">
+              {site.site_email}
+            </a>
+          )}
+        </div>
+      )}
 
       <Link to="/register" className="btn-ghost mt-4 block text-center">تعديل البيانات</Link>
 
