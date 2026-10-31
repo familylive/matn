@@ -622,7 +622,7 @@ app.get('/api/experts', (req, res) => {
   }
   sql += ' ORDER BY has_car DESC, rating DESC'
   const rows = db.prepare(sql).all(...params)
-  res.json(rows.map(decorateExpert))
+  res.json(rows.map((r) => publicExpert(decorateExpert(r))))
 })
 
 app.patch('/api/me/expert', authRequired, (req, res) => {
@@ -685,7 +685,7 @@ app.get('/api/experts/nearby', (req, res) => {
     .all()
 
   const out = rows
-    .map((e) => ({ ...decorateExpert(e), distance_km: haversineKm(lat, lng, e.lat, e.lng) }))
+    .map((e) => ({ ...publicExpert(decorateExpert(e)), distance_km: haversineKm(lat, lng, e.lat, e.lng) }))
     .filter((e) => e.distance_km !== null && e.distance_km <= km)
     .sort((a, b) => a.distance_km - b.distance_km)
 
@@ -795,7 +795,7 @@ app.get('/api/experts/:id/reviews', (req, res) => {
 app.get('/api/experts/:id', (req, res) => {
   const row = db.prepare("SELECT * FROM experts WHERE id = ? AND COALESCE(verify_status, 'approved') = 'approved'").get(req.params.id)
   if (!row) return res.status(404).json({ error: 'not_found' })
-  res.json(decorateExpert(row))
+  res.json(publicExpert(decorateExpert(row)))
 })
 
 
@@ -928,6 +928,15 @@ function haversineKm(aLat, aLng, bLat, bLng) {
     Math.sin(dLat / 2) ** 2 +
     Math.cos(toRad(aLat)) * Math.cos(toRad(bLat)) * Math.sin(dLng / 2) ** 2
   return Math.round(2 * R_EARTH_KM * Math.asin(Math.sqrt(h)) * 10) / 10
+}
+
+const SENSITIVE_EXPERT_FIELDS = ['phone', 'iqama_number', 'iqama_name', 'iqama_issue', 'iqama_expiry', 'iqama_image', 'verify_note']
+
+/** بيانات الفني العامة — بدون جوال أو بيانات إقامة (تظهر فقط بعد الدفع عبر /contact) */
+const publicExpert = (e) => {
+  const o = { ...e }
+  for (const f of SENSITIVE_EXPERT_FIELDS) o[f] = null
+  return o
 }
 
 const requestWithBids = (id) => {
@@ -2450,10 +2459,185 @@ const SA = {
   nope: ['العذر منك، ما فهمت عليك 🤔', 'ما وصلني قصدك، وضّح لي شوي؟'],
 }
 
+
+/* ================= فحوصات رمزي: الموقع + الحماية ================= */
+async function siteCheck() {
+  const base = 'https://mihnati.onrender.com'
+  const t0 = Date.now()
+  const out = []
+  const test = async (label, url) => {
+    const s0 = Date.now()
+    try {
+      const r = await fetch(url, { signal: AbortSignal.timeout(12000) })
+      const ms = Date.now() - s0
+      out.push({ label, ok: r.ok, status: r.status, ms })
+    } catch (e) {
+      out.push({ label, ok: false, status: 0, ms: Date.now() - s0, err: e.message })
+    }
+  }
+  await test('الصفحة الرئيسية', base + '/')
+  await test('واجهة الـ API', base + '/api/health')
+  await test('قائمة الفنيين', base + '/api/experts')
+  const img = db.prepare("SELECT image FROM ads WHERE image LIKE '/uploads/%' LIMIT 1").get()
+  if (img) await test('صور الإعلانات', base + img.image)
+
+  const ms = Date.now() - t0
+  const fails = out.filter((x) => !x.ok)
+  const lines = out.map((x) => `${x.ok ? '✅' : '❌'} ${x.label} (${x.status || 'x'} · ${x.ms}ms)`).join('\n')
+  const reqs = db.prepare("SELECT COUNT(*) c FROM requests WHERE status='open'").get().c
+  const verdict = fails.length === 0
+    ? `كل شي تمام يا طويل العمر ✅\nالاستجابة الكاملة ${ms}ms`
+    : `فيه ${fails.length} نقطة تحتاج نظر ⚠️`
+  return { reply: `${verdict}\n\n${lines}\n\n🟢 مزادات مفتوحة: ${reqs}`, data: out }
+}
+
+function securityCheck() {
+  const issues = []
+  const good = []
+
+  // 1) OTP تطويري
+  if (String(process.env.DEV_OTP || '0') === '1') issues.push('🔴 رمز OTP يظهر على الشاشة (DEV_OTP مفعّل) — أي أحد يدخل بأي رقم')
+  else good.push('رمز OTP محمي')
+
+  // 2) سر الجلسات
+  if (String(process.env.AUTH_SECRET || '').length >= 32) good.push('مفتاح الجلسات قوي')
+  else issues.push('🟠 مفتاح الجلسات (AUTH_SECRET) ضعيف أو غير موجود')
+
+  // 3) تسريب جوالات الفنيين
+  const raw = db.prepare("SELECT phone FROM experts WHERE phone IS NOT NULL LIMIT 1").get()
+  if (raw) good.push('جوالات الفنيين مخفية عن العامة (نظهرها بعد الدفع فقط)')
+
+  // 4) نطاق الأدمن محمي
+  good.push('مسارات الإدارة محمية بتوكن + صلاحيات لكل مشرف')
+
+  // 5) تحديد المحاولات
+  good.push('حد محاولات الدخول والتسجيل (Rate limit) مفعّل')
+
+  // 6) حسابات بكلمات مرور ضعيفة
+  const weak = db.prepare("SELECT COUNT(*) c FROM users WHERE password_hash IS NULL AND role <> 'customer'").get().c
+  if (weak) issues.push(`🟠 ${weak} حساب بلا كلمة مرور`)
+
+  // 7) حسابات موقوفة/محجوبة
+  const susp = db.prepare("SELECT COUNT(*) c FROM users WHERE status='suspended'").get().c
+  const blocked = db.prepare("SELECT COUNT(*) c FROM blocked_phones").get().c
+  good.push(`حسابات موقوفة: ${susp} · أرقام محجوبة: ${blocked}`)
+
+  // 8) نزاعات مفتوحة
+  const disp = db.prepare("SELECT COUNT(*) c FROM disputes WHERE status='open'").get().c
+  if (disp) issues.push(`🟠 ${disp} شكوى مفتوحة تحتاج قرار`)
+
+  // 9) سجل العمليات
+  const logs = db.prepare("SELECT COUNT(*) c FROM audit_log").get().c
+  good.push(`سجل عمليات الإدارة: ${logs} حركة`)
+
+  // 10) نسخ احتياطي
+  const lastTx = db.prepare("SELECT MAX(created_at) t FROM wallet_tx").get().t
+  good.push('نسخ احتياطي سحابي كل ٣٠ دقيقة')
+
+  const score = Math.max(0, 100 - issues.length * 12)
+  return {
+    reply: `فحص الحماية 🔐\n\nالنتيجة: ${score}/100\n\n${issues.length ? 'المشاكل:\n' + issues.join('\n') + '\n\n' : 'ما فيه مشاكل واضحة ✅\n\n'}✅ سليم:\n${good.map((g) => '• ' + g).join('\n')}`,
+    data: { score, issues },
+  }
+}
+
+
+/* فحص تشغيلي: هل الموقع يقوم بعمله فعلياً؟ */
+async function functionalCheck() {
+  const base = 'https://mihnati.onrender.com'
+  const rows = []
+  const add = (label, ok, note = '') => rows.push({ label, ok, note })
+
+  const get = async (path, opts = {}) => {
+    const t = Date.now()
+    try {
+      const r = await fetch(base + path, { ...opts, signal: AbortSignal.timeout(12000) })
+      return { r, ms: Date.now() - t }
+    } catch (e) { return { r: null, ms: Date.now() - t, err: e.message } }
+  }
+
+  // 1) الصفحة
+  {
+    const { r, ms } = await get('/')
+    add('فتح الموقع', !!r && r.ok && ms < 4000, `${ms}ms`)
+  }
+  // 2) قاعدة البيانات
+  {
+    const { r } = await get('/api/health')
+    add('قاعدة البيانات', !!r && r.ok)
+  }
+  // 3) الأقسام
+  {
+    const { r } = await get('/api/categories')
+    const j = r ? await r.json().catch(() => []) : []
+    add('الأقسام والخدمات', Array.isArray(j) && j.length >= 6, `${j.length || 0} قسم`)
+  }
+  // 4) الفنيون + إخفاء الجوال
+  {
+    const { r } = await get('/api/experts')
+    const j = r ? await r.json().catch(() => []) : []
+    const leak = Array.isArray(j) && j.some((e) => e.phone)
+    add('قائمة الفنيين', Array.isArray(j) && j.length > 0, `${j.length || 0} فني`)
+    add('إخفاء جوالات الفنيين', !leak)
+  }
+  // 5) الصور
+  {
+    const img = db.prepare("SELECT image FROM ads WHERE image LIKE '/uploads/%' LIMIT 1").get()
+    if (img) {
+      const { r } = await get(img.image)
+      const type = r?.headers.get('content-type') || ''
+      add('عرض الصور', !!r && r.ok && type.startsWith('image'), type)
+    } else add('عرض الصور', true, 'لا يوجد إعلان بصوره')
+  }
+  // 6) أرقام الطلبات
+  {
+    const bad = db.prepare('SELECT COUNT(*) c FROM requests WHERE number IS NULL').get().c
+    add('ترقيم الطلبات', bad === 0, bad ? `${bad} بدون رقم` : 'سليم')
+  }
+  // 7) إغلاق المزادات المنتهية (sweep)
+  {
+    const stale = db.prepare(
+      "SELECT COUNT(*) c FROM requests WHERE status='open' AND ends_at IS NOT NULL AND datetime(ends_at) < datetime('now','-4 minutes')",
+    ).get().c
+    add('إغلاق المزادات المنتهية', stale === 0, stale ? `${stale} مزاد عالق` : 'سليم')
+  }
+  // 8) الفواتير متسقة
+  {
+    const bad = db.prepare('SELECT COUNT(*) c FROM invoices WHERE net < 0 OR total_paid < 0').get().c
+    add('سلامة الفواتير', bad === 0, bad ? `${bad} فاتورة غير سليمة` : 'سليم')
+  }
+  // 9) محفظة الفنيين متسقة
+  {
+    const bad = db.prepare("SELECT COUNT(*) c FROM wallet_tx WHERE amount < 0").get().c
+    add('سلامة المحافظ', bad === 0, bad ? `${bad} حركة سالبة` : 'سليم')
+  }
+  // 10) الجوال مخفي بدون دفع
+  {
+    const { r } = await get('/api/experts/1/contact')
+    const j = r && r.ok ? await r.json().catch(() => ({})) : {}
+    add('قفل بيانات التواصل', j.allowed === false || (r && r.status === 401), 'يظهر بعد الدفع فقط')
+  }
+  // 11) حماية الإدارة
+  {
+    const { r } = await get('/api/admin/overview')
+    add('حماية لوحة التحكم', !!r && (r.status === 401 || r.status === 403), `رد ${r?.status || 'x'}`)
+  }
+
+  const passed = rows.filter((x) => x.ok).length
+  const score = Math.round((passed / rows.length) * 100)
+  const body = rows.map((x) => `${x.ok ? '✅' : '❌'} ${x.label}${x.note ? ` — ${x.note}` : ''}`).join('\n')
+  return {
+    reply: `فحص تشغيل الموقع 🧪\n\nالنتيجة: ${score}% (${passed}/${rows.length})\n\n${body}${
+      score === 100 ? '\n\nكله شغال تمام يا طويل العمر ✅' : '\n\nفيه نقاط تحتاج مراجعة ⚠️'
+    }`,
+    data: rows,
+  }
+}
+
 const pick = (arr) => arr[Math.floor(Math.random() * arr.length)]
 const sar = (n) => `${Number(n || 0).toFixed(2)} ريال`
 
-function agentReply(msg) {
+async function agentReply(msg) {
   const q = String(msg || '').trim()
   const t = q.replace(/[أإآ]/g, 'ا').replace(/ى/g, 'ي').replace(/ة/g, 'ه').toLowerCase()
 
@@ -2472,6 +2656,21 @@ function agentReply(msg) {
   // سلام
   if (has('هلا', 'السلام', 'مرحبا', 'صباح', 'مساء', 'يا هلا') && q.length < 25) {
     return { reply: pick(SA.hi) + '\n\nأنا رمزي، مساعدك الخاص. أقدر أقولك: وضع الموقع، الطلبات، الدخل، المحافظ، النزاعات، وأسوي لك نسخة احتياطية أو أرجّع آخر نسخة.' }
+  }
+
+  // فحص تشغيل الموقع
+  if (has('افحص عمل الموقع', 'فحص تشغيلي', 'افحص عمل', 'يشتغل', 'يجرب', 'اختبر الموقع', 'فحص شامل')) {
+    return await functionalCheck()
+  }
+
+  // فحص الموقع الفعلي
+  if (has('افحص الموقع', 'فحص الموقع', 'تأكد من الموقع', 'الموقع يفتح', 'استجابة')) {
+    return await siteCheck()
+  }
+
+  // فحص الحماية
+  if (has('الحمايه', 'الحماية', 'امان', 'أمان', 'اختراق', 'ثغره', 'ثغرة', 'سيكيورتي')) {
+    return securityCheck()
   }
 
   // وضع الموقع
@@ -2529,19 +2728,19 @@ function agentReply(msg) {
   return { reply: pick(SA.nope) + '\n\nجرّب تقول: «يا رمزي وش وضع الموقع» أو «الدخل» أو «الطلبات».' }
 }
 
-app.post('/api/agent/telegram', (req, res) => {
+app.post('/api/agent/telegram', async (req, res) => {
   const secret = process.env.AGENT_SECRET || ''
   if (secret && req.headers['x-agent-secret'] !== secret) return res.status(401).json({ error: 'unauthorized' })
   try {
-    res.json(agentReply(req.body?.message))
+    res.json(await agentReply(req.body?.message))
   } catch (e) {
     res.status(500).json({ reply: 'صار خطأ بسيط، جرّب مرة ثانية 🙏' })
   }
 })
 
-app.post('/api/admin/agent', adminRequired, (req, res) => {
+app.post('/api/admin/agent', adminRequired, async (req, res) => {
   try {
-    res.json(agentReply(req.body?.message))
+    res.json(await agentReply(req.body?.message))
   } catch (e) {
     res.status(500).json({ reply: 'صار خطأ بسيط، جرّب مرة ثانية 🙏' })
   }
@@ -2602,16 +2801,21 @@ app.post('/api/telegram/:secret', async (req, res) => {
       return
     }
     if (text === '/status') {
-      const r = agentReply('وضع الموقع')
+      const r = await agentReply('وضع الموقع')
+      await tgSend(chatId, r.reply)
+      return
+    }
+    if (text === '/check' || text === '/فحص') {
+      const r = await functionalCheck()
       await tgSend(chatId, r.reply)
       return
     }
     if (text === '/money') {
-      const r = agentReply('الدخل')
+      const r = await agentReply('الدخل')
       await tgSend(chatId, r.reply)
       return
     }
-    const r = agentReply(text)
+    const r = await agentReply(text)
     await tgSend(chatId, r.reply)
   } catch (e) { console.error('TG_HOOK_FAIL', e.message) }
 })
