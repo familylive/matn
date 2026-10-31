@@ -37,9 +37,80 @@ app.use(cors())
 app.use(express.json({ limit: '60mb' }))
 app.locals.verify = verifyToken
 
-const uploadsDir = path.join(__dirname, 'uploads')
+const uploadsDir = process.env.UPLOADS_DIR || path.join(process.env.DATA_DIR || __dirname, 'uploads')
 if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true })
-app.use('/uploads', express.static(uploadsDir, { maxAge: '7d' }))
+
+/* ---- تخزين الملفات في Cloudflare KV ----
+   الخطة المجانية على Render بلا قرص دائم → مجلد uploads يُمسح مع كل نشر/إعادة تشغيل.
+   نحتفظ بنسخة من كل ملف مرفوع في KV، ونرجعها تلقائياً إذا اختفت من القرص. */
+const kvEnv = () => ({ token: process.env.CF_BACKUP_TOKEN, acc: process.env.CF_ACCOUNT_ID, ns: process.env.CF_KV_NS })
+const kvReady = () => { const { token, acc, ns } = kvEnv(); return Boolean(token && acc && ns) }
+const kvFileKey = (name) => `file:${path.basename(name)}`
+
+async function kvPutFile(name) {
+  if (!kvReady()) return false
+  const base = path.basename(name)
+  const fp = path.join(uploadsDir, base)
+  try {
+    if (!fs.existsSync(fp)) return false
+    const body = fs.readFileSync(fp)
+    if (!body.length || body.length > 24 * 1024 * 1024) return false
+    const { token, acc, ns } = kvEnv()
+    const r = await fetch(
+      `https://api.cloudflare.com/client/v4/accounts/${acc}/storage/kv/namespaces/${ns}/values/${encodeURIComponent(kvFileKey(base))}`,
+      { method: 'PUT', headers: { authorization: `Bearer ${token}`, 'content-type': 'application/octet-stream' }, body },
+    )
+    if (!r.ok) console.error('KV_FILE_PUT_BAD', base, r.status)
+    return r.ok
+  } catch (e) { console.error('KV_FILE_PUT_FAIL', base, e.message); return false }
+}
+
+async function kvGetFile(name) {
+  if (!kvReady()) return null
+  const base = path.basename(name)
+  try {
+    const { token, acc, ns } = kvEnv()
+    const r = await fetch(
+      `https://api.cloudflare.com/client/v4/accounts/${acc}/storage/kv/namespaces/${ns}/values/${encodeURIComponent(kvFileKey(base))}`,
+      { headers: { authorization: `Bearer ${token}` } },
+    )
+    if (!r.ok) return null
+    return Buffer.from(await r.arrayBuffer())
+  } catch (e) { console.error('KV_FILE_GET_FAIL', base, e.message); return null }
+}
+
+/* أي ملف يرفعه المستخدم → نسخة سحابية في KV (لا يعطّل الرفع لو فشلت) */
+app.use((req, res, next) => {
+  res.on('finish', () => {
+    const f = req.file
+    if (f?.filename) kvPutFile(f.filename).catch(() => {})
+  })
+  next()
+})
+
+const MIME_BY_EXT = {
+  '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.png': 'image/png', '.webp': 'image/webp',
+  '.gif': 'image/gif', '.heic': 'image/heic', '.heif': 'image/heif', '.pdf': 'application/pdf',
+}
+
+app.get('/uploads/:name', async (req, res) => {
+  const name = path.basename(req.params.name)
+  const fp = path.join(uploadsDir, name)
+  const type = MIME_BY_EXT[path.extname(name).toLowerCase()] || 'application/octet-stream'
+  try {
+    if (fs.existsSync(fp) && fs.statSync(fp).size > 0) {
+      res.setHeader('Content-Type', type)
+      res.setHeader('Cache-Control', 'public, max-age=604800')
+      return fs.createReadStream(fp).pipe(res)
+    }
+  } catch {}
+  const buf = await kvGetFile(name)
+  if (!buf) return res.status(404).send('not_found')
+  try { fs.writeFileSync(fp, buf) } catch {}
+  res.setHeader('Content-Type', type)
+  res.setHeader('Cache-Control', 'public, max-age=604800')
+  res.send(buf)
+})
 
 const upload = multer({
   storage: multer.diskStorage({
@@ -1686,11 +1757,17 @@ app.post('/api/me/iqama', authRequired, upload.single('iqama'), async (req, res)
   if (!req.file) return res.status(400).json({ error: 'no_file' })
   const url = `/uploads/${req.file.filename}`
   let parsed = {}
+  const within = (pr, ms, tag) =>
+    Promise.race([
+      pr,
+      new Promise((_, rej) => setTimeout(() => rej(new Error(`timeout:${tag}`)), ms)),
+    ])
   try {
     const { createWorker } = await import('tesseract.js')
-    const worker = await createWorker('ara', 1, { logger: () => {} })
-    const { data } = await worker.recognize(req.file.path)
-    await worker.terminate()
+    // الخطة المجانية بطيئة جداً في OCR — لا نخلّي رفع صورة الإقامة يعلّق
+    const worker = await within(createWorker('ara', 1, { logger: () => {} }), 25000, 'worker')
+    const { data } = await within(worker.recognize(req.file.path), 25000, 'recognize')
+    await within(worker.terminate(), 5000, 'terminate').catch(() => {})
     const text = data.text || ''
     const pick = (re) => (text.match(re) || [])[1]?.trim() || ''
     parsed = {
@@ -2802,6 +2879,16 @@ app.get('/api/admin/snapshots', adminRequired, adminCan('backup'), async (_req, 
   }
 })
 
+/* مزامنة ملفات القرص إلى KV (يدوي — بعد أي نشر) */
+app.post('/api/admin/files/sync', adminRequired, adminCan('backup'), async (_req, res) => {
+  if (!kvReady()) return res.status(400).json({ error: 'kv_not_configured' })
+  let names = []
+  try { names = fs.readdirSync(uploadsDir) } catch {}
+  let ok = 0
+  for (const n of names) { if (await kvPutFile(n)) ok++ }
+  res.json({ ok: true, total: names.length, synced: ok })
+})
+
 /* استرجاع الصور والملفات فقط (بدون لمس البيانات) */
 app.post('/api/admin/restore-files', adminRequired, adminCan('backup'), (req, res) => {
   const files = req.body?.files
@@ -2811,6 +2898,7 @@ app.post('/api/admin/restore-files', adminRequired, adminCan('backup'), (req, re
     if (typeof b64 !== 'string') continue
     try {
       fs.writeFileSync(path.join(uploadsDir, path.basename(name)), Buffer.from(b64, 'base64'))
+      kvPutFile(name).catch(() => {})
       n++
     } catch (e) { console.error('FILE_RESTORE_FAIL', name, e.message) }
   }
@@ -2917,7 +3005,7 @@ async function autoRestoreOnBoot() {
     const tables = snap?.tables
     if (!tables || typeof tables !== 'object') return console.log('AUTORESTORE: bad snapshot')
 
-    const order = ['users', 'experts', 'categories', 'requests', 'bids', 'payments', 'invoices', 'reviews', 'ads', 'city_requests', 'wallet_tx', 'withdrawals', 'credits', 'finance_reports', 'admins', 'blocked_phones']
+    const order = ['users', 'experts', 'categories', 'requests', 'bids', 'payments', 'invoices', 'reviews', 'ads', 'city_requests', 'wallet_tx', 'withdrawals', 'credits', 'finance_reports', 'admins', 'blocked_phones', 'settings']
     db.pragma('foreign_keys = OFF')
     let restored = 0
     for (const t of order) {
@@ -2943,7 +3031,20 @@ async function autoRestoreOnBoot() {
     try { backfillInviteCodes() } catch (e) { console.error('INVITE_BACKFILL_FAIL', e.message) }
     try { backfillUserCodes() } catch (e) { console.error('USERCODE_BACKFILL_FAIL', e.message) }
     try { fixSettings() } catch (e) { console.error('SETTINGS_FIX_FAIL', e.message) }
-    console.log(`AUTORESTORE_OK rows=${restored} snapshot=${snap.taken_at || ''}`)
+
+    // الصور/الملفات: من النسخة السحابية إلى القرص، ثم نسخة احتياطية في KV
+    let restoredFiles = 0
+    const files = snap?.files
+    if (files && typeof files === 'object') {
+      for (const [name, b64] of Object.entries(files)) {
+        if (typeof b64 !== 'string') continue
+        try {
+          fs.writeFileSync(path.join(uploadsDir, path.basename(name)), Buffer.from(b64, 'base64'))
+          restoredFiles++
+        } catch {}
+      }
+    }
+    console.log(`AUTORESTORE_OK rows=${restored} files=${restoredFiles} snapshot=${snap.taken_at || ''}`)
   } catch (e) {
     console.error('AUTORESTORE_FAIL', e.message)
   }
