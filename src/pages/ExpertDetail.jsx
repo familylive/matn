@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react'
 import { useLocation, useNavigate, useParams } from 'react-router-dom'
-import experts from '../data/experts.json'
 import FavoriteButton from '../components/FavoriteButton.jsx'
 import { ExpertBadge, TradesChips } from '../components/Trades.jsx'
 import VerifiedBadge from '../components/VerifiedBadge.jsx'
@@ -91,7 +90,7 @@ export default function ExpertDetail() {
     return () => { alive = false }
   }, [id])
 
-  const expert = state?.expert || apiExpert || experts.find((e) => String(e.id) === String(id))
+  const expert = state?.expert || apiExpert || null
 
   if (!expert && loadingExpert) {
     return <div className="min-h-screen grid place-items-center text-gray-500">جارٍ التحميل…</div>

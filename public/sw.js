@@ -1,4 +1,4 @@
-const CACHE = 'mihnati-v4'
+const CACHE = 'mihnati-v5'
 
 self.addEventListener('install', () => self.skipWaiting())
 self.addEventListener('activate', (event) => {

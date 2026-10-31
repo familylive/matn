@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import expertsFallback from '../data/experts.json'
 import ExpertCard from '../components/ExpertCard.jsx'
 import { useFavorites } from '../hooks/useFavorites.js'
 import { useLang } from '../i18n/LanguageContext.jsx'
@@ -36,7 +35,7 @@ export default function Favorites() {
             : [],
         ),
       )
-      .catch(() => setExperts(expertsFallback))
+      .catch(() => setExperts([]))
   }, [])
 
   const list = experts.filter((e) => favorites.map(String).includes(String(e.id)))

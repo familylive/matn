@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import experts from '../data/experts.json'
 import { useParentCategories as useCategories, catLabel } from '../hooks/useCategories.js'
 import ExpertCard from '../components/ExpertCard.jsx'
 import LocationSetup from '../components/LocationSetup.jsx'
@@ -13,16 +12,16 @@ export default function Home() {
   const { t, lang } = useLang()
   const categories = useCategories()
   const [counts, setCounts] = useState({ byCategory: {} })
-  const [list, setList] = useState(experts)
+  const [list, setList] = useState([])
 
   useEffect(() => {
     let alive = true
     fetch('/api/experts')
       .then((r) => r.json())
       .then((rows) => {
-        if (!alive || !Array.isArray(rows) || !rows.length) return
+        if (!alive) return
         setList(
-          rows.map((r) => ({
+          (Array.isArray(rows) ? rows : []).map((r) => ({
             id: r.id,
             personName: r.name_ar || r.name,
             jobName: r.job,
@@ -138,13 +137,14 @@ export default function Home() {
         </div>
       </div>
 
+      {filtered.length > 0 && (
       <div className="px-4 mt-7">
         <h3 className="section-title mb-3">{t('home.featured')}</h3>
         <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
           {filtered.map((e) => <ExpertCard key={e.id} expert={e} />)}
-          {filtered.length === 0 && <p className="text-gray-500 text-sm">{t('home.noResults')}</p>}
         </div>
       </div>
+      )}
 
       <div className="px-4 mt-8">
         <h3 className="section-title mb-4">{t('home.how')}</h3>
