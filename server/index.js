@@ -2455,6 +2455,28 @@ app.post('/api/me/delete', authRequired, (req, res) => {
 
 /* ================= توثيق الإيميل (رمز بالبريد) ================= */
 async function sendEmail(to, subject, html) {
+  // 1) SMTP (Gmail/Aramex/أي مزود)
+  const host = process.env.SMTP_HOST
+  const user = process.env.SMTP_USER
+  const pass = process.env.SMTP_PASS
+  if (host && user && pass) {
+    try {
+      const nodemailer = (await import('nodemailer')).default
+      const port = Number(process.env.SMTP_PORT || 465)
+      const tx = nodemailer.createTransport({
+        host, port, secure: port === 465,
+        auth: { user, pass },
+      })
+      await tx.sendMail({
+        from: process.env.MAIL_FROM || `مهنتي <${user}>`,
+        to, subject, html,
+      })
+      return { ok: true, via: 'smtp' }
+    } catch (e) {
+      return { ok: false, error: 'smtp_failed: ' + e.message }
+    }
+  }
+
   const key = process.env.RESEND_API_KEY
   const from = process.env.MAIL_FROM || 'Mihnati <onboarding@resend.dev>'
   if (!key) return { ok: false, error: 'email_not_configured' }
